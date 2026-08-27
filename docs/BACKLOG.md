@@ -12,15 +12,14 @@ only; shipped items live in the git history.
   consolidated engram Task Group. That fixture requires observing what Codex's
   consolidator actually preserves when it folds an extension note; capture one
   and add the fallback + differential test before relying on import in anger.
-- **Stale apply lock.** `sync` uses an exclusive `.engram.lock` file removed on
-  completion. A crash mid-apply leaves the lock behind and blocks the next apply.
-  Add staleness detection (age/PID) or a `--force-unlock` escape hatch.
-- **`curate --apply` takes no lock across the batch.** `sync --apply` holds the
-  exclusive `.engram.lock`, but `curate` applies its multi-file batch through
-  `store` without acquiring it, so a concurrent `sync --apply` (or a second
-  curate) could interleave writes on the canonical root. Each `store.Save`/
-  `Delete` is individually atomic, but the batch is not. Acquire the same lock
-  around `curate.Apply` before relying on curate alongside background sync.
+- **Single-write canonical mutators are unlocked.** `curate --apply` and
+  `sync --apply` both take the shared `internal/lock` exclusive lock (with
+  stale-reclaim), so multi-file batches are atomic against another apply. But
+  `remember`, `share`, and `import --apply` write canonical through `store`
+  *without* acquiring it. Each is a single atomic `store.Save` guarded by SC-13
+  conflict detection, so this is not corruption today — but a `curate` batch and
+  a concurrent `remember` are not mutually exclusive. Bring the single-write
+  paths under the same canonical-root lock so all canonical mutation serializes.
 - **Codex curate output extraction is naive.** `ExtractCodexText` returns all of
   `codex exec` stdout and leans on fenced-`json` recovery to find the proposal
   inside the session-log preamble. If Codex ever emits a stray ```json block

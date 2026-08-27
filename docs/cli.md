@@ -157,8 +157,10 @@ explicit rather than ambient.
   *proposed operations only* (`add` / `update` / `merge` / `remove` / `rescope`
   with reasons) — it never touches a file. engram validates every proposed
   operation against the corpus and the schema; a dry-run reports the plan, and
-  `--apply` executes it through the same `store` write-path. **Fail closed**: if
-  any operation in the batch is invalid, `--apply` applies nothing (exit `3`).
+  `--apply` executes it through the same `store` write-path, holding the shared
+  exclusive canonical-root lock so the multi-file batch is atomic against a
+  concurrent apply. **Fail closed**: if any operation in the batch is invalid,
+  `--apply` applies nothing (exit `3`).
   Model/effort are `--model` / `--effort` (flags win over the per-harness config
   default: claude → `claude-sonnet-5`/`high`, codex → `gpt-5.6-terra`/`high`);
   `--harness` picks which agent runs (default `claude-code`). The trust boundary

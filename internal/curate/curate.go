@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/davisbuilds/engram/internal/lock"
 	"github.com/davisbuilds/engram/internal/review"
 	"github.com/davisbuilds/engram/internal/schema"
 	"github.com/davisbuilds/engram/internal/store"
@@ -203,6 +204,16 @@ func Apply(root string, ops []Operation, corpus []*schema.CanonicalMemory) ([]Ap
 	if !AllValid(results) {
 		return nil, fmt.Errorf("refusing to apply: %d of %d operations are invalid", countInvalid(results), len(results))
 	}
+	// Hold the canonical-root lock across the whole batch so the multi-file
+	// merge/remove sequence is atomic against another concurrent writer (a second
+	// curate, or a future canonical mutator that honors the same lock) rather than
+	// interleaving into a half-applied merge.
+	release, err := lock.Acquire(root, lock.DefaultStaleAfter)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
 	applied := make([]Applied, 0, len(ops))
 	for _, op := range ops {
 		a, err := applyOne(root, op, corpus)

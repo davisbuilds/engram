@@ -9,7 +9,6 @@ package sync
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -17,12 +16,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/davisbuilds/engram/internal/lock"
 	"github.com/davisbuilds/engram/internal/marker"
 	"github.com/davisbuilds/engram/internal/render"
 	"github.com/davisbuilds/engram/internal/schema"
 )
-
-const lockName = ".engram.lock"
 
 // ActionKind is one of the reconciliation outcomes for a single memory.
 type ActionKind string
@@ -326,22 +324,12 @@ func atomicWrite(path string, data []byte) error {
 	return os.Rename(tmpName, path)
 }
 
-// acquireLock takes an exclusive apply lock on the memory dir. A second holder
-// fails rather than interleaving, so no check-then-act window can double-write.
+// acquireLock takes an exclusive apply lock on the memory dir via the shared
+// lock package. A second live holder fails rather than interleaving, so no
+// check-then-act window can double-write; a lock orphaned by a crash is
+// reclaimed once stale.
 func acquireLock(dir string) (func(), error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, err
-	}
-	path := filepath.Join(dir, lockName)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-	if err != nil {
-		if errors.Is(err, os.ErrExist) {
-			return nil, fmt.Errorf("another engram apply holds the lock at %s", path)
-		}
-		return nil, err
-	}
-	_ = f.Close()
-	return func() { _ = os.Remove(path) }, nil
+	return lock.Acquire(dir, lock.DefaultStaleAfter)
 }
 
 // sortActions orders actions deterministically by name then kind, so plans and

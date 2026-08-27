@@ -2,6 +2,7 @@ package curate
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -174,6 +175,24 @@ func TestApplyRescopeChangesScope(t *testing.T) {
 	got, _, _, _ := store.Load(root, "m")
 	if got.Scope != "project:acme" {
 		t.Errorf("scope = %q, want project:acme", got.Scope)
+	}
+}
+
+func TestApplyBlocksWhenLockHeld(t *testing.T) {
+	root := t.TempDir()
+	c := corpus("victim")
+	seed(t, root, c...)
+	// A concurrent apply already holds a fresh lock on the canonical root.
+	if err := os.WriteFile(filepath.Join(root, ".engram.lock"), []byte("held\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ops := []Operation{{Op: OpRemove, Name: "victim"}}
+	if _, err := Apply(root, ops, c); err == nil {
+		t.Fatal("Apply should fail while the canonical lock is held")
+	}
+	// The batch must not have run: victim survives.
+	if _, _, found, _ := store.Load(root, "victim"); !found {
+		t.Error("victim was deleted despite a held lock")
 	}
 }
 
