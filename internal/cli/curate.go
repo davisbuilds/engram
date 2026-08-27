@@ -161,7 +161,10 @@ func opResultItems(results []curate.OpResult) []map[string]any {
 			item["to_scope"] = r.Op.ToScope
 		}
 		if r.Op.Memory != nil {
+			// Surface the full proposed memory so a dry-run reviewer can judge
+			// the content an add/update/merge would write, not just its name.
 			item["memory_name"] = r.Op.Memory.Name
+			item["memory"] = r.Op.Memory
 		}
 		if r.Error != "" {
 			item["error"] = r.Error
