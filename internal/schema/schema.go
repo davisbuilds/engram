@@ -48,34 +48,36 @@ const (
 
 // AppliesTo narrows where a memory is relevant. Empty lists mean "no constraint
 // on this axis" — the scope filter treats an absent axis as matching anything.
+// The struct carries json tags too so an agent can construct a memory as JSON
+// and pipe it to `engram remember --from-json -`.
 type AppliesTo struct {
-	Cwd    []string `yaml:"cwd,omitempty"`
-	Agents []string `yaml:"agents,omitempty"`
-	Hosts  []string `yaml:"hosts,omitempty"`
+	Cwd    []string `yaml:"cwd,omitempty" json:"cwd,omitempty"`
+	Agents []string `yaml:"agents,omitempty" json:"agents,omitempty"`
+	Hosts  []string `yaml:"hosts,omitempty" json:"hosts,omitempty"`
 }
 
 // Provenance records where a memory came from. All fields are ISO-8601 strings
 // or free identifiers; none are load-bearing for scope decisions.
 type Provenance struct {
-	Origin   string `yaml:"origin,omitempty"`
-	Session  string `yaml:"session,omitempty"`
-	Author   string `yaml:"author,omitempty"`
-	Created  string `yaml:"created,omitempty"`
-	Modified string `yaml:"modified,omitempty"`
+	Origin   string `yaml:"origin,omitempty" json:"origin,omitempty"`
+	Session  string `yaml:"session,omitempty" json:"session,omitempty"`
+	Author   string `yaml:"author,omitempty" json:"author,omitempty"`
+	Created  string `yaml:"created,omitempty" json:"created,omitempty"`
+	Modified string `yaml:"modified,omitempty" json:"modified,omitempty"`
 }
 
 // CanonicalMemory is one authored memory. Name, Description, Type, and Scope are
 // required; the rest are optional. Body is the markdown after the frontmatter
 // and is preserved verbatim across a parse/render round-trip.
 type CanonicalMemory struct {
-	Name        string     `yaml:"name"`
-	Description string     `yaml:"description"`
-	Type        Type       `yaml:"type"`
-	Scope       string     `yaml:"scope"`
-	AppliesTo   AppliesTo  `yaml:"applies_to,omitempty"`
-	Provenance  Provenance `yaml:"provenance,omitempty"`
-	Related     []string   `yaml:"related,omitempty"`
-	Body        string     `yaml:"-"`
+	Name        string     `yaml:"name" json:"name"`
+	Description string     `yaml:"description" json:"description"`
+	Type        Type       `yaml:"type" json:"type"`
+	Scope       string     `yaml:"scope" json:"scope"`
+	AppliesTo   AppliesTo  `yaml:"applies_to,omitempty" json:"applies_to,omitempty"`
+	Provenance  Provenance `yaml:"provenance,omitempty" json:"provenance,omitempty"`
+	Related     []string   `yaml:"related,omitempty" json:"related,omitempty"`
+	Body        string     `yaml:"-" json:"body,omitempty"`
 }
 
 // Parse reads a canonical memory file (frontmatter + body). It errors on missing

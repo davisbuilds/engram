@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -61,6 +62,50 @@ func TestRunSyncLifecycle(t *testing.T) {
 	writeFile(t, memFile, "---\nname: a-mem\ndescription: hand\n---\nmine\n")
 	if code := Run(append([]string{"sync", "--apply"}, base...)); code != exitConflicts {
 		t.Errorf("conflict apply exit = %d, want %d", code, exitConflicts)
+	}
+}
+
+// TestRunRememberAndShare pins the authoring write-path: create, idempotent
+// re-remember, canonical-side CONFLICT on a hand-edited file (exit 3, SC-13), and
+// a scope move via share.
+func TestRunRememberAndShare(t *testing.T) {
+	dir := t.TempDir()
+	canon := filepath.Join(dir, "canonical")
+	if err := os.MkdirAll(canon, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+canon+"\n")
+	defer silenceStdout(t)()
+	c := []string{"--config", cfg, "--json"}
+	memArgs := []string{"remember", "--name", "a-mem", "--description", "d", "--type", "lesson", "--scope", "global"}
+
+	if code := Run(append(memArgs, c...)); code != exitOK {
+		t.Fatalf("remember exit = %d, want %d", code, exitOK)
+	}
+	memFile := filepath.Join(canon, "a-mem.md")
+	if _, err := os.Stat(memFile); err != nil {
+		t.Fatalf("canonical file missing: %v", err)
+	}
+	if code := Run(append(memArgs, c...)); code != exitOK {
+		t.Errorf("idempotent remember exit = %d, want %d", code, exitOK)
+	}
+
+	// Hand-edit to differing content, then remember without --force must conflict.
+	writeFile(t, memFile, "---\nname: a-mem\ndescription: HAND\ntype: lesson\nscope: global\n---\nx\n")
+	if code := Run(append(memArgs, c...)); code != exitConflicts {
+		t.Errorf("conflict remember exit = %d, want %d", code, exitConflicts)
+	}
+
+	if code := Run(append([]string{"share", "a-mem", "--to", "project:acme"}, c...)); code != exitOK {
+		t.Fatalf("share exit = %d, want %d", code, exitOK)
+	}
+	got, err := os.ReadFile(memFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "scope: project:acme") {
+		t.Errorf("share did not update scope:\n%s", got)
 	}
 }
 

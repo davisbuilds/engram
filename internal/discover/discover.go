@@ -19,13 +19,20 @@ type ParseError struct {
 	Err  error
 }
 
-// Discover recursively parses every *.md under root into a CanonicalMemory. It
-// returns the parsed memories and a separate slice of per-file parse errors; a
-// malformed file is reported, not fatal. A missing root yields empty results.
-func Discover(root string) ([]*schema.CanonicalMemory, []ParseError, error) {
+// Located is a parsed memory together with the file it came from, so callers
+// that must rewrite or locate a specific memory (share, remember) know its path.
+type Located struct {
+	Memory *schema.CanonicalMemory
+	Path   string
+}
+
+// Locate recursively parses every *.md under root into a Located. It returns the
+// located memories and a separate slice of per-file parse errors; a malformed
+// file is reported, not fatal. A missing root yields empty results.
+func Locate(root string) ([]Located, []ParseError, error) {
 	var (
-		mems  []*schema.CanonicalMemory
-		perrs []ParseError
+		located []Located
+		perrs   []ParseError
 	)
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -44,7 +51,7 @@ func Discover(root string) ([]*schema.CanonicalMemory, []ParseError, error) {
 			perrs = append(perrs, ParseError{Path: path, Err: perr})
 			return nil
 		}
-		mems = append(mems, m)
+		located = append(located, Located{Memory: m, Path: path})
 		return nil
 	})
 	if errors.Is(err, fs.ErrNotExist) {
@@ -52,6 +59,20 @@ func Discover(root string) ([]*schema.CanonicalMemory, []ParseError, error) {
 	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("walk %s: %w", root, err)
+	}
+	return located, perrs, nil
+}
+
+// Discover recursively parses every *.md under root into a CanonicalMemory,
+// discarding source paths. A missing root yields empty results.
+func Discover(root string) ([]*schema.CanonicalMemory, []ParseError, error) {
+	located, perrs, err := Locate(root)
+	if err != nil {
+		return nil, perrs, err
+	}
+	mems := make([]*schema.CanonicalMemory, len(located))
+	for i, l := range located {
+		mems[i] = l.Memory
 	}
 	return mems, perrs, nil
 }

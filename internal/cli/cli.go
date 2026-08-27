@@ -73,8 +73,8 @@ type command struct {
 // truth for dispatch, `help`, and `help --json`.
 func commands() []command {
 	return []command{
-		{"remember", "Author a canonical memory (flags, or --from-json - on stdin).", stub},
-		{"share", "Promote a memory to a wider scope tier (writes canonical).", stub},
+		{"remember", "Author a canonical memory (flags, or --from-json - on stdin).", cmdRemember},
+		{"share", "Move a memory to a different scope tier (writes canonical).", cmdShare},
 		{"sync", "Render canonical memories into the harnesses (dry-run; --apply to write).", cmdSync},
 		{"import", "Reverse-sync a harness's native memory into canonical (one-shot; --apply).", stub},
 		{"discover", "Parse and list every canonical memory, with parse errors.", cmdDiscover},
