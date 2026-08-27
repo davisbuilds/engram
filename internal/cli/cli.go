@@ -50,11 +50,16 @@ type NextStep struct {
 	Command string `json:"command"`
 }
 
-// env carries per-invocation output preferences resolved from global flags and
-// the environment. engram holds no other process state.
+// env carries per-invocation flags resolved from the command line. engram holds
+// no other process state.
 type env struct {
 	jsonMode bool
 	quiet    bool
+	apply    bool
+	config   string
+	cwd      string
+	agent    string
+	host     string
 }
 
 // command is one entry in engram's subcommand table.
@@ -70,11 +75,11 @@ func commands() []command {
 	return []command{
 		{"remember", "Author a canonical memory (flags, or --from-json - on stdin).", stub},
 		{"share", "Promote a memory to a wider scope tier (writes canonical).", stub},
-		{"sync", "Render canonical memories into the harnesses (dry-run; --apply to write).", stub},
+		{"sync", "Render canonical memories into the harnesses (dry-run; --apply to write).", cmdSync},
 		{"import", "Reverse-sync a harness's native memory into canonical (one-shot; --apply).", stub},
-		{"discover", "Parse and list every canonical memory, with parse errors.", stub},
-		{"list", "List memories relevant to a given cwd / agent / host.", stub},
-		{"audit", "Report pending render actions for a harness without writing.", stub},
+		{"discover", "Parse and list every canonical memory, with parse errors.", cmdDiscover},
+		{"list", "List memories relevant to a given cwd / agent / host.", cmdList},
+		{"audit", "Report pending render actions for a harness without writing.", cmdAudit},
 		{"diff", "Show the cross-state difference for each render target.", stub},
 		{"show", "Dump a harness's engram-rendered memories.", stub},
 		{"review", "Health report: near-dupe names, promotion candidates, staleness leads.", stub},
@@ -91,7 +96,8 @@ func Run(args []string) int {
 
 	var sub string
 	rest := make([]string, 0, len(args))
-	for _, a := range args {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
 		switch {
 		case a == "--json":
 			e.jsonMode = true
@@ -99,10 +105,20 @@ func Run(args []string) int {
 			e.jsonMode = false
 		case a == "-q" || a == "--quiet":
 			e.quiet = true
+		case a == "--apply":
+			e.apply = true
 		case a == "--version":
 			return cmdVersion(e, "version", nil)
 		case (a == "-h" || a == "--help") && sub == "":
 			return e.usage(exitOK)
+		case strings.HasPrefix(a, "--config"):
+			e.config, i = flagValue(args, i)
+		case strings.HasPrefix(a, "--cwd"):
+			e.cwd, i = flagValue(args, i)
+		case strings.HasPrefix(a, "--agent"):
+			e.agent, i = flagValue(args, i)
+		case strings.HasPrefix(a, "--host"):
+			e.host, i = flagValue(args, i)
 		case sub == "" && !strings.HasPrefix(a, "-"):
 			sub = a
 		default:
@@ -256,4 +272,17 @@ func isTTY(f *os.File) bool {
 		return false
 	}
 	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+// flagValue extracts the value for the value-taking flag at args[i], supporting
+// both "--flag=value" and "--flag value", and returns the value plus the index
+// to continue iterating from.
+func flagValue(args []string, i int) (string, int) {
+	if eq := strings.IndexByte(args[i], '='); eq >= 0 {
+		return args[i][eq+1:], i
+	}
+	if i+1 < len(args) {
+		return args[i+1], i + 1
+	}
+	return "", i
 }
