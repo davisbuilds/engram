@@ -109,6 +109,44 @@ func TestRunRememberAndShare(t *testing.T) {
 	}
 }
 
+// TestRunImportClaude pins the reverse-sync wiring and the loop guard: a
+// hand-authored native memory imports into canonical, while engram's own
+// rendered file (origin marker) is skipped.
+func TestRunImportClaude(t *testing.T) {
+	dir := t.TempDir()
+	canon := filepath.Join(dir, "canonical")
+	claude := filepath.Join(dir, "claude")
+	cmem := filepath.Join(claude, "projects", "-work-x", "memory")
+	writeFile(t, filepath.Join(cmem, "human.md"),
+		"---\nname: human-lesson\ndescription: d\nmetadata:\n  type: lesson\n---\nb\n")
+	writeFile(t, filepath.Join(cmem, "ours.md"),
+		"---\nname: our-render\ndescription: d\nmetadata:\n  type: lesson\n  origin: engram-sync\n---\nx\n")
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+canon+"\nharnesses:\n  claude-code:\n    home: "+claude+"\n")
+	defer silenceStdout(t)()
+	c := []string{"--config", cfg, "--cwd", "/work/x", "--json"}
+
+	if code := Run(append([]string{"import", "claude-code", "--apply"}, c...)); code != exitOK {
+		t.Fatalf("import exit = %d, want %d", code, exitOK)
+	}
+	if _, err := os.Stat(filepath.Join(canon, "human-lesson.md")); err != nil {
+		t.Errorf("hand-authored memory not imported: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(canon, "our-render.md")); !os.IsNotExist(err) {
+		t.Error("engram-origin file must be skipped by the loop guard, not imported")
+	}
+}
+
+func TestRunImportDisabledHarnessIsStrict(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+filepath.Join(dir, "canonical")+"\nharnesses:\n  codex:\n    disabled: true\n")
+	defer silenceStdout(t)()
+	if code := Run([]string{"import", "codex", "--config", cfg, "--json"}); code != exitUsage {
+		t.Errorf("import of a disabled harness exit = %d, want %d", code, exitUsage)
+	}
+}
+
 func TestRunUnknownCommandIsUsageError(t *testing.T) {
 	defer silenceStdout(t)()
 	if code := Run([]string{"bogus", "--json"}); code != exitUsage {

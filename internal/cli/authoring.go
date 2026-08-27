@@ -5,9 +5,11 @@ import (
 	"flag"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/davisbuilds/engram/internal/config"
+	"github.com/davisbuilds/engram/internal/importer"
 	"github.com/davisbuilds/engram/internal/schema"
 	"github.com/davisbuilds/engram/internal/store"
 )
@@ -125,6 +127,87 @@ func cmdShare(e *env, name string, args []string) int {
 	e.emit(name, true, map[string]any{
 		"outcome": outcome, "name": memName, "from_scope": from, "to_scope": to, "path": path,
 	}, nil, nil, nil)
+	return exitOK
+}
+
+func cmdImport(e *env, name string, args []string) int {
+	var harness string
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") && harness == "" {
+			harness = a
+		}
+	}
+	if harness == "" {
+		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram import <claude-code|codex> [--apply]"}, nil)
+		return exitUsage
+	}
+	s, rerr := e.newSession()
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitError
+	}
+
+	var (
+		res importer.Result
+		err error
+	)
+	switch harness {
+	case config.HarnessClaude:
+		h := s.cfg.Harnesses[config.HarnessClaude]
+		if !h.Enabled() {
+			e.emit(name, false, nil, nil, &RespError{Code: "harness_disabled", Message: "claude-code is disabled; cannot import from it"}, nil)
+			return exitUsage
+		}
+		res, err = importer.ImportClaude(claudeMemoryDir(h.Home, s.cwd))
+	case config.HarnessCodex:
+		h := s.cfg.Harnesses[config.HarnessCodex]
+		if !h.Enabled() {
+			e.emit(name, false, nil, nil, &RespError{Code: "harness_disabled", Message: "codex is disabled; cannot import from it"}, nil)
+			return exitUsage
+		}
+		res, err = importer.ImportCodex(filepath.Join(h.Home, "memories", "MEMORY.md"))
+	default:
+		e.emit(name, false, nil, nil, &RespError{Code: "unknown_harness", Message: "harness must be claude-code or codex"}, nil)
+		return exitUsage
+	}
+	if err != nil {
+		e.emit(name, false, nil, nil, &RespError{Code: "import", Message: err.Error()}, nil)
+		return exitError
+	}
+
+	base := map[string]any{
+		"harness": harness, "apply": e.apply,
+		"skipped": res.Skipped, "would_import": len(res.Memories),
+	}
+	if !e.apply {
+		base["memories"] = memoryItems(res.Memories)
+		e.emit(name, true, base, nil, nil, nil)
+		return exitOK
+	}
+
+	outcomes := make([]map[string]string, 0, len(res.Memories))
+	conflicts := 0
+	for _, m := range res.Memories {
+		if verr := m.Validate(); verr != nil {
+			outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": "invalid", "error": verr.Error()})
+			continue
+		}
+		outcome, _, serr := store.Save(s.cfg.CanonicalRoot, m, false)
+		if serr != nil {
+			e.emit(name, false, base, nil, &RespError{Code: "save", Message: serr.Error()}, nil)
+			return exitError
+		}
+		if outcome == store.Conflict {
+			conflicts++
+		}
+		outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": string(outcome)})
+	}
+	base["results"] = outcomes
+	if conflicts > 0 {
+		e.emit(name, false, base, nil, nil, nil)
+		return exitConflicts
+	}
+	e.emit(name, true, base, nil, nil, nil)
 	return exitOK
 }
 
