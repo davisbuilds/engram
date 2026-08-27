@@ -1,0 +1,24 @@
+# Compiled binaries
+/bin/
+/engram
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+._*
+
+# Local-only working docs — these reference personal machine paths/host names
+# and are kept out of the public tree. Public docs live directly under docs/.
+/docs/specs/
+/docs/plans/
+/docs/design/
+**/archive/
+
+# Local runtime config / state (never committed)
+/.engram/
+*.local.yaml
+*.local.yml
