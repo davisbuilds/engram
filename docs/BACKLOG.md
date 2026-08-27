@@ -29,8 +29,10 @@ only; shipped items live in the git history.
 
 ## Surface not yet built
 
-- Headless-agent path: `review` (near-dupe / promotion leads), the
-  `claude -p` / `codex exec` exec builder (with the `--` separator guard), the
-  `agent-memory-capture` / `agent-memory-review` skills, and `docs/headless.md`.
 - `import` currently reads only the current cwd's Claude project memory dir;
   an `--all` mode could sweep every project slug.
+- Skills are project-scoped only (in-repo symlinks). Global install via the
+  workspace `~/.agents/skills` + skill-standardizer flow is a later promotion.
+- `review` heuristics are deliberately simple (name-token Jaccard for near-dupes,
+  unconstrained project scope for promotion). Semantic/LLM near-dupe detection is
+  Stage 2 and belongs in an agent flow, not the CLI.

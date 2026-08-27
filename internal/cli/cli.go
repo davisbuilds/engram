@@ -82,7 +82,7 @@ func commands() []command {
 		{"audit", "Report pending render actions for a harness without writing.", cmdAudit},
 		{"diff", "Show the cross-state difference for each render target.", cmdDiff},
 		{"show", "Dump a harness's engram-rendered memories.", cmdShow},
-		{"review", "Health report: near-dupe names, promotion candidates, staleness leads.", stub},
+		{"review", "Health report: near-dupe names + promotion candidates, emitted as agent next_steps.", cmdReview},
 		{"hook", "Print harness lifecycle wiring for session-boundary sync.", cmdHook},
 		{"config", "Show config + per-harness readiness (is each harness set up to read what engram writes?).", cmdConfig},
 		{"schema", "Emit engram's JSON schemas (self-describing).", cmdSchema},
@@ -179,16 +179,6 @@ func (e *env) emit(cmd string, ok bool, data any, warnings []string, respErr *Re
 	if ok {
 		fmt.Printf("engram %s: ok\n", cmd)
 	}
-}
-
-// stub reports a not-yet-implemented command uniformly, so the surface is real
-// and discoverable while the phased build fills each command in.
-func stub(e *env, name string, _ []string) int {
-	e.emit(name, false, nil, nil, &RespError{
-		Code:    "not_implemented",
-		Message: name + " is scaffolded but not yet implemented",
-	}, nil)
-	return exitError
 }
 
 func cmdVersion(e *env, _ string, _ []string) int {
