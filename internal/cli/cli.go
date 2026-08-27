@@ -126,7 +126,11 @@ func Run(args []string) int {
 }
 
 // emit writes the response in the resolved output mode. JSON and all primary
-// data go to stdout; human diagnostics go to stderr.
+// data go to stdout; human diagnostics go to stderr. warnings is part of the
+// stable response-envelope contract; it is threaded through now and populated
+// once the sync/audit commands that surface non-fatal notes land.
+//
+//nolint:unparam // warnings is a deliberate envelope field, not dead yet
 func (e *env) emit(cmd string, ok bool, data any, warnings []string, respErr *RespError, next []NextStep) {
 	if e.jsonMode {
 		enc := json.NewEncoder(os.Stdout)
