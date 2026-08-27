@@ -4,24 +4,27 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/discover"
+	"github.com/davisbuilds/engram/internal/marker"
+	"github.com/davisbuilds/engram/internal/schema"
 	"github.com/davisbuilds/engram/internal/scope"
 	"github.com/davisbuilds/engram/internal/slug"
 	"github.com/davisbuilds/engram/internal/sync"
 )
 
-// session resolves the cwd/agent/host context and loads config once, shared by
-// the sync/audit/list/discover commands.
+// session resolves the cwd/host context and loads config once, shared by the
+// sync/audit/list/discover commands.
 type session struct {
-	cfg   *config.Config
-	cwd   string
-	agent string
-	host  string
+	cfg           *config.Config
+	cwd           string
+	host          string
+	agentOverride string
 }
 
-func (e *env) session(defaultAgent string) (*session, *RespError) {
+func (e *env) newSession() (*session, *RespError) {
 	cfg, err := config.Load(e.config)
 	if err != nil {
 		return nil, &RespError{Code: "config_load", Message: err.Error()}
@@ -34,11 +37,166 @@ func (e *env) session(defaultAgent string) (*session, *RespError) {
 		}
 		cwd = wd
 	}
-	agent := e.agent
-	if agent == "" {
-		agent = defaultAgent
+	return &session{cfg: cfg, cwd: cwd, host: e.resolveHost(cfg), agentOverride: e.agent}, nil
+}
+
+// agentFor returns the effective agent for scope filtering: an explicit --agent
+// override wins, otherwise the harness's own native agent name.
+func (s *session) agentFor(native string) string {
+	if s.agentOverride != "" {
+		return s.agentOverride
 	}
-	return &session{cfg: cfg, cwd: cwd, agent: agent, host: e.resolveHost(cfg)}, nil
+	return native
+}
+
+// targets builds a reconcilable target for every enabled harness, filtering the
+// discovered memories per harness (the agent axis differs by harness).
+func (s *session) targets() ([]sync.Target, []string, *RespError) {
+	mems, perrs, err := discover.Discover(s.cfg.CanonicalRoot)
+	if err != nil {
+		return nil, nil, &RespError{Code: "discover", Message: err.Error()}
+	}
+	warns := warnParseErrors(perrs)
+
+	var targets []sync.Target
+	if h := s.cfg.Harnesses[config.HarnessClaude]; h.Enabled() {
+		rel := scope.RelevantFor(mems, s.cwd, s.agentFor("claude"), s.host)
+		targets = append(targets, sync.ClaudeTarget{
+			MemoryDir: claudeMemoryDir(h.Home, s.cwd), Desired: rel,
+		})
+	} else {
+		warns = append(warns, "claude-code disabled; skipped")
+	}
+	if h := s.cfg.Harnesses[config.HarnessCodex]; h.Enabled() {
+		rel := scope.RelevantFor(mems, s.cwd, s.agentFor("codex"), s.host)
+		targets = append(targets, sync.CodexTarget{
+			ExtensionDir: codexExtDir(h.Home), Desired: rel, Now: time.Now,
+		})
+	} else {
+		warns = append(warns, "codex disabled; skipped")
+	}
+	return targets, warns, nil
+}
+
+func cmdSync(e *env, name string, _ []string) int {
+	s, rerr := e.newSession()
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitError
+	}
+	targets, warns, rerr := s.targets()
+	if rerr != nil {
+		e.emit(name, false, nil, warns, rerr, nil)
+		return exitError
+	}
+	if len(targets) == 0 {
+		e.emit(name, false, nil, warns, &RespError{Code: "no_harness", Message: "no enabled harness to sync"}, nil)
+		return exitUsage
+	}
+
+	exit := exitOK
+	var next []NextStep
+	entries := make([]map[string]any, 0, len(targets))
+	for _, tg := range targets {
+		entry := map[string]any{"harness": tg.Harness()}
+		if !e.apply {
+			actions, err := tg.Plan()
+			if err != nil {
+				entry["error"] = err.Error()
+				exit = worseExit(exit, exitError)
+			} else {
+				entry["actions"] = actions
+				exit = worseExit(exit, exitForActions(actions))
+				next = append(next, conflictNextSteps(actions)...)
+			}
+		} else {
+			res, err := tg.Apply()
+			if err != nil {
+				entry["error"] = err.Error()
+				exit = worseExit(exit, exitError)
+			} else {
+				entry["result"] = res
+				if len(res.Conflicts) > 0 {
+					exit = worseExit(exit, exitConflicts)
+					next = append(next, conflictNextSteps(res.Conflicts)...)
+				}
+			}
+		}
+		entries = append(entries, entry)
+	}
+	e.emit(name, exit == exitOK, map[string]any{
+		"cwd": s.cwd, "host": s.host, "apply": e.apply, "harnesses": entries,
+	}, warns, nil, next)
+	return exit
+}
+
+func cmdAudit(e *env, name string, _ []string) int {
+	s, rerr := e.newSession()
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitError
+	}
+	targets, warns, rerr := s.targets()
+	if rerr != nil {
+		e.emit(name, false, nil, warns, rerr, nil)
+		return exitError
+	}
+
+	exit := exitOK
+	var next []NextStep
+	entries := make([]map[string]any, 0, len(targets))
+	for _, tg := range targets {
+		entry := map[string]any{"harness": tg.Harness()}
+		actions, err := tg.Plan()
+		if err != nil {
+			entry["error"] = err.Error()
+			exit = worseExit(exit, exitError)
+		} else {
+			entry["actions"] = actions
+			exit = worseExit(exit, exitForActions(actions))
+			next = append(next, conflictNextSteps(actions)...)
+		}
+		entries = append(entries, entry)
+	}
+	e.emit(name, exit == exitOK, map[string]any{
+		"cwd": s.cwd, "host": s.host, "harnesses": entries,
+	}, warns, nil, next)
+	return exit
+}
+
+func cmdList(e *env, name string, _ []string) int {
+	s, rerr := e.newSession()
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitError
+	}
+	mems, perrs, err := discover.Discover(s.cfg.CanonicalRoot)
+	if err != nil {
+		e.emit(name, false, nil, warnParseErrors(perrs), &RespError{Code: "discover", Message: err.Error()}, nil)
+		return exitError
+	}
+	relevant := scope.RelevantFor(mems, s.cwd, s.agentFor("claude"), s.host)
+	e.emit(name, true, map[string]any{
+		"cwd": s.cwd, "host": s.host, "memories": memoryItems(relevant),
+	}, warnParseErrors(perrs), nil, nil)
+	return exitOK
+}
+
+func cmdDiscover(e *env, name string, _ []string) int {
+	cfg, err := config.Load(e.config)
+	if err != nil {
+		e.emit(name, false, nil, nil, &RespError{Code: "config_load", Message: err.Error()}, nil)
+		return exitError
+	}
+	mems, perrs, derr := discover.Discover(cfg.CanonicalRoot)
+	if derr != nil {
+		e.emit(name, false, nil, warnParseErrors(perrs), &RespError{Code: "discover", Message: derr.Error()}, nil)
+		return exitError
+	}
+	e.emit(name, true, map[string]any{
+		"canonical_root": cfg.CanonicalRoot, "count": len(mems), "memories": memoryItems(mems),
+	}, warnParseErrors(perrs), nil, nil)
+	return exitOK
 }
 
 // resolveHost maps the current machine to its configured host label. An explicit
@@ -55,9 +213,20 @@ func (e *env) resolveHost(cfg *config.Config) string {
 	return label
 }
 
-// claudeMemoryDir is the per-project memory directory for the given cwd.
 func claudeMemoryDir(claudeHome, cwd string) string {
 	return filepath.Join(claudeHome, "projects", slug.ForCwd(cwd), "memory")
+}
+
+func codexExtDir(codexHome string) string {
+	return filepath.Join(codexHome, "memories", "extensions", marker.Extension)
+}
+
+func memoryItems(mems []*schema.CanonicalMemory) []map[string]string {
+	items := make([]map[string]string, 0, len(mems))
+	for _, m := range mems {
+		items = append(items, map[string]string{"name": m.Name, "scope": m.Scope, "type": string(m.Type)})
+	}
+	return items
 }
 
 func warnParseErrors(perrs []discover.ParseError) []string {
@@ -80,134 +249,14 @@ func exitForActions(actions []sync.Action) int {
 	return exitOK
 }
 
-// claudePlan gathers the scope-filtered target for a session, shared by sync's
-// dry-run and audit.
-func (s *session) claudeTarget() (sync.ClaudeTarget, []discover.ParseError, *RespError) {
-	claude := s.cfg.Harnesses[config.HarnessClaude]
-	mems, perrs, err := discover.Discover(s.cfg.CanonicalRoot)
-	if err != nil {
-		return sync.ClaudeTarget{}, nil, &RespError{Code: "discover", Message: err.Error()}
+// worseExit returns the more significant of two exit codes: a hard error
+// outranks conflicts, which outrank success.
+func worseExit(a, b int) int {
+	prio := map[int]int{exitOK: 0, exitConflicts: 1, exitError: 2, exitUsage: 2}
+	if prio[b] > prio[a] {
+		return b
 	}
-	relevant := scope.RelevantFor(mems, s.cwd, s.agent, s.host)
-	return sync.ClaudeTarget{
-		MemoryDir: claudeMemoryDir(claude.Home, s.cwd),
-		Desired:   relevant,
-	}, perrs, nil
-}
-
-func cmdSync(e *env, name string, _ []string) int {
-	s, rerr := e.session("claude")
-	if rerr != nil {
-		e.emit(name, false, nil, nil, rerr, nil)
-		return exitError
-	}
-	claude := s.cfg.Harnesses[config.HarnessClaude]
-	if e.apply && !claude.Enabled() {
-		e.emit(name, false, nil, nil, &RespError{
-			Code: "harness_disabled", Message: "claude-code is disabled; refusing to write",
-		}, nil)
-		return exitUsage
-	}
-	target, perrs, rerr := s.claudeTarget()
-	if rerr != nil {
-		e.emit(name, false, nil, warnParseErrors(perrs), rerr, nil)
-		return exitError
-	}
-
-	base := map[string]any{
-		"harness": config.HarnessClaude, "cwd": s.cwd, "host": s.host,
-		"memory_dir": target.MemoryDir, "relevant": len(target.Desired), "apply": e.apply,
-	}
-
-	if !e.apply {
-		actions, err := target.Plan()
-		if err != nil {
-			e.emit(name, false, nil, warnParseErrors(perrs), &RespError{Code: "plan", Message: err.Error()}, nil)
-			return exitError
-		}
-		base["actions"] = actions
-		e.emit(name, true, base, warnParseErrors(perrs), nil, conflictNextSteps(actions))
-		return exitForActions(actions)
-	}
-
-	res, err := target.Apply()
-	if err != nil {
-		e.emit(name, false, nil, warnParseErrors(perrs), &RespError{Code: "apply", Message: err.Error()}, nil)
-		return exitError
-	}
-	base["result"] = res
-	ok := len(res.Conflicts) == 0
-	e.emit(name, ok, base, warnParseErrors(perrs), nil, conflictNextSteps(res.Conflicts))
-	if !ok {
-		return exitConflicts
-	}
-	return exitOK
-}
-
-func cmdAudit(e *env, name string, _ []string) int {
-	s, rerr := e.session("claude")
-	if rerr != nil {
-		e.emit(name, false, nil, nil, rerr, nil)
-		return exitError
-	}
-	target, perrs, rerr := s.claudeTarget()
-	if rerr != nil {
-		e.emit(name, false, nil, warnParseErrors(perrs), rerr, nil)
-		return exitError
-	}
-	actions, err := target.Plan()
-	if err != nil {
-		e.emit(name, false, nil, warnParseErrors(perrs), &RespError{Code: "plan", Message: err.Error()}, nil)
-		return exitError
-	}
-	e.emit(name, true, map[string]any{
-		"harness": config.HarnessClaude, "cwd": s.cwd, "host": s.host,
-		"memory_dir": target.MemoryDir, "relevant": len(target.Desired), "actions": actions,
-	}, warnParseErrors(perrs), nil, conflictNextSteps(actions))
-	return exitForActions(actions)
-}
-
-func cmdList(e *env, name string, _ []string) int {
-	s, rerr := e.session("claude")
-	if rerr != nil {
-		e.emit(name, false, nil, nil, rerr, nil)
-		return exitError
-	}
-	mems, perrs, err := discover.Discover(s.cfg.CanonicalRoot)
-	if err != nil {
-		e.emit(name, false, nil, warnParseErrors(perrs), &RespError{Code: "discover", Message: err.Error()}, nil)
-		return exitError
-	}
-	relevant := scope.RelevantFor(mems, s.cwd, s.agent, s.host)
-	items := make([]map[string]string, 0, len(relevant))
-	for _, m := range relevant {
-		items = append(items, map[string]string{"name": m.Name, "scope": m.Scope, "type": string(m.Type)})
-	}
-	e.emit(name, true, map[string]any{
-		"cwd": s.cwd, "agent": s.agent, "host": s.host, "memories": items,
-	}, warnParseErrors(perrs), nil, nil)
-	return exitOK
-}
-
-func cmdDiscover(e *env, name string, _ []string) int {
-	cfg, err := config.Load(e.config)
-	if err != nil {
-		e.emit(name, false, nil, nil, &RespError{Code: "config_load", Message: err.Error()}, nil)
-		return exitError
-	}
-	mems, perrs, derr := discover.Discover(cfg.CanonicalRoot)
-	if derr != nil {
-		e.emit(name, false, nil, warnParseErrors(perrs), &RespError{Code: "discover", Message: derr.Error()}, nil)
-		return exitError
-	}
-	items := make([]map[string]string, 0, len(mems))
-	for _, m := range mems {
-		items = append(items, map[string]string{"name": m.Name, "scope": m.Scope, "type": string(m.Type)})
-	}
-	e.emit(name, true, map[string]any{
-		"canonical_root": cfg.CanonicalRoot, "count": len(items), "memories": items,
-	}, warnParseErrors(perrs), nil, nil)
-	return exitOK
+	return a
 }
 
 // conflictNextSteps turns each CONFLICT into an agent-consumable lead.
@@ -217,7 +266,7 @@ func conflictNextSteps(actions []sync.Action) []NextStep {
 		if a.Kind == sync.Conflict {
 			steps = append(steps, NextStep{
 				Reason:  "unmarked file at " + a.Path + " blocks rendering " + a.Name,
-				Command: "resolve by removing or renaming the hand-authored file, then re-run engram sync",
+				Command: "remove or rename the hand-authored file, then re-run engram sync",
 			})
 		}
 	}

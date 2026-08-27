@@ -53,12 +53,26 @@ type Result struct {
 	Conflicts []Action `json:"conflicts"`
 }
 
+// Target is one harness's reconcilable memory store. Both harness targets share
+// the same plan/apply contract so the caller can drive them uniformly.
+type Target interface {
+	// Harness names the target harness (e.g. "claude-code", "codex").
+	Harness() string
+	// Plan computes the reconciliation actions without writing.
+	Plan() ([]Action, error)
+	// Apply reconciles under an exclusive lock and reports what it did.
+	Apply() (Result, error)
+}
+
 // ClaudeTarget is a Claude Code per-project memory directory paired with the
 // memories that should render into it (already scope-filtered by the caller).
 type ClaudeTarget struct {
 	MemoryDir string
 	Desired   []*schema.CanonicalMemory
 }
+
+// Harness identifies this target's harness.
+func (ClaudeTarget) Harness() string { return "claude-code" }
 
 // ownedFile is an engram-authored memory file already on disk.
 type ownedFile struct {
