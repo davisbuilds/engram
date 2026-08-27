@@ -57,6 +57,23 @@ func Save(root string, m *schema.CanonicalMemory, force bool) (Outcome, string, 
 	return Updated, path, nil
 }
 
+// Delete removes the canonical memory named name from the root. A missing memory
+// is not an error (delete is idempotent); the bool reports whether a file was
+// actually removed.
+func Delete(root, name string) (bool, error) {
+	_, path, found, err := Load(root, name)
+	if err != nil {
+		return false, err
+	}
+	if !found {
+		return false, nil
+	}
+	if err := os.Remove(path); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // Load returns the canonical memory named name, its file path, and whether it was
 // found.
 func Load(root, name string) (*schema.CanonicalMemory, string, bool, error) {

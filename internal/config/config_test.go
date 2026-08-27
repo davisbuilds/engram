@@ -62,3 +62,29 @@ func TestHostLabelUnknownIsNotOK(t *testing.T) {
 		t.Error("unmapped hostname should report ok=false (fail-closed)")
 	}
 }
+
+func TestCurateModelDefaults(t *testing.T) {
+	cfg, err := Load("") // no file: built-in defaults
+	if err != nil {
+		t.Fatal(err)
+	}
+	claude := cfg.CurateModel(HarnessClaude)
+	if claude.Model != "claude-sonnet-5" || claude.Effort != "high" {
+		t.Errorf("claude default = %+v, want claude-sonnet-5/high", claude)
+	}
+	codex := cfg.CurateModel(HarnessCodex)
+	if codex.Model != "gpt-5.6-terra" || codex.Effort != "high" {
+		t.Errorf("codex default = %+v, want gpt-5.6-terra/high", codex)
+	}
+}
+
+func TestCurateModelPartialOverrideFallsBack(t *testing.T) {
+	// A config that sets only the model must inherit the default effort.
+	cfg := &Config{Curate: CurateConfig{Models: map[string]ModelChoice{
+		HarnessClaude: {Model: "claude-opus-5"},
+	}}}
+	got := cfg.CurateModel(HarnessClaude)
+	if got.Model != "claude-opus-5" || got.Effort != "high" {
+		t.Errorf("partial override = %+v, want claude-opus-5/high", got)
+	}
+}

@@ -84,6 +84,9 @@ engram [global flags] <command> [args]
     sync         Render canonical → harnesses. Dry-run; --apply to write.
     import       Reverse-sync a harness's native memory into canonical
                  (explicit, one-shot; dry-run, --apply to write).
+    curate       Run a headless agent over the corpus; it proposes
+                 add/merge/remove/rescope, engram validates and applies
+                 (dry-run; --apply to write). The one command that runs an agent.
 
   Introspection (read-only, --json everywhere):
     discover     Parse and list every canonical memory, with parse errors.
@@ -148,6 +151,18 @@ explicit rather than ambient.
 - **`show <harness>`** — permissive on a disabled harness (proceeds, stderr note);
   contrast `import` (strict). Read vs write, mapped to filesystem semantics.
 - **`review`** — never mutates; every finding is a `next_step` the agent may run.
+- **`curate`** — the proposer/applier loop, and the **only** command that invokes
+  an agent. engram gathers the canonical corpus + `review` findings
+  (deterministic), hands them to a headless agent as facts, and the agent returns
+  *proposed operations only* (`add` / `update` / `merge` / `remove` / `rescope`
+  with reasons) — it never touches a file. engram validates every proposed
+  operation against the corpus and the schema; a dry-run reports the plan, and
+  `--apply` executes it through the same `store` write-path. **Fail closed**: if
+  any operation in the batch is invalid, `--apply` applies nothing (exit `3`).
+  Model/effort are `--model` / `--effort` (flags win over the per-harness config
+  default: claude → `claude-sonnet-5`/`high`, codex → `gpt-5.6-terra`/`high`);
+  `--harness` picks which agent runs (default `claude-code`). The trust boundary
+  is that a model *proposes* and engram is the sole *mutator*.
 - **`hook print`** — emits the JSON snippet wiring `engram sync --apply --quiet`
   to Claude Code SessionStart/Stop. Codex capture is agent-wrapped (documented).
 

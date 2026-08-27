@@ -15,6 +15,18 @@ only; shipped items live in the git history.
 - **Stale apply lock.** `sync` uses an exclusive `.engram.lock` file removed on
   completion. A crash mid-apply leaves the lock behind and blocks the next apply.
   Add staleness detection (age/PID) or a `--force-unlock` escape hatch.
+- **`curate --apply` takes no lock across the batch.** `sync --apply` holds the
+  exclusive `.engram.lock`, but `curate` applies its multi-file batch through
+  `store` without acquiring it, so a concurrent `sync --apply` (or a second
+  curate) could interleave writes on the canonical root. Each `store.Save`/
+  `Delete` is individually atomic, but the batch is not. Acquire the same lock
+  around `curate.Apply` before relying on curate alongside background sync.
+- **Codex curate output extraction is naive.** `ExtractCodexText` returns all of
+  `codex exec` stdout and leans on fenced-`json` recovery to find the proposal
+  inside the session-log preamble. If Codex ever emits a stray ```json block
+  before the real one, the wrong block wins. Prefer `codex exec`'s structured/
+  `--json` event stream (confirm the flag exists in the installed version) and
+  parse the final assistant message explicitly, as the Claude path already does.
 
 ## Import quality
 
