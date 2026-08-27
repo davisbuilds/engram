@@ -136,7 +136,10 @@ explicit rather than ambient.
   `--applies-agent`, `--applies-host`, …) **or** a complete `CanonicalMemory`
   as JSON on stdin via `--from-json -` (the agent path: construct once, pipe in).
   Refuses to overwrite a differing canonical of the same name → canonical-side
-  `CONFLICT` (exit `3`), never silent data loss.
+  `CONFLICT` (exit `3`), never silent data loss. Every canonical writer
+  (`remember`, `share`, `import --apply`, `curate --apply`) takes the shared
+  exclusive canonical-root lock, so no two writers interleave; a held lock is a
+  retryable error (exit `1`, `error.code = "locked"`), not a silent second write.
 - **`sync`** — computes render `Action`s (`CREATE` / `UPDATE` / `STALE` /
   `CONFLICT`) for the relevant memories against the current cwd/agent/host and,
   with `--apply`, executes them under an exclusive lock (idempotent; a second

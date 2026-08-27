@@ -63,6 +63,12 @@ func cmdRemember(e *env, name string, args []string) int {
 		e.emit(name, false, nil, nil, &RespError{Code: "config_load", Message: err.Error()}, nil)
 		return exitError
 	}
+	release, lerr := canonLock(cfg.CanonicalRoot)
+	if lerr != nil {
+		e.emit(name, false, nil, nil, lerr, nil)
+		return exitError
+	}
+	defer release()
 	outcome, path, err := store.Save(cfg.CanonicalRoot, m, *force)
 	if err != nil {
 		e.emit(name, false, nil, nil, &RespError{Code: "save", Message: err.Error()}, nil)
@@ -103,6 +109,14 @@ func cmdShare(e *env, name string, args []string) int {
 		e.emit(name, false, nil, nil, &RespError{Code: "config_load", Message: err.Error()}, nil)
 		return exitError
 	}
+	// Lock across load-modify-save so a concurrent writer cannot slip between
+	// reading the current scope and writing the moved one.
+	release, lerr := canonLock(cfg.CanonicalRoot)
+	if lerr != nil {
+		e.emit(name, false, nil, nil, lerr, nil)
+		return exitError
+	}
+	defer release()
 	m, _, found, err := store.Load(cfg.CanonicalRoot, memName)
 	if err != nil {
 		e.emit(name, false, nil, nil, &RespError{Code: "load", Message: err.Error()}, nil)
@@ -189,6 +203,13 @@ func cmdImport(e *env, name string, args []string) int {
 		e.emit(name, true, base, warns, nil, nil)
 		return exitOK
 	}
+
+	release, lerr := canonLock(s.cfg.CanonicalRoot)
+	if lerr != nil {
+		e.emit(name, false, base, warns, lerr, nil)
+		return exitError
+	}
+	defer release()
 
 	outcomes := make([]map[string]string, 0, len(res.Memories))
 	conflicts := 0
