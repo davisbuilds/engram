@@ -10,11 +10,15 @@ import (
 	"github.com/davisbuilds/engram/internal/schema"
 )
 
-// Result is what an importer produced: the canonical memories it mapped, and the
-// names/titles it skipped as engram-origin (the loop guard).
+// Result is what an importer produced: the canonical memories it mapped, the
+// names/titles it skipped as engram-origin (the loop guard), and — for Codex —
+// whether the consolidated source looks stale.
 type Result struct {
 	Memories []*schema.CanonicalMemory
 	Skipped  []string
+	// StaleWarning is set when the Codex MEMORY.md being imported is older than
+	// 30 days, i.e. the consolidator may be stalled and the source may lag reality.
+	StaleWarning bool
 }
 
 // frontmatterAndBody splits a canonical/native memory file into its YAML

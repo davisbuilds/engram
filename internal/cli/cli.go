@@ -84,7 +84,7 @@ func commands() []command {
 		{"show", "Dump a harness's engram-rendered memories.", cmdShow},
 		{"review", "Health report: near-dupe names, promotion candidates, staleness leads.", stub},
 		{"hook", "Print harness lifecycle wiring for session-boundary sync.", cmdHook},
-		{"config", "Show or validate the resolved configuration.", stub},
+		{"config", "Show config + per-harness readiness (is each harness set up to read what engram writes?).", cmdConfig},
 		{"schema", "Emit engram's JSON schemas (self-describing).", cmdSchema},
 		{"version", "Print the engram version.", cmdVersion},
 	}

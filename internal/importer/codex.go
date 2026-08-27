@@ -3,9 +3,13 @@ package importer
 import (
 	"errors"
 	"os"
+	"time"
 
 	"github.com/davisbuilds/engram/internal/schema"
 )
+
+// staleAfter is how old a Codex MEMORY.md may be before import flags it as stale.
+const staleAfter = 30 * 24 * time.Hour
 
 // ImportCodex reads a Codex MEMORY.md, splits it into Task Groups, and maps each
 // group to one canonical memory (the Task Group is the unit, preserving Codex's
@@ -20,6 +24,9 @@ func ImportCodex(memoryFile string) (Result, error) {
 	}
 	if err != nil {
 		return res, err
+	}
+	if fi, statErr := os.Stat(memoryFile); statErr == nil && time.Since(fi.ModTime()) > staleAfter {
+		res.StaleWarning = true
 	}
 	for _, g := range splitTaskGroups(string(data)) {
 		if isEngramOrigin(g.body) {

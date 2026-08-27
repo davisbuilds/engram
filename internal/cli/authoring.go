@@ -179,9 +179,14 @@ func cmdImport(e *env, name string, args []string) int {
 		"harness": harness, "apply": e.apply,
 		"skipped": res.Skipped, "would_import": len(res.Memories),
 	}
+	var warns []string
+	if res.StaleWarning {
+		base["stale_warning"] = true
+		warns = append(warns, "Codex MEMORY.md is older than 30 days; the consolidator may be stalled and this import may lag reality")
+	}
 	if !e.apply {
 		base["memories"] = memoryItems(res.Memories)
-		e.emit(name, true, base, nil, nil, nil)
+		e.emit(name, true, base, warns, nil, nil)
 		return exitOK
 	}
 
@@ -204,10 +209,10 @@ func cmdImport(e *env, name string, args []string) int {
 	}
 	base["results"] = outcomes
 	if conflicts > 0 {
-		e.emit(name, false, base, nil, nil, nil)
+		e.emit(name, false, base, warns, nil, nil)
 		return exitConflicts
 	}
-	e.emit(name, true, base, nil, nil, nil)
+	e.emit(name, true, base, warns, nil, nil)
 	return exitOK
 }
 

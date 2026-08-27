@@ -200,6 +200,24 @@ func TestRunDiffAndShow(t *testing.T) {
 	}
 }
 
+// TestRunConfigFlagsCodexMemoriesOff verifies the readiness check surfaces the
+// silent-no-op case: engram enabled for Codex, but Codex's own memory is off.
+func TestRunConfigFlagsCodexMemoriesOff(t *testing.T) {
+	dir := t.TempDir()
+	codex := filepath.Join(dir, "codex")
+	writeFile(t, filepath.Join(codex, "config.toml"), "memories = false\n")
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+filepath.Join(dir, "canonical")+
+		"\nharnesses:\n  codex:\n    home: "+codex+"\n")
+	out := captureStdout(t, func() { Run([]string{"config", "--config", cfg, "--json"}) })
+	if !strings.Contains(out, "never consolidated") {
+		t.Errorf("config should warn that Codex memory is off:\n%s", out)
+	}
+	if !strings.Contains(out, `"ready": false`) {
+		t.Errorf("codex should report ready:false when memories is off:\n%s", out)
+	}
+}
+
 func TestRunUnknownCommandIsUsageError(t *testing.T) {
 	defer silenceStdout(t)()
 	if code := Run([]string{"bogus", "--json"}); code != exitUsage {

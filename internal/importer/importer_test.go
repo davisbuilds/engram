@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/davisbuilds/engram/internal/schema"
 )
@@ -103,6 +104,28 @@ func TestImportCodexSkipsEngramGroups(t *testing.T) {
 	}
 	if len(res.Skipped) != 1 {
 		t.Errorf("expected 1 loop-guard skip, got %d", len(res.Skipped))
+	}
+}
+
+func TestImportCodexStaleWarning(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "MEMORY.md")
+	if err := os.WriteFile(path, []byte("# Task Group: a lesson\n\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if res, _ := ImportCodex(path); res.StaleWarning {
+		t.Error("a fresh MEMORY.md must not be flagged stale")
+	}
+	old := time.Now().Add(-40 * 24 * time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+	res, err := ImportCodex(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.StaleWarning {
+		t.Error("a 40-day-old MEMORY.md should set StaleWarning")
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/discover"
+	"github.com/davisbuilds/engram/internal/harness"
 	"github.com/davisbuilds/engram/internal/marker"
 	"github.com/davisbuilds/engram/internal/schema"
 	"github.com/davisbuilds/engram/internal/scope"
@@ -65,6 +66,7 @@ func (s *session) targets() ([]sync.Target, []string, *RespError) {
 		targets = append(targets, sync.ClaudeTarget{
 			MemoryDir: claudeMemoryDir(h.Home, s.cwd), Desired: rel,
 		})
+		warns = append(warns, harnessWarnings(harness.CheckClaude(h.Home, true))...)
 	} else {
 		warns = append(warns, "claude-code disabled; skipped")
 	}
@@ -73,6 +75,7 @@ func (s *session) targets() ([]sync.Target, []string, *RespError) {
 		targets = append(targets, sync.CodexTarget{
 			ExtensionDir: codexExtDir(h.Home), Desired: rel, Now: time.Now,
 		})
+		warns = append(warns, harnessWarnings(harness.CheckCodex(h.Home, true))...)
 	} else {
 		warns = append(warns, "codex disabled; skipped")
 	}
