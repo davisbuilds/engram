@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -197,6 +198,144 @@ func cmdDiscover(e *env, name string, _ []string) int {
 		"canonical_root": cfg.CanonicalRoot, "count": len(mems), "memories": memoryItems(mems),
 	}, warnParseErrors(perrs), nil, nil)
 	return exitOK
+}
+
+// cmdDiff shows the full per-memory reconciliation status for each harness,
+// including the memories already in sync — a superset of audit's pending actions.
+func cmdDiff(e *env, name string, _ []string) int {
+	s, rerr := e.newSession()
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitError
+	}
+	targets, warns, rerr := s.targets()
+	if rerr != nil {
+		e.emit(name, false, nil, warns, rerr, nil)
+		return exitError
+	}
+	exit := exitOK
+	entries := make([]map[string]any, 0, len(targets))
+	for _, tg := range targets {
+		entry := map[string]any{"harness": tg.Harness()}
+		actions, err := tg.Plan()
+		if err != nil {
+			entry["error"] = err.Error()
+			exit = worseExit(exit, exitError)
+			entries = append(entries, entry)
+			continue
+		}
+		byName := map[string]sync.ActionKind{}
+		for _, a := range actions {
+			byName[a.Name] = a.Kind
+		}
+		var items []map[string]string
+		for _, m := range tg.DesiredMemories() {
+			status := "in-sync"
+			if k, ok := byName[m.Name]; ok {
+				status = string(k)
+				delete(byName, m.Name)
+			}
+			items = append(items, map[string]string{"name": m.Name, "status": status})
+		}
+		for nm, k := range byName {
+			items = append(items, map[string]string{"name": nm, "status": string(k)})
+		}
+		sort.Slice(items, func(i, j int) bool { return items[i]["name"] < items[j]["name"] })
+		entry["memories"] = items
+		exit = worseExit(exit, exitForActions(actions))
+		entries = append(entries, entry)
+	}
+	e.emit(name, exit == exitOK, map[string]any{"cwd": s.cwd, "host": s.host, "harnesses": entries}, warns, nil, nil)
+	return exit
+}
+
+// cmdShow dumps a harness's engram-rendered memories. Reading a disabled harness
+// is permissive: it proceeds with a warning (contrast import, which is strict).
+func cmdShow(e *env, name string, args []string) int {
+	var harness string
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") && harness == "" {
+			harness = a
+		}
+	}
+	if harness == "" {
+		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram show <claude-code|codex>"}, nil)
+		return exitUsage
+	}
+	s, rerr := e.newSession()
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitError
+	}
+
+	var (
+		warns []string
+		items []map[string]string
+	)
+	switch harness {
+	case config.HarnessClaude:
+		h := s.cfg.Harnesses[config.HarnessClaude]
+		if !h.Enabled() {
+			warns = append(warns, "claude-code is disabled; showing anyway (read is permissive)")
+		}
+		items = showClaude(claudeMemoryDir(h.Home, s.cwd))
+	case config.HarnessCodex:
+		h := s.cfg.Harnesses[config.HarnessCodex]
+		if !h.Enabled() {
+			warns = append(warns, "codex is disabled; showing anyway (read is permissive)")
+		}
+		items = showCodex(filepath.Join(codexExtDir(h.Home), "notes"))
+	default:
+		e.emit(name, false, nil, nil, &RespError{Code: "unknown_harness", Message: "harness must be claude-code or codex"}, nil)
+		return exitUsage
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i]["name"] < items[j]["name"] })
+	e.emit(name, true, map[string]any{"harness": harness, "count": len(items), "memories": items}, warns, nil, nil)
+	return exitOK
+}
+
+func showClaude(dir string) []map[string]string {
+	items := []map[string]string{}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return items
+	}
+	for _, e := range entries {
+		if e.IsDir() || e.Name() == "MEMORY.md" || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if strings.Contains(string(data), "origin: "+marker.Origin) {
+			items = append(items, map[string]string{"name": strings.TrimSuffix(e.Name(), ".md"), "path": path})
+		}
+	}
+	return items
+}
+
+func showCodex(notesDir string) []map[string]string {
+	items := []map[string]string{}
+	entries, err := os.ReadDir(notesDir)
+	if err != nil {
+		return items
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(notesDir, e.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if n, scp, ok := marker.CodexNoteName(string(data)); ok {
+			items = append(items, map[string]string{"name": n, "scope": scp, "path": path})
+		}
+	}
+	return items
 }
 
 // resolveHost maps the current machine to its configured host label. An explicit

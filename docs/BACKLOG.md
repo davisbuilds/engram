@@ -32,7 +32,5 @@ only; shipped items live in the git history.
 - Headless-agent path: `review` (near-dupe / promotion leads), the
   `claude -p` / `codex exec` exec builder (with the `--` separator guard), the
   `agent-memory-capture` / `agent-memory-review` skills, and `docs/headless.md`.
-- `hook print`: Claude Code SessionStart/Stop wiring for session-boundary sync.
-- `diff` and `show` commands (registered but still stubbed).
 - `import` currently reads only the current cwd's Claude project memory dir;
   an `--all` mode could sweep every project slug.

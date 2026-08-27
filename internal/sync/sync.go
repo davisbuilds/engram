@@ -58,6 +58,8 @@ type Result struct {
 type Target interface {
 	// Harness names the target harness (e.g. "claude-code", "codex").
 	Harness() string
+	// DesiredMemories returns the scope-filtered memories that should render here.
+	DesiredMemories() []*schema.CanonicalMemory
 	// Plan computes the reconciliation actions without writing.
 	Plan() ([]Action, error)
 	// Apply reconciles under an exclusive lock and reports what it did.
@@ -73,6 +75,9 @@ type ClaudeTarget struct {
 
 // Harness identifies this target's harness.
 func (ClaudeTarget) Harness() string { return "claude-code" }
+
+// DesiredMemories returns the scope-filtered memories for this target.
+func (t ClaudeTarget) DesiredMemories() []*schema.CanonicalMemory { return t.Desired }
 
 // ownedFile is an engram-authored memory file already on disk.
 type ownedFile struct {

@@ -1,11 +1,28 @@
 package cli
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// captureStdout runs fn with os.Stdout redirected and returns what it wrote.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	fn()
+	_ = w.Close()
+	os.Stdout = old
+	b, _ := io.ReadAll(r)
+	return string(b)
+}
 
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
@@ -144,6 +161,42 @@ func TestRunImportDisabledHarnessIsStrict(t *testing.T) {
 	defer silenceStdout(t)()
 	if code := Run([]string{"import", "codex", "--config", cfg, "--json"}); code != exitUsage {
 		t.Errorf("import of a disabled harness exit = %d, want %d", code, exitUsage)
+	}
+}
+
+func TestRunHookPrint(t *testing.T) {
+	out := captureStdout(t, func() { Run([]string{"hook", "print", "--json"}) })
+	if !strings.Contains(out, "engram sync --apply --quiet") {
+		t.Errorf("hook fragment missing the sync command:\n%s", out)
+	}
+	if !strings.Contains(out, "SessionStart") || !strings.Contains(out, "Stop") {
+		t.Errorf("hook fragment missing lifecycle events:\n%s", out)
+	}
+}
+
+// TestRunDiffAndShow covers the read commands, including that show on a disabled
+// harness is permissive (exit 0), unlike import.
+func TestRunDiffAndShow(t *testing.T) {
+	dir := t.TempDir()
+	canon := filepath.Join(dir, "canonical")
+	claude := filepath.Join(dir, "claude")
+	writeFile(t, filepath.Join(canon, "m.md"),
+		"---\nname: a-mem\ndescription: d\ntype: lesson\nscope: global\n---\nb\n")
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+canon+
+		"\nharnesses:\n  claude-code:\n    home: "+claude+"\n  codex:\n    disabled: true\n")
+	defer silenceStdout(t)()
+	c := []string{"--config", cfg, "--cwd", "/work/x", "--json"}
+
+	Run(append([]string{"sync", "--apply"}, c...))
+	if code := Run(append([]string{"diff"}, c...)); code != exitOK {
+		t.Errorf("diff exit = %d, want %d", code, exitOK)
+	}
+	if code := Run(append([]string{"show", "claude-code"}, c...)); code != exitOK {
+		t.Errorf("show exit = %d, want %d", code, exitOK)
+	}
+	if code := Run(append([]string{"show", "codex"}, c...)); code != exitOK {
+		t.Errorf("permissive show of a disabled harness exit = %d, want %d", code, exitOK)
 	}
 }
 

@@ -29,6 +29,9 @@ type CodexTarget struct {
 // Harness identifies this target's harness.
 func (CodexTarget) Harness() string { return "codex" }
 
+// DesiredMemories returns the scope-filtered memories for this target.
+func (t CodexTarget) DesiredMemories() []*schema.CanonicalMemory { return t.Desired }
+
 func (t CodexTarget) notesDir() string { return filepath.Join(t.ExtensionDir, "notes") }
 func (t CodexTarget) instructionsPath() string {
 	return filepath.Join(t.ExtensionDir, instructionsFile)
