@@ -5,6 +5,8 @@
 package importer
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/davisbuilds/engram/internal/schema"
@@ -19,6 +21,62 @@ type Result struct {
 	// StaleWarning is set when the Codex MEMORY.md being imported is older than
 	// 30 days, i.e. the consolidator may be stalled and the source may lag reality.
 	StaleWarning bool
+}
+
+// projectScopeFromRepo maps a directory path to a project scope, but only when
+// the path resolves to a real git repository — the single principled signal that
+// separates a project from a multi-project container (a workspace parent like
+// ~/Dev is not a repo and stays global). It walks up from path for a .git marker,
+// stopping at the home directory so a dotfiles repo at ~ never captures unrelated
+// work, and returns project:<repo base>. A path that is not under a repo — or
+// does not exist on this machine — yields "global". Only the repo's base name
+// enters the scope; the full, machine-specific path never does. The base name is
+// used verbatim (not slugified) because tier matching compares it against a
+// literal path segment of the session cwd.
+func projectScopeFromRepo(path string) string {
+	path = strings.TrimRight(strings.TrimSpace(path), string(filepath.Separator))
+	if path == "" {
+		return "global"
+	}
+	home, _ := os.UserHomeDir()
+	home = strings.TrimRight(home, string(filepath.Separator))
+	d := path
+	for {
+		if d == "" || d == string(filepath.Separator) || (home != "" && d == home) {
+			return "global"
+		}
+		if _, err := os.Stat(filepath.Join(d, ".git")); err == nil {
+			return "project:" + filepath.Base(d)
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			return "global"
+		}
+		d = parent
+	}
+}
+
+// deriveCodexScope reads a Task Group's `applies_to: cwd=<path>` line and maps
+// the path to a project scope by the same repo rule as Claude imports: a real
+// git repo → project:<base>, anything else → global. A group with no such line
+// stays global.
+func deriveCodexScope(body string) string {
+	for _, ln := range strings.Split(body, "\n") {
+		ln = strings.TrimSpace(ln)
+		if !strings.HasPrefix(ln, "applies_to:") {
+			continue
+		}
+		idx := strings.Index(ln, "cwd=")
+		if idx < 0 {
+			continue
+		}
+		rest := ln[idx+len("cwd="):]
+		if end := strings.IndexAny(rest, "; \t"); end >= 0 {
+			rest = rest[:end]
+		}
+		return projectScopeFromRepo(rest)
+	}
+	return "global"
 }
 
 // frontmatterAndBody splits a canonical/native memory file into its YAML

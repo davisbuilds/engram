@@ -147,7 +147,11 @@ explicit rather than ambient.
 - **`import <harness>`** — reverse-sync, explicit and one-shot. Dry-run lists the
   canonical memories it *would* create; `--apply` writes them. Marker/loop-guarded
   so engram's own output never round-trips. `import` against a disabled harness
-  exits `2`.
+  exits `2`. **Scope is derived, not defaulted:** a memory's scope resolves to
+  `project:<repo>` when its source cwd (Claude: the import cwd; Codex: the Task
+  Group's `applies_to: cwd=`) is a real git repository, else `global`. Only the
+  repo's base name enters the scope — the full path never does. A workspace
+  container (a non-repo parent of many projects) correctly stays `global`.
 - **`show <harness>`** — permissive on a disabled harness (proceeds, stderr note);
   contrast `import` (strict). Read vs write, mapped to filesystem semantics.
 - **`review`** — never mutates; every finding is a `next_step` the agent may run.

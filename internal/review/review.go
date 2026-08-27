@@ -1,7 +1,11 @@
 // Package review produces health leads over the canonical memory set — the
 // judgment inputs for a headless agent. It never mutates: it flags Jaccard-
-// similar names as possible duplicates and over-narrow scopes as promotion
-// candidates, and leaves the merge/promote decision to the agent.
+// similar names as possible duplicates and leaves the merge decision to the
+// agent. Scope judgment (should this be broader or narrower?) is deliberately
+// not a deterministic finding here — a correctly project-scoped memory needs no
+// cwd glob, so no static rule distinguishes a genuine over-scope from a normal
+// one; that judgment belongs to `curate`, where an agent can actually reason
+// about the memory's content.
 package review
 
 import (
@@ -46,16 +50,6 @@ func Analyze(mems []*schema.CanonicalMemory) []Finding {
 		}
 	}
 
-	for _, m := range mems {
-		if strings.HasPrefix(m.Scope, "project:") && len(m.AppliesTo.Cwd) == 0 {
-			out = append(out, Finding{
-				Kind:      "promotion-candidate",
-				Names:     []string{m.Name},
-				Detail:    fmt.Sprintf("%q is project-scoped but sets no cwd constraint; it may belong at a wider scope", m.Name),
-				Suggested: "engram share " + m.Name + " --to global",
-			})
-		}
-	}
 	return out
 }
 

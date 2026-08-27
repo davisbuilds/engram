@@ -158,7 +158,7 @@ func cmdImport(e *env, name string, args []string) int {
 			e.emit(name, false, nil, nil, &RespError{Code: "harness_disabled", Message: "claude-code is disabled; cannot import from it"}, nil)
 			return exitUsage
 		}
-		res, err = importer.ImportClaude(claudeMemoryDir(h.Home, s.cwd))
+		res, err = importer.ImportClaude(claudeMemoryDir(h.Home, s.cwd), s.cwd)
 	case config.HarnessCodex:
 		h := s.cfg.Harnesses[config.HarnessCodex]
 		if !h.Enabled() {

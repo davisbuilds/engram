@@ -38,10 +38,13 @@ only; shipped items live in the git history.
 
 ## Modelling
 
-- **Imported scope defaults to `global`.** Both importers set `scope: global`;
-  Claude memories are per-project and could map to `project:<repo>` from the cwd
-  slug, and Codex groups carry `applies_to: cwd=...`. For now the user re-scopes
-  with `engram share`. Consider deriving project scope on import.
+- **Codex scope derivation depends on the live filesystem.** Import now derives a
+  memory's scope by resolving a cwd to a real git repo (Claude: the import cwd;
+  Codex: the Task Group's `applies_to: cwd=`). A repo → `project:<base>`, anything
+  else → `global`. That makes Codex import non-reproducible: a Task Group whose
+  project has since been deleted or that references another machine's path falls
+  back to `global`. Safe (never a wrong project), but worth a content-hash or
+  path-cache alternative if reproducibility matters later.
 - **`remember` provenance timestamps.** `remember` sets `provenance.origin` but
   not `created`/`modified`, to keep render output deterministic and idempotent.
   A "preserve created, bump modified on change" policy would restore timestamps
