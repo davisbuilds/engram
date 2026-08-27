@@ -25,7 +25,7 @@ import (
 // single write. A held lock yields a retryable "locked" error rather than a
 // silent second writer.
 func canonLock(root string) (func(), *RespError) {
-	release, err := lock.Acquire(root, lock.DefaultStaleAfter)
+	release, err := lock.Acquire(root)
 	if err != nil {
 		return nil, &RespError{Code: "locked", Message: err.Error()}
 	}

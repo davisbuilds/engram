@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/davisbuilds/engram/internal/lock"
 )
 
 // captureStdout runs fn with os.Stdout redirected and returns what it wrote.
@@ -241,10 +243,12 @@ func TestCanonicalMutatorsBlockUnderHeldLock(t *testing.T) {
 	cfg := filepath.Join(dir, "c.yaml")
 	writeFile(t, cfg, "canonical_root: "+canon+"\nharnesses:\n  claude-code:\n    home: "+claude+"\n")
 
-	// A concurrent apply already holds a fresh lock.
-	if err := os.WriteFile(filepath.Join(canon, ".engram.lock"), []byte("held\n"), 0o644); err != nil {
+	// A concurrent apply already holds the canonical lock.
+	release, err := lock.Acquire(canon)
+	if err != nil {
 		t.Fatal(err)
 	}
+	defer release()
 	defer silenceStdout(t)()
 
 	cases := [][]string{

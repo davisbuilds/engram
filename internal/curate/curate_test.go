@@ -2,10 +2,10 @@ package curate
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/davisbuilds/engram/internal/lock"
 	"github.com/davisbuilds/engram/internal/schema"
 	"github.com/davisbuilds/engram/internal/store"
 )
@@ -182,10 +182,12 @@ func TestApplyBlocksWhenLockHeld(t *testing.T) {
 	root := t.TempDir()
 	c := corpus("victim")
 	seed(t, root, c...)
-	// A concurrent apply already holds a fresh lock on the canonical root.
-	if err := os.WriteFile(filepath.Join(root, ".engram.lock"), []byte("held\n"), 0o644); err != nil {
+	// A concurrent apply already holds the lock on the canonical root.
+	release, err := lock.Acquire(root)
+	if err != nil {
 		t.Fatal(err)
 	}
+	defer release()
 	ops := []Operation{{Op: OpRemove, Name: "victim"}}
 	if _, err := Apply(root, ops); err == nil {
 		t.Fatal("Apply should fail while the canonical lock is held")
@@ -251,6 +253,48 @@ func TestApplyRevalidatesAgainstCurrentDisk(t *testing.T) {
 	}
 	if _, err := Apply(root, ops); err == nil {
 		t.Error("Apply must fail closed when the proposal no longer validates against current canonical")
+	}
+}
+
+// A batch that updates a memory and then rescopes it must keep the updated
+// content: the rescope reads current on-disk state, not the initial snapshot.
+func TestApplyUpdateThenRescopeKeepsUpdatedContent(t *testing.T) {
+	root := t.TempDir()
+	seed(t, root, mem("x"))
+	updated := &schema.CanonicalMemory{
+		Name: "x", Description: "updated", Type: schema.TypeLesson, Scope: "global", Body: "new body\n",
+	}
+	ops := []Operation{
+		{Op: OpUpdate, Name: "x", Memory: updated},
+		{Op: OpRescope, Name: "x", ToScope: "project:acme"},
+	}
+	if _, err := Apply(root, ops); err != nil {
+		t.Fatal(err)
+	}
+	got, _, _, _ := store.Load(root, "x")
+	if got.Body != "new body\n" {
+		t.Errorf("rescope discarded the prior update: body = %q", got.Body)
+	}
+	if got.Scope != "project:acme" {
+		t.Errorf("scope = %q, want project:acme", got.Scope)
+	}
+}
+
+// Apply must refuse to mutate a canonical store that contains an unparseable
+// file, since such a file is invisible to validation and could be clobbered.
+func TestApplyRefusesWhenCanonicalHasParseError(t *testing.T) {
+	root := t.TempDir()
+	seed(t, root, mem("ok"))
+	// A malformed memory file (no frontmatter) sits in the canonical root.
+	if err := os.WriteFile(root+"/broken.md", []byte("no frontmatter here\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ops := []Operation{{Op: OpAdd, Memory: mem("addition")}}
+	if _, err := Apply(root, ops); err == nil {
+		t.Error("Apply must fail closed when a canonical file does not parse")
+	}
+	if _, _, found, _ := store.Load(root, "addition"); found {
+		t.Error("nothing should have been written while canonical had a parse error")
 	}
 }
 

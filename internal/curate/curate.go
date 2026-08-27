@@ -237,15 +237,21 @@ func Apply(root string, ops []Operation) ([]Applied, error) {
 	// Hold the canonical-root lock across discovery, validation, and the whole
 	// multi-file mutation so no other writer can change canonical between the
 	// check and the writes, and the merge/remove sequence never half-applies.
-	release, err := lock.Acquire(root, lock.DefaultStaleAfter)
+	release, err := lock.Acquire(root)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
 
-	corpus, _, derr := discover.Discover(root)
+	corpus, perrs, derr := discover.Discover(root)
 	if derr != nil {
 		return nil, fmt.Errorf("re-discover canonical under lock: %w", derr)
+	}
+	// A malformed canonical file is omitted from the corpus, so an add/merge could
+	// silently force-overwrite it. Refuse to mutate a store that does not fully
+	// parse; the operator fixes the bad file first.
+	if len(perrs) > 0 {
+		return nil, fmt.Errorf("refusing to apply: %d canonical file(s) do not parse; fix them before curating", len(perrs))
 	}
 	results := Validate(ops, corpus)
 	if !AllValid(results) {
@@ -254,7 +260,7 @@ func Apply(root string, ops []Operation) ([]Applied, error) {
 
 	applied := make([]Applied, 0, len(ops))
 	for _, op := range ops {
-		a, err := applyOne(root, op, corpus)
+		a, err := applyOne(root, op)
 		if err != nil {
 			return applied, fmt.Errorf("apply %s: %w", op.Op, err)
 		}
@@ -263,7 +269,7 @@ func Apply(root string, ops []Operation) ([]Applied, error) {
 	return applied, nil
 }
 
-func applyOne(root string, op Operation, corpus []*schema.CanonicalMemory) (Applied, error) {
+func applyOne(root string, op Operation) (Applied, error) {
 	switch op.Op {
 	case OpAdd, OpUpdate:
 		if _, _, err := store.Save(root, op.Memory, true); err != nil {
@@ -291,28 +297,24 @@ func applyOne(root string, op Operation, corpus []*schema.CanonicalMemory) (Appl
 		}
 		return Applied{Op: op.Op, Name: op.Name, Removed: []string{op.Name}}, nil
 	case OpRescope:
-		m := findMemory(corpus, op.Name)
-		if m == nil {
-			return Applied{}, fmt.Errorf("memory %q vanished from corpus", op.Name)
+		// Load the current on-disk memory so a rescope after an update/merge of
+		// the same name in this batch operates on the latest content, not a stale
+		// snapshot (which would silently discard the earlier op's change).
+		m, _, found, err := store.Load(root, op.Name)
+		if err != nil {
+			return Applied{}, err
 		}
-		clone := *m
-		clone.Scope = op.ToScope
-		if _, _, err := store.Save(root, &clone, true); err != nil {
+		if !found {
+			return Applied{}, fmt.Errorf("rescope target %q not found", op.Name)
+		}
+		m.Scope = op.ToScope
+		if _, _, err := store.Save(root, m, true); err != nil {
 			return Applied{}, err
 		}
 		return Applied{Op: op.Op, Name: op.Name}, nil
 	default:
 		return Applied{}, fmt.Errorf("unknown operation %q", op.Op)
 	}
-}
-
-func findMemory(corpus []*schema.CanonicalMemory, name string) *schema.CanonicalMemory {
-	for _, m := range corpus {
-		if m.Name == name {
-			return m
-		}
-	}
-	return nil
 }
 
 func contains(xs []string, target string) bool {

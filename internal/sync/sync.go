@@ -329,7 +329,7 @@ func atomicWrite(path string, data []byte) error {
 // check-then-act window can double-write; a lock orphaned by a crash is
 // reclaimed once stale.
 func acquireLock(dir string) (func(), error) {
-	return lock.Acquire(dir, lock.DefaultStaleAfter)
+	return lock.Acquire(dir)
 }
 
 // sortActions orders actions deterministically by name then kind, so plans and
