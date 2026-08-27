@@ -109,7 +109,7 @@ func cmdSync(e *env, name string, _ []string) int {
 				entry["error"] = err.Error()
 				exit = worseExit(exit, exitError)
 			} else {
-				entry["actions"] = actions
+				entry["actions"] = orEmpty(actions)
 				exit = worseExit(exit, exitForActions(actions))
 				next = append(next, conflictNextSteps(actions)...)
 			}
@@ -156,7 +156,7 @@ func cmdAudit(e *env, name string, _ []string) int {
 			entry["error"] = err.Error()
 			exit = worseExit(exit, exitError)
 		} else {
-			entry["actions"] = actions
+			entry["actions"] = orEmpty(actions)
 			exit = worseExit(exit, exitForActions(actions))
 			next = append(next, conflictNextSteps(actions)...)
 		}
@@ -389,6 +389,16 @@ func exitForActions(actions []sync.Action) int {
 		}
 	}
 	return exitOK
+}
+
+// orEmpty coerces a nil slice to an empty one so JSON consumers always see a
+// list to iterate, never null. Agent-first: the envelope's iterated arrays are
+// stable types.
+func orEmpty[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
 }
 
 // worseExit returns the more significant of two exit codes: a hard error

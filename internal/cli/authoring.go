@@ -177,7 +177,7 @@ func cmdImport(e *env, name string, args []string) int {
 
 	base := map[string]any{
 		"harness": harness, "apply": e.apply,
-		"skipped": res.Skipped, "would_import": len(res.Memories),
+		"skipped": orEmpty(res.Skipped), "would_import": len(res.Memories),
 	}
 	var warns []string
 	if res.StaleWarning {
