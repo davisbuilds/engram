@@ -50,11 +50,23 @@ func Acquire(dir string, staleAfter time.Duration) (func(), error) {
 		// The lock exists. On the first attempt only, reclaim it if it is stale.
 		if attempt == 0 && staleAfter > 0 {
 			if info, serr := os.Stat(path); serr == nil && time.Since(info.ModTime()) > staleAfter {
-				_ = os.Remove(path) // best-effort; the retry's O_EXCL is the real guard
+				reclaimStale(path, info.ModTime())
 				continue
 			}
 		}
 		return nil, fmt.Errorf("another engram apply holds the lock at %s", path)
 	}
 	return nil, fmt.Errorf("could not acquire lock at %s", path)
+}
+
+// reclaimStale removes an orphaned lock, but only if it is still the exact stale
+// file first observed (unchanged mtime) — never a fresh lock a racing acquirer
+// created in the meantime. Together with the O_EXCL re-create on the retry, this
+// makes reclaim safe under contention: at most one acquirer wins the create, and
+// no acquirer can unlink another's valid replacement. (A stale lock is always
+// older than staleAfter, so a just-created replacement never matches its mtime.)
+func reclaimStale(path string, observed time.Time) {
+	if cur, err := os.Stat(path); err == nil && cur.ModTime().Equal(observed) {
+		_ = os.Remove(path)
+	}
 }

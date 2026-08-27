@@ -67,3 +67,26 @@ func TestAcquireReclaimDisabled(t *testing.T) {
 		t.Error("reclaim disabled: even a stale lock must block")
 	}
 }
+
+func TestReclaimStaleOnlyRemovesUnchangedFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, Name)
+	if err := os.WriteFile(path, []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A different observed mtime means the file was replaced by a racing
+	// acquirer; reclaim must NOT delete that replacement.
+	reclaimStale(path, info.ModTime().Add(-time.Hour))
+	if _, err := os.Stat(path); err != nil {
+		t.Error("reclaimStale deleted a file whose mtime did not match the observed stale one")
+	}
+	// The exact observed file is removed.
+	reclaimStale(path, info.ModTime())
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("reclaimStale should have removed the observed stale file")
+	}
+}

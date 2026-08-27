@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/davisbuilds/engram/internal/discover"
 	"github.com/davisbuilds/engram/internal/lock"
 	"github.com/davisbuilds/engram/internal/review"
 	"github.com/davisbuilds/engram/internal/schema"
@@ -102,23 +103,48 @@ func ParseProposal(text string) (Proposal, error) {
 	return p, nil
 }
 
-// Validate checks every operation against the existing corpus and the schema,
-// returning a per-operation verdict in input order. It mutates nothing.
+// Validate checks every operation against the corpus and the schema, returning a
+// per-operation verdict in input order. It threads a working copy of the corpus:
+// each valid operation's effect is applied to the working set before the next is
+// checked, so an intra-batch conflict (e.g. two adds of the same new name, or an
+// update of a name an earlier op removed) is caught rather than both passing
+// against the unchanged initial state. It mutates nothing on disk.
 func Validate(ops []Operation, corpus []*schema.CanonicalMemory) []OpResult {
-	existing := map[string]*schema.CanonicalMemory{}
+	working := map[string]*schema.CanonicalMemory{}
 	for _, m := range corpus {
-		existing[m.Name] = m
+		working[m.Name] = m
 	}
 	results := make([]OpResult, 0, len(ops))
 	for _, op := range ops {
 		r := OpResult{Op: op, Valid: true}
-		if err := validateOne(op, existing); err != nil {
+		if err := validateOne(op, working); err != nil {
 			r.Valid = false
 			r.Error = err.Error()
+		} else {
+			applyToWorkingSet(op, working)
 		}
 		results = append(results, r)
 	}
 	return results
+}
+
+// applyToWorkingSet advances the simulated corpus by one validated operation so
+// later operations in the same batch are checked against the state earlier ones
+// would produce. Only names matter for validation, so a rescope is a no-op here.
+func applyToWorkingSet(op Operation, working map[string]*schema.CanonicalMemory) {
+	switch op.Op {
+	case OpAdd, OpUpdate:
+		working[op.Memory.Name] = op.Memory
+	case OpMerge:
+		working[op.Memory.Name] = op.Memory
+		for _, s := range op.Sources {
+			if s != op.Memory.Name {
+				delete(working, s)
+			}
+		}
+	case OpRemove:
+		delete(working, op.Name)
+	}
 }
 
 func validateOne(op Operation, existing map[string]*schema.CanonicalMemory) error {
@@ -160,6 +186,11 @@ func validateOne(op Operation, existing map[string]*schema.CanonicalMemory) erro
 		if op.Memory == nil {
 			return fmt.Errorf("merge requires the merged memory")
 		}
+		// The merged memory's name must be new or one of the sources; otherwise
+		// applying it would force-overwrite an existing, unrelated memory.
+		if _, exists := existing[op.Memory.Name]; exists && !contains(op.Sources, op.Memory.Name) {
+			return fmt.Errorf("merge target %q already exists and is not among the sources; refusing to overwrite unrelated canonical content", op.Memory.Name)
+		}
 		return op.Memory.Validate()
 	case OpRemove:
 		if op.Name == "" {
@@ -196,23 +227,30 @@ type Applied struct {
 	Removed []string `json:"removed,omitempty"`
 }
 
-// Apply executes a validated batch against the canonical root. It refuses to run
-// unless every operation is valid (fail closed), so a model proposal is applied
-// whole or not at all. It returns what each operation did, in order.
-func Apply(root string, ops []Operation, corpus []*schema.CanonicalMemory) ([]Applied, error) {
-	results := Validate(ops, corpus)
-	if !AllValid(results) {
-		return nil, fmt.Errorf("refusing to apply: %d of %d operations are invalid", countInvalid(results), len(results))
-	}
-	// Hold the canonical-root lock across the whole batch so the multi-file
-	// merge/remove sequence is atomic against another concurrent writer (a second
-	// curate, or a future canonical mutator that honors the same lock) rather than
-	// interleaving into a half-applied merge.
+// Apply executes a batch against the canonical root. It acquires the shared lock
+// first, then re-discovers and re-validates against the *current* canonical
+// state — not the snapshot the agent was shown, which another writer may have
+// changed while the (slow) agent ran. The batch applies whole or not at all
+// (fail closed): if the proposal no longer validates against current canonical,
+// nothing is written. It returns what each operation did, in order.
+func Apply(root string, ops []Operation) ([]Applied, error) {
+	// Hold the canonical-root lock across discovery, validation, and the whole
+	// multi-file mutation so no other writer can change canonical between the
+	// check and the writes, and the merge/remove sequence never half-applies.
 	release, err := lock.Acquire(root, lock.DefaultStaleAfter)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
+
+	corpus, _, derr := discover.Discover(root)
+	if derr != nil {
+		return nil, fmt.Errorf("re-discover canonical under lock: %w", derr)
+	}
+	results := Validate(ops, corpus)
+	if !AllValid(results) {
+		return nil, fmt.Errorf("refusing to apply: proposal no longer validates against current canonical (%d of %d invalid)", countInvalid(results), len(results))
+	}
 
 	applied := make([]Applied, 0, len(ops))
 	for _, op := range ops {
@@ -275,6 +313,15 @@ func findMemory(corpus []*schema.CanonicalMemory, name string) *schema.Canonical
 		}
 	}
 	return nil
+}
+
+func contains(xs []string, target string) bool {
+	for _, x := range xs {
+		if x == target {
+			return true
+		}
+	}
+	return false
 }
 
 func countInvalid(results []OpResult) int {

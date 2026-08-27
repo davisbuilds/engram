@@ -65,11 +65,11 @@ func TestParseProposalRejectsNoJSON(t *testing.T) {
 }
 
 func TestValidateAcceptsGoodOps(t *testing.T) {
-	c := corpus("dup-one", "dup-two", "keep")
+	c := corpus("dup-one", "dup-two", "keep", "widen")
 	ops := []Operation{
 		{Op: OpMerge, Sources: []string{"dup-one", "dup-two"}, Memory: mem("dup-merged")},
 		{Op: OpRemove, Name: "keep"},
-		{Op: OpRescope, Name: "dup-one", ToScope: "project:acme"},
+		{Op: OpRescope, Name: "widen", ToScope: "project:acme"},
 		{Op: OpAdd, Memory: mem("brand-new")},
 	}
 	results := Validate(ops, c)
@@ -113,7 +113,7 @@ func TestApplyFailsClosedOnInvalidBatch(t *testing.T) {
 		{Op: OpRemove, Name: "real"},
 		{Op: OpRemove, Name: "ghost"},
 	}
-	if _, err := Apply(root, ops, corpus("real")); err == nil {
+	if _, err := Apply(root, ops); err == nil {
 		t.Fatal("expected Apply to refuse an invalid batch")
 	}
 	if _, _, found, _ := store.Load(root, "real"); !found {
@@ -128,7 +128,7 @@ func TestApplyMergeWritesAndDeletesSources(t *testing.T) {
 	ops := []Operation{
 		{Op: OpMerge, Sources: []string{"a", "b"}, Memory: mem("ab")},
 	}
-	applied, err := Apply(root, ops, c)
+	applied, err := Apply(root, ops)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestApplyMergeKeepsSourceReusedAsTarget(t *testing.T) {
 	ops := []Operation{
 		{Op: OpMerge, Sources: []string{"a", "b"}, Memory: mem("a")},
 	}
-	if _, err := Apply(root, ops, c); err != nil {
+	if _, err := Apply(root, ops); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, found, _ := store.Load(root, "a"); !found {
@@ -169,7 +169,7 @@ func TestApplyRescopeChangesScope(t *testing.T) {
 	c := corpus("m")
 	seed(t, root, c...)
 	ops := []Operation{{Op: OpRescope, Name: "m", ToScope: "project:acme"}}
-	if _, err := Apply(root, ops, c); err != nil {
+	if _, err := Apply(root, ops); err != nil {
 		t.Fatal(err)
 	}
 	got, _, _, _ := store.Load(root, "m")
@@ -187,12 +187,70 @@ func TestApplyBlocksWhenLockHeld(t *testing.T) {
 		t.Fatal(err)
 	}
 	ops := []Operation{{Op: OpRemove, Name: "victim"}}
-	if _, err := Apply(root, ops, c); err == nil {
+	if _, err := Apply(root, ops); err == nil {
 		t.Fatal("Apply should fail while the canonical lock is held")
 	}
 	// The batch must not have run: victim survives.
 	if _, _, found, _ := store.Load(root, "victim"); !found {
 		t.Error("victim was deleted despite a held lock")
+	}
+}
+
+// P1-2: a merge whose target names an existing, unrelated memory must be
+// rejected — applying it would force-overwrite that memory.
+func TestValidateRejectsMergeOntoUnrelatedTarget(t *testing.T) {
+	c := corpus("a", "b", "important")
+	ops := []Operation{{Op: OpMerge, Sources: []string{"a", "b"}, Memory: mem("important")}}
+	if Validate(ops, c)[0].Valid {
+		t.Error("merge onto an existing unrelated memory must be invalid")
+	}
+	// But merging into a brand-new name, or reusing a source name, is fine.
+	for _, target := range []string{"a", "brand-new"} {
+		ops := []Operation{{Op: OpMerge, Sources: []string{"a", "b"}, Memory: mem(target)}}
+		if !Validate(ops, c)[0].Valid {
+			t.Errorf("merge into %q should be valid", target)
+		}
+	}
+}
+
+// P1-4: operations in one batch are validated against the state earlier ops
+// would produce, so two adds of the same new name cannot both pass.
+func TestValidateCatchesIntraBatchConflicts(t *testing.T) {
+	c := corpus("existing")
+	// Two adds of the same previously-absent name.
+	dup := []Operation{
+		{Op: OpAdd, Memory: mem("new-one")},
+		{Op: OpAdd, Memory: mem("new-one")},
+	}
+	res := Validate(dup, c)
+	if !res[0].Valid || res[1].Valid {
+		t.Errorf("first add should pass, second (duplicate) should fail: %+v", res)
+	}
+	// Remove a memory, then update the same name: the update must fail closed.
+	ro := []Operation{
+		{Op: OpRemove, Name: "existing"},
+		{Op: OpUpdate, Name: "existing", Memory: mem("existing")},
+	}
+	res = Validate(ro, c)
+	if !res[0].Valid || res[1].Valid {
+		t.Errorf("remove-then-update of the same name must reject the update: %+v", res)
+	}
+}
+
+// P1-3: Apply re-discovers and re-validates against current canonical under the
+// lock, so a proposal built on a since-changed snapshot fails closed rather than
+// force-writing stale output.
+func TestApplyRevalidatesAgainstCurrentDisk(t *testing.T) {
+	root := t.TempDir()
+	seed(t, root, mem("target"))
+	// The agent proposed a rescope of "target" against the snapshot it saw...
+	ops := []Operation{{Op: OpRescope, Name: "target", ToScope: "project:acme"}}
+	// ...but another writer removed "target" before we apply.
+	if _, err := store.Delete(root, "target"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Apply(root, ops); err == nil {
+		t.Error("Apply must fail closed when the proposal no longer validates against current canonical")
 	}
 }
 

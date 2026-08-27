@@ -132,7 +132,7 @@ func cmdCurate(e *env, name string, args []string) int {
 			curateNextSteps(results))
 		return exitConflicts
 	}
-	applied, aerr := curate.Apply(cfg.CanonicalRoot, proposal.Operations, mems)
+	applied, aerr := curate.Apply(cfg.CanonicalRoot, proposal.Operations)
 	if aerr != nil {
 		data["applied"] = orEmpty(applied)
 		e.emit(name, false, data, warns, &RespError{Code: "apply", Message: aerr.Error()}, nil)

@@ -213,7 +213,9 @@ func TestDeriveCodexScopeNonRepoPathStaysGlobal(t *testing.T) {
 }
 
 func TestProjectScopeFromRepoGuardsDegenerate(t *testing.T) {
-	for _, p := range []string{"", "/", ".", "  "} {
+	// "." is not degenerate — it resolves to the real cwd (covered separately);
+	// these are the paths that must always yield global.
+	for _, p := range []string{"", "/", "  "} {
 		if got := projectScopeFromRepo(p); got != "global" {
 			t.Errorf("projectScopeFromRepo(%q) = %q, want global", p, got)
 		}
@@ -235,5 +237,14 @@ func TestImportCodexDerivesProjectScope(t *testing.T) {
 	}
 	if len(res.Memories) != 1 || res.Memories[0].Scope != "project:dotfiles" {
 		t.Errorf("scope = %q, want project:dotfiles", res.Memories[0].Scope)
+	}
+}
+
+func TestProjectScopeFromRepoResolvesRelativeCwd(t *testing.T) {
+	repo := mkRepo(t, "myrepo")
+	t.Chdir(repo) // run as if invoked from inside the repo
+	// A relative "." must resolve to the absolute repo root, not "project:.".
+	if got := projectScopeFromRepo("."); got != "project:myrepo" {
+		t.Errorf("projectScopeFromRepo(\".\") = %q, want project:myrepo", got)
 	}
 }

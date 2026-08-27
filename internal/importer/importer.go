@@ -34,7 +34,17 @@ type Result struct {
 // used verbatim (not slugified) because tier matching compares it against a
 // literal path segment of the session cwd.
 func projectScopeFromRepo(path string) string {
-	path = strings.TrimRight(strings.TrimSpace(path), string(filepath.Separator))
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "global"
+	}
+	// Resolve a relative cwd (e.g. "." or "src/pkg") to an absolute, cleaned path
+	// so the walk finds the real repo root and the scope carries its base name,
+	// not "." — otherwise "--cwd ." would yield "project:." or a wrong "global".
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	path = strings.TrimRight(path, string(filepath.Separator))
 	if path == "" {
 		return "global"
 	}

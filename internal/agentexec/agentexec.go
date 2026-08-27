@@ -39,11 +39,15 @@ func CodexArgv(prompt string) []string {
 }
 
 // ClaudeArgvOpts builds a headless `claude -p` run for curate: JSON output,
-// model/effort passthrough, no tools (the corpus is handed to the agent in the
-// prompt, so it needs no filesystem access — a tighter blast radius). The `--`
-// separator still guards the positional prompt.
+// model/effort passthrough, and — critically — all tools explicitly disabled via
+// `--tools ""`. The corpus is untrusted (prompt-injected memory content is
+// possible), so the proposer must have no filesystem access: an *absent*
+// --allowedTools does NOT disable tools (the session's own settings may still
+// permit Edit/Bash), whereas `--tools ""` is the documented no-tools mode. This
+// keeps engram the sole mutator even against a hostile corpus. The `--` separator
+// still guards the positional prompt.
 func ClaudeArgvOpts(prompt string, opts Options, allowedTools ...string) []string {
-	argv := []string{"claude", "-p", "--output-format", "json"}
+	argv := []string{"claude", "-p", "--output-format", "json", "--tools", ""}
 	if opts.Model != "" {
 		argv = append(argv, "--model", opts.Model)
 	}

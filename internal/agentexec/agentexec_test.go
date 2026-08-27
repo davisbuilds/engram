@@ -61,9 +61,16 @@ func TestClaudeArgvOptsCarriesModelEffortAndJSON(t *testing.T) {
 	if argv[len(argv)-2] != "--" || argv[len(argv)-1] != "prompt here" {
 		t.Errorf("prompt must follow -- as the last arg: %v", argv)
 	}
-	// No tools requested for curate: the agent reads the corpus from the prompt.
-	if strings.Contains(joined, "--allowedTools") {
-		t.Errorf("curate argv should request no tools: %v", argv)
+	// The proposer must run with all tools explicitly disabled (--tools ""): the
+	// corpus is untrusted, and an absent --allowedTools does not disable tools.
+	found := false
+	for i := 0; i < len(argv)-1; i++ {
+		if argv[i] == "--tools" && argv[i+1] == "" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("curate argv must disable all tools via --tools \"\": %v", argv)
 	}
 }
 
