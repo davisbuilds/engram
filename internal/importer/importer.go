@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/davisbuilds/engram/internal/schema"
+	slug2 "github.com/davisbuilds/engram/internal/slug"
 )
 
 // Result is what an importer produced: the canonical memories it mapped, the
@@ -97,6 +98,61 @@ func deriveCodexScope(body string) string {
 		return projectScopeFromRepo(rest)
 	}
 	return "global"
+}
+
+// pathFromClaudeSlug reconstructs the absolute project path a Claude project slug
+// encodes. The slug maps every non-alphanumeric character — '/', but also '-',
+// '.', '_', spaces, … — to '-', so it is lossy and not invertible by string
+// surgery. This resolves it against the live filesystem: it walks real
+// directories and matches each candidate by re-encoding its name with the same
+// rule (slug.ForCwd). It returns the path (and true) only when *exactly one*
+// reconstruction exists; zero matches (e.g. a deleted project) or two-or-more
+// (an ambiguous slug like "-a-b" for both "/a-b" and "/a/b") both yield false, so
+// the caller falls back to global rather than guess a wrong project.
+func pathFromClaudeSlug(slug string) (string, bool) {
+	matches := resolveSlugMatches(string(filepath.Separator), slug)
+	if len(matches) != 1 {
+		return "", false
+	}
+	return matches[0], true
+}
+
+// resolveSlugMatches returns every real path under base whose Claude encoding is
+// slug. Each path component in the slug is introduced by the '-' that encodes its
+// leading separator; at each level it re-encodes every real child directory name
+// with slug.ForCwd and descends into those whose encoding is a whole leading
+// component of the remaining slug. Collecting *all* matches (not the first) is
+// what lets the caller detect ambiguity instead of silently narrowing to one repo.
+func resolveSlugMatches(base, slug string) []string {
+	if slug == "" {
+		return []string{base}
+	}
+	if slug[0] != '-' {
+		return nil // a component must be introduced by its encoded separator
+	}
+	rest := slug[1:]
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		enc := slug2.ForCwd(e.Name())
+		if !strings.HasPrefix(rest, enc) {
+			continue
+		}
+		// enc must be a whole component: the slug ends here, or the next character
+		// is the '-' that encodes the following separator.
+		tail := rest[len(enc):]
+		if tail != "" && tail[0] != '-' {
+			continue
+		}
+		out = append(out, resolveSlugMatches(filepath.Join(base, e.Name()), tail)...)
+	}
+	return out
 }
 
 // opensFrontmatterFence reports whether the file's first line is a `---` fence

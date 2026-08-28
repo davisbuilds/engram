@@ -132,6 +132,43 @@ func deriveTitle(body, fileBase string) string {
 	return fileBase
 }
 
+// ImportClaudeAll sweeps every project slug under a Claude home
+// (<home>/projects/*/memory) and imports each, deriving that project's scope from
+// the slug: the slug is resolved back to its real path and run through the same
+// repo rule as a single import (repo → project:<base>, else global). A slug whose
+// project no longer exists on disk resolves to global — safe, never a wrong
+// project. Results across all slugs are merged; a missing projects dir yields an
+// empty result. Unlike single import, this needs no cwd — the slug carries it.
+func ImportClaudeAll(claudeHome string) (Result, error) {
+	var res Result
+	projectsDir := filepath.Join(claudeHome, "projects")
+	entries, err := os.ReadDir(projectsDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return res, nil
+	}
+	if err != nil {
+		return res, err
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		slug := e.Name()
+		memDir := filepath.Join(projectsDir, slug, "memory")
+		// Resolve the slug to the cwd ImportClaude derives scope from; an empty cwd
+		// (unresolvable slug) yields global, exactly as a deleted project should.
+		cwd, _ := pathFromClaudeSlug(slug)
+		sub, err := ImportClaude(memDir, cwd)
+		if err != nil {
+			return res, err
+		}
+		res.Memories = append(res.Memories, sub.Memories...)
+		res.Skipped = append(res.Skipped, sub.Skipped...)
+		res.Dropped = append(res.Dropped, sub.Dropped...)
+	}
+	return res, nil
+}
+
 // importedType defaults an absent or unknown native type to reference.
 func importedType(t string) schema.Type {
 	if t == "" {

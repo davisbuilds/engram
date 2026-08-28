@@ -185,6 +185,117 @@ func TestImportClaudeAccountsForEveryFile(t *testing.T) {
 	}
 }
 
+// The resolver must match real directories whose names contain '-' (which the
+// slug can't distinguish from a path separator).
+func TestResolveSlugMatchesHyphenatedComponents(t *testing.T) {
+	base := t.TempDir()
+	full := filepath.Join(base, "my-user", "code", "web-app-ios")
+	if err := os.MkdirAll(full, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Slug for base/my-user/code/web-app-ios, relative to base: every separator and
+	// every literal '-' becomes '-'.
+	got := resolveSlugMatches(base, "-my-user-code-web-app-ios")
+	if len(got) != 1 || got[0] != full {
+		t.Errorf("resolveSlugMatches = %v, want [%q]", got, full)
+	}
+}
+
+// P1: a component whose real name contains a non-hyphen non-alphanumeric char
+// (underscore, dot, space) still encodes to '-' in the slug and must resolve —
+// the resolver re-encodes real names rather than rebuilding only hyphenated ones.
+func TestResolveSlugMatchesNonHyphenChars(t *testing.T) {
+	base := t.TempDir()
+	for _, real := range []string{"my_project", "app.v2", "two words"} {
+		if err := os.MkdirAll(filepath.Join(base, real), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// All three encode to the same shape "<sep>my-project" etc.
+		enc := "-" + strings.Map(func(r rune) rune {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+				return r
+			}
+			return '-'
+		}, real)
+		got := resolveSlugMatches(base, enc)
+		want := filepath.Join(base, real)
+		if len(got) != 1 || got[0] != want {
+			t.Errorf("resolveSlugMatches(%q) = %v, want [%q]", enc, got, want)
+		}
+	}
+}
+
+// P2: when two real paths encode to the same slug ("-a-b" ← both "/a-b" and
+// "/a/b"), the resolver reports both, so pathFromClaudeSlug falls back to global
+// rather than silently narrowing to one repo.
+func TestResolveSlugAmbiguousYieldsNoUniquePath(t *testing.T) {
+	base := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(base, "foo-bar"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(base, "foo", "bar"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got := resolveSlugMatches(base, "-foo-bar")
+	if len(got) != 2 {
+		t.Fatalf("both encodings should match; got %v", got)
+	}
+}
+
+func TestResolveSlugNoMatchIsEmpty(t *testing.T) {
+	base := t.TempDir()
+	if got := resolveSlugMatches(base, "-nonexistent-project"); len(got) != 0 {
+		t.Errorf("a slug with no matching directory must not resolve; got %v", got)
+	}
+}
+
+// ImportClaudeAll sweeps every project slug and merges the results; a slug that
+// resolves to a real repo carries its project scope, and MEMORY.md is ignored.
+func TestImportClaudeAllSweepsAllSlugs(t *testing.T) {
+	home := t.TempDir()
+	// Two project slugs, each with one native memory. Scope resolution walks from
+	// the real root and won't find these temp paths, so both resolve to global —
+	// the sweep/merge behavior is what this pins (scope resolution is covered by
+	// the resolveTokens tests).
+	mk := func(slug, mem string) {
+		d := filepath.Join(home, "projects", slug, "memory")
+		writeMem(t, filepath.Join(d, mem+".md"),
+			"---\nname: "+mem+"\ndescription: d\nmetadata:\n  type: lesson\n---\nbody\n")
+		writeMem(t, filepath.Join(d, "MEMORY.md"), "- index\n")
+	}
+	mk("-work-alpha", "alpha-lesson")
+	mk("-work-beta", "beta-lesson")
+
+	res, err := ImportClaudeAll(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := byName(res.Memories)
+	if len(res.Memories) != 2 || names["alpha-lesson"] == nil || names["beta-lesson"] == nil {
+		t.Errorf("sweep should import one memory per slug; got %v", keys(names))
+	}
+}
+
+func TestImportClaudeAllMissingProjectsDirIsEmpty(t *testing.T) {
+	res, err := ImportClaudeAll(t.TempDir()) // no projects/ subdir
+	if err != nil {
+		t.Fatalf("a missing projects dir must not error: %v", err)
+	}
+	if len(res.Memories) != 0 {
+		t.Errorf("expected empty result, got %d", len(res.Memories))
+	}
+}
+
+func writeMem(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestImportClaudeSkipsEngramOrigin(t *testing.T) {
 	dir := t.TempDir()
 	ours := "---\nname: ours\ndescription: d\nmetadata:\n  type: lesson\n  origin: engram-sync\n---\nx\n"

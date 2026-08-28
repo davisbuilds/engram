@@ -31,12 +31,13 @@ only; shipped items live in the git history.
 
 ## Modelling
 
-- **Codex scope derivation depends on the live filesystem.** Import now derives a
-  memory's scope by resolving a cwd to a real git repo (Claude: the import cwd;
-  Codex: the Task Group's `applies_to: cwd=`). A repo → `project:<base>`, anything
-  else → `global`. That makes Codex import non-reproducible: a Task Group whose
-  project has since been deleted or that references another machine's path falls
-  back to `global`. Safe (never a wrong project), but worth a content-hash or
+- **Scope derivation depends on the live filesystem.** Import derives a memory's
+  scope by resolving a path to a real git repo (single Claude import: the cwd;
+  `import --all`: each project slug reconstructed against the filesystem; Codex:
+  the Task Group's `applies_to: cwd=`). A repo → `project:<base>`, anything else →
+  `global`. That makes import non-reproducible: a project since deleted (or on
+  another machine) falls back to `global` — e.g. an orphaned Claude slug whose
+  project dir is gone. Safe (never a wrong project), but worth a content-hash or
   path-cache alternative if reproducibility matters later.
 - **`remember` provenance timestamps.** `remember` sets `provenance.origin` but
   not `created`/`modified`, to keep render output deterministic and idempotent.
@@ -45,8 +46,6 @@ only; shipped items live in the git history.
 
 ## Surface not yet built
 
-- `import` currently reads only the current cwd's Claude project memory dir;
-  an `--all` mode could sweep every project slug.
 - Skills are project-scoped only (in-repo symlinks). Global install via the
   workspace `~/.agents/skills` + skill-standardizer flow is a later promotion.
 - `review` heuristics are deliberately simple (name-token Jaccard for near-dupes,

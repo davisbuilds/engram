@@ -187,6 +187,31 @@ func TestRunImportNormalizesNameAndReportsDropped(t *testing.T) {
 	}
 }
 
+// import --all sweeps every project slug, not just the cwd's, landing memories
+// from multiple slugs into canonical in one invocation.
+func TestRunImportAllSweepsSlugs(t *testing.T) {
+	dir := t.TempDir()
+	canon := filepath.Join(dir, "canonical")
+	claude := filepath.Join(dir, "claude")
+	writeFile(t, filepath.Join(claude, "projects", "-work-alpha", "memory", "a.md"),
+		"---\nname: alpha-lesson\ndescription: d\nmetadata:\n  type: lesson\n---\nb\n")
+	writeFile(t, filepath.Join(claude, "projects", "-work-beta", "memory", "b.md"),
+		"---\nname: beta-lesson\ndescription: d\nmetadata:\n  type: lesson\n---\nb\n")
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+canon+"\nharnesses:\n  claude-code:\n    home: "+claude+"\n")
+	defer silenceStdout(t)()
+	// cwd points at only one slug's project, proving --all reaches beyond it.
+	c := []string{"--config", cfg, "--cwd", "/work/alpha", "--json"}
+	if code := Run(append([]string{"import", "claude-code", "--all", "--apply"}, c...)); code != exitOK {
+		t.Fatalf("import --all exit = %d, want %d", code, exitOK)
+	}
+	for _, n := range []string{"alpha-lesson", "beta-lesson"} {
+		if _, err := os.Stat(filepath.Join(canon, n+".md")); err != nil {
+			t.Errorf("--all should import %s from its slug: %v", n, err)
+		}
+	}
+}
+
 func TestRunImportDisabledHarnessIsStrict(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "c.yaml")
