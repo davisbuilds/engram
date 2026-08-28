@@ -12,12 +12,13 @@ only; shipped items live in the git history.
   consolidated engram Task Group. That fixture requires observing what Codex's
   consolidator actually preserves when it folds an extension note; capture one
   and add the fallback + differential test before relying on import in anger.
-- **Codex curate output extraction is naive.** `ExtractCodexText` returns all of
-  `codex exec` stdout and leans on fenced-`json` recovery to find the proposal
-  inside the session-log preamble. If Codex ever emits a stray ```json block
-  before the real one, the wrong block wins. Prefer `codex exec`'s structured/
-  `--json` event stream (confirm the flag exists in the installed version) and
-  parse the final assistant message explicitly, as the Claude path already does.
+- **Codex curate has no verified failure-event handling.** `ExtractCodexText` now
+  parses the `codex exec --json` JSONL stream and returns the final
+  `agent_message`; an exit-0 run with no assistant message is reported as "no
+  agent message". A turn that fails *with* exit 0 (if that can happen) would land
+  in that same generic error rather than surfacing Codex's own failure text,
+  because the error-event shape has not been observed and captured. Capture a real
+  failing run and map its event to a specific error message.
 
 ## Import quality
 

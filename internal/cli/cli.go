@@ -87,7 +87,7 @@ func commands() []command {
 		{"audit", "Report pending render actions for a harness without writing.", cmdAudit},
 		{"diff", "Show the cross-state difference for each render target.", cmdDiff},
 		{"show", "Dump a harness's engram-rendered memories.", cmdShow},
-		{"review", "Health report: near-dupe names + promotion candidates, emitted as agent next_steps.", cmdReview},
+		{"review", "Health report: flags near-duplicate memory names, emitted as agent next_steps.", cmdReview},
 		{"curate", "Run a headless agent over the corpus; it proposes add/merge/remove/rescope, engram applies (dry-run; --apply).", cmdCurate},
 		{"hook", "Print harness lifecycle wiring for session-boundary sync.", cmdHook},
 		{"config", "Show config + per-harness readiness (is each harness set up to read what engram writes?).", cmdConfig},
