@@ -10,9 +10,10 @@ each one into every harness's native memory location, scoped by tier, working
 directory, agent, and host — so a lesson learned in one place is available in
 the others on the next sync.
 
-> **Status: early scaffold.** The command surface and interface contract are
-> defined (`docs/cli.md`); most commands are stubbed as the implementation lands
-> in phases.
+> **Status: working, pre-1.0.** The full pipeline is implemented — a canonical
+> store, Claude Code + Codex renderers, idempotent forward `sync`, reverse-sync
+> `import`, `review`, and the headless `curate` proposer/applier loop. The
+> interface contract (`docs/cli.md`) is stable but may still change before 1.0.
 
 ## Design in one breath
 
@@ -32,7 +33,7 @@ the others on the next sync.
 
 ## Build
 
-Requires Go 1.26+. No external dependencies.
+Requires Go 1.26+; the only dependency is `gopkg.in/yaml.v3`.
 
 ```bash
 make build      # -> bin/engram
@@ -40,13 +41,28 @@ make build      # -> bin/engram
 ./bin/engram schema --json
 ```
 
+`curate` additionally shells out to a headless agent CLI (`claude` and/or
+`codex`); every other command is self-contained.
+
 ## Layout
 
 ```
-cmd/engram        entrypoint
-internal/cli      command dispatch + the response envelope
-internal/version  build version
-docs/cli.md       the CLI interface contract
+cmd/engram          entrypoint
+internal/schema     the canonical memory type + validation
+internal/store      atomic per-memory read/write of canonical files
+internal/discover   parse the canonical set (with per-file parse errors)
+internal/render     pure canonical → harness renderers (Claude, Codex)
+internal/sync       the filesystem owner: idempotent apply, marker discipline
+internal/importer   reverse-sync a harness's native memory into canonical
+internal/review     read-only health findings (near-duplicate names)
+internal/curate     the headless proposer/applier loop (agent proposes, engram applies)
+internal/agentexec  builds headless agent argv + extracts structured output
+internal/lock       the advisory flock all canonical mutation serializes under
+internal/scope      the scope/applies_to filter model
+internal/config     configuration + per-harness readiness
+internal/cli        command dispatch + the JSON response envelope
+docs/cli.md         the CLI interface contract
+docs/headless.md    how a headless agent drives engram
 ```
 
 ## License

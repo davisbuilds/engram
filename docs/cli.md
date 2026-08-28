@@ -94,8 +94,8 @@ engram [global flags] <command> [args]
     audit        Report pending render Actions for a harness without writing.
     diff         Cross-state difference for each render target.
     show         Dump a harness's engram-rendered memories.
-    review       Health report: near-dupe names, promotion candidates,
-                 staleness — emitted as next_steps leads.
+    review       Health report: flags near-duplicate memory names —
+                 emitted as next_steps leads (merge judgment left to the agent).
 
   Wiring & meta:
     hook         Print harness lifecycle wiring (SessionStart/Stop sync).

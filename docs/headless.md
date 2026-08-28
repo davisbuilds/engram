@@ -43,9 +43,10 @@ Follow the `agent-memory-capture` skill for what is worth remembering.
 engram review --json | jq -c '.next_steps[]'
 ```
 
-Each `next_steps[].command` is runnable: an `engram share ...` for a promotion
-candidate, or a `--`-guarded `claude -p ... -- "..."` comparison pass for a
-near-duplicate. The `agent-memory-review` skill covers the judgment.
+Each near-duplicate finding's `next_steps[].command` is a runnable, `--`-guarded
+`claude -p ... -- "..."` pass that asks the agent to compare the two memories and
+merge them if warranted. The `agent-memory-review` skill covers the judgment;
+broader scope/promotion calls are left to `curate`.
 
 ## Curate: engram runs the agent, engram applies
 

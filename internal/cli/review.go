@@ -10,9 +10,11 @@ import (
 )
 
 // cmdReview produces health leads over the canonical set and emits each as a
-// next_step. It never mutates: the merge/promote decision is the agent's. A
+// next_step. It never mutates: the merge decision is the agent's. A
 // near-duplicate lead carries a ready-to-run headless `claude -p` invocation
-// (with the `--` separator guaranteed), a promotion lead an `engram share`.
+// (with the `--` separator guaranteed) that asks the agent to compare the two
+// memories and merge them if warranted. Scope/promotion judgment is deliberately
+// left to `curate`, where an agent can reason about a memory's content.
 func cmdReview(e *env, name string, _ []string) int {
 	cfg, err := config.Load(e.config)
 	if err != nil {

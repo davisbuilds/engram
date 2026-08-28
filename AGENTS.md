@@ -32,8 +32,9 @@ is the intelligence. See `README.md` for the user-facing overview.
   validates each against the corpus and schema and is the *only* mutator, failing
   closed (applies nothing) if any proposed operation is invalid.
 - **All canonical mutation serializes** under one exclusive apply lock
-  (`internal/lock`, with stale reclaim) — `remember`, `share`, `import --apply`,
-  and `curate --apply` all take it.
+  (`internal/lock`, an advisory `flock` the kernel releases automatically on
+  process exit or crash) — `remember`, `share`, `import --apply`, and
+  `curate --apply` all take it.
 - **Scope model:** tiers `global` / `project:<repo>`, plus `applies_to` narrowing
   axes (cwd globs, agents, hosts). The host axis fails closed for an unmapped
   machine, and host labels are config-declared, never compiled in.
