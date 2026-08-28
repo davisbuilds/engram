@@ -189,13 +189,27 @@ func TestExtractCodexTextErrorsWithoutAgentMessage(t *testing.T) {
 	}
 }
 
-// A single malformed line must not abort the stream: the valid agent_message
-// after it is still recovered.
-func TestExtractCodexTextToleratesMalformedLine(t *testing.T) {
+// A JSON-looking line that fails to parse is corruption and must fail closed:
+// otherwise a valid *earlier* agent_message would survive as the result and
+// curate --apply could execute a superseded proposal (Codex PR #2 P1).
+func TestExtractCodexTextFailsClosedOnMalformedEvent(t *testing.T) {
 	stream := strings.Join([]string{
-		`{"type":"thread.started"`, // truncated / not valid JSON
-		"not json at all",
+		codexItemLine(t, "agent_message", "superseded proposal"),
+		`{"type":"item.completed","item":{"id":"item_1","type":"agent_mess`, // truncated final line
+	}, "\n")
+	if _, err := ExtractCodexText([]byte(stream)); err == nil {
+		t.Error("a malformed JSON event after a valid message must fail closed, not return the earlier message")
+	}
+}
+
+// Genuinely non-JSON lines (a blank line, a banner) are not events and cannot be
+// the final message, so they are skipped rather than treated as corruption.
+func TestExtractCodexTextSkipsNonJSONNoise(t *testing.T) {
+	stream := strings.Join([]string{
+		"",
+		"some non-json banner line",
 		codexItemLine(t, "agent_message", "answer"),
+		"",
 	}, "\n")
 	got, err := ExtractCodexText([]byte(stream))
 	if err != nil {

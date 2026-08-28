@@ -168,11 +168,18 @@ func ExtractCodexText(stdout []byte) (string, error) {
 	for sc.Scan() {
 		line := bytes.TrimSpace(sc.Bytes())
 		if len(line) == 0 || line[0] != '{' {
-			continue // defensively skip any non-JSON line
+			// A blank line or non-JSON banner is not an event and can never be the
+			// final agent_message, so skipping it cannot hide the model's answer.
+			continue
 		}
+		// A line that looks like a JSON event but does not parse is corruption — a
+		// truncated final message, say. Failing closed here is load-bearing: were we
+		// to skip it, a valid *earlier* agent_message would survive as `last` and
+		// curate --apply could execute a superseded, potentially destructive
+		// proposal. engram must never apply a proposal it could not fully read.
 		var ev codexEvent
 		if err := json.Unmarshal(line, &ev); err != nil {
-			continue // a single malformed event line is not fatal to the stream
+			return "", fmt.Errorf("malformed event in codex json stream: %w", err)
 		}
 		if ev.Type == "item.completed" && ev.Item != nil && ev.Item.Type == "agent_message" {
 			last = ev.Item.Text
