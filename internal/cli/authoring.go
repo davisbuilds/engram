@@ -147,13 +147,17 @@ func cmdShare(e *env, name string, args []string) int {
 
 func cmdImport(e *env, name string, args []string) int {
 	var harness string
+	all := false
 	for _, a := range args {
-		if !strings.HasPrefix(a, "-") && harness == "" {
+		switch {
+		case a == "--all":
+			all = true
+		case !strings.HasPrefix(a, "-") && harness == "":
 			harness = a
 		}
 	}
 	if harness == "" {
-		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram import <claude-code|codex> [--apply]"}, nil)
+		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram import <claude-code|codex> [--all] [--apply]"}, nil)
 		return exitUsage
 	}
 	s, rerr := e.newSession()
@@ -173,13 +177,20 @@ func cmdImport(e *env, name string, args []string) int {
 			e.emit(name, false, nil, nil, &RespError{Code: "harness_disabled", Message: "claude-code is disabled; cannot import from it"}, nil)
 			return exitUsage
 		}
-		res, err = importer.ImportClaude(claudeMemoryDir(h.Home, s.cwd), s.cwd)
+		if all {
+			// Sweep every project slug, not just the current cwd's.
+			res, err = importer.ImportClaudeAll(h.Home)
+		} else {
+			res, err = importer.ImportClaude(claudeMemoryDir(h.Home, s.cwd), s.cwd)
+		}
 	case config.HarnessCodex:
 		h := s.cfg.Harnesses[config.HarnessCodex]
 		if !h.Enabled() {
 			e.emit(name, false, nil, nil, &RespError{Code: "harness_disabled", Message: "codex is disabled; cannot import from it"}, nil)
 			return exitUsage
 		}
+		// Codex keeps a single consolidated MEMORY.md, so --all imports the same
+		// source as a plain import; it is accepted but has no additional effect.
 		res, err = importer.ImportCodex(filepath.Join(h.Home, "memories", "MEMORY.md"))
 	default:
 		e.emit(name, false, nil, nil, &RespError{Code: "unknown_harness", Message: "harness must be claude-code or codex"}, nil)

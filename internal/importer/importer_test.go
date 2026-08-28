@@ -185,6 +185,98 @@ func TestImportClaudeAccountsForEveryFile(t *testing.T) {
 	}
 }
 
+// The slug→path resolver must reconstruct real directories whose names contain
+// '-' (which the slug can't distinguish from a path separator), backtracking so a
+// greedy prefix never traps a resolvable path.
+func TestResolveTokensBacktracksHyphenatedComponents(t *testing.T) {
+	base := t.TempDir()
+	// A tree with hyphens in two components (what the slug can't disambiguate).
+	full := filepath.Join(base, "my-user", "code", "web-app-ios")
+	if err := os.MkdirAll(full, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tokens := []string{"my", "user", "code", "web", "app", "ios"}
+	got, ok := resolveTokens(base, tokens)
+	if !ok || got != full {
+		t.Errorf("resolveTokens = (%q, %v), want (%q, true)", got, ok, full)
+	}
+}
+
+// When both a shorter and a longer hyphenated dir exist, a slug for the shorter
+// one must still resolve via backtracking rather than being captured by the longer.
+func TestResolveTokensPrefersResolvablePath(t *testing.T) {
+	base := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(base, "proj", "web-app-ios"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(base, "proj", "web-app", "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Longest match: proj/web-app-ios.
+	if got, ok := resolveTokens(base, []string{"proj", "web", "app", "ios"}); !ok || got != filepath.Join(base, "proj", "web-app-ios") {
+		t.Errorf("longest: got (%q,%v)", got, ok)
+	}
+	// Backtrack: proj/web-app/sub (web-app-sub does not exist, so it must fall back
+	// to web-app then sub).
+	if got, ok := resolveTokens(base, []string{"proj", "web", "app", "sub"}); !ok || got != filepath.Join(base, "proj", "web-app", "sub") {
+		t.Errorf("backtrack: got (%q,%v)", got, ok)
+	}
+}
+
+func TestResolveTokensReturnsFalseWhenNoPathExists(t *testing.T) {
+	base := t.TempDir()
+	if _, ok := resolveTokens(base, []string{"nonexistent", "project"}); ok {
+		t.Error("a slug with no matching directory must not resolve")
+	}
+}
+
+// ImportClaudeAll sweeps every project slug and merges the results; a slug that
+// resolves to a real repo carries its project scope, and MEMORY.md is ignored.
+func TestImportClaudeAllSweepsAllSlugs(t *testing.T) {
+	home := t.TempDir()
+	// Two project slugs, each with one native memory. Scope resolution walks from
+	// the real root and won't find these temp paths, so both resolve to global —
+	// the sweep/merge behavior is what this pins (scope resolution is covered by
+	// the resolveTokens tests).
+	mk := func(slug, mem string) {
+		d := filepath.Join(home, "projects", slug, "memory")
+		writeMem(t, filepath.Join(d, mem+".md"),
+			"---\nname: "+mem+"\ndescription: d\nmetadata:\n  type: lesson\n---\nbody\n")
+		writeMem(t, filepath.Join(d, "MEMORY.md"), "- index\n")
+	}
+	mk("-work-alpha", "alpha-lesson")
+	mk("-work-beta", "beta-lesson")
+
+	res, err := ImportClaudeAll(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := byName(res.Memories)
+	if len(res.Memories) != 2 || names["alpha-lesson"] == nil || names["beta-lesson"] == nil {
+		t.Errorf("sweep should import one memory per slug; got %v", keys(names))
+	}
+}
+
+func TestImportClaudeAllMissingProjectsDirIsEmpty(t *testing.T) {
+	res, err := ImportClaudeAll(t.TempDir()) // no projects/ subdir
+	if err != nil {
+		t.Fatalf("a missing projects dir must not error: %v", err)
+	}
+	if len(res.Memories) != 0 {
+		t.Errorf("expected empty result, got %d", len(res.Memories))
+	}
+}
+
+func writeMem(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestImportClaudeSkipsEngramOrigin(t *testing.T) {
 	dir := t.TempDir()
 	ours := "---\nname: ours\ndescription: d\nmetadata:\n  type: lesson\n  origin: engram-sync\n---\nx\n"

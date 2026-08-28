@@ -99,6 +99,53 @@ func deriveCodexScope(body string) string {
 	return "global"
 }
 
+// pathFromClaudeSlug reconstructs the absolute project path a Claude project slug
+// encodes. The slug replaces every non-alphanumeric run with '-', so '/' and a
+// literal '-' are indistinguishable in the slug; this resolves that ambiguity
+// against the live filesystem, returning the real path (and true) when one exists,
+// or ("", false) when no reconstruction does — e.g. the project was deleted. The
+// caller maps a false result to global scope, exactly as a non-existent cwd would.
+func pathFromClaudeSlug(slug string) (string, bool) {
+	tokens := splitSlugTokens(slug)
+	if len(tokens) == 0 {
+		return "", false
+	}
+	return resolveTokens(string(filepath.Separator), tokens)
+}
+
+// splitSlugTokens splits a slug into its '-'-separated tokens, dropping the empty
+// tokens that a leading '-' or any '-' run produces.
+func splitSlugTokens(slug string) []string {
+	var out []string
+	for _, t := range strings.Split(slug, "-") {
+		if t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// resolveTokens walks the filesystem from base, consuming slug tokens into real
+// directory components. Because a component may itself contain '-' (e.g. a dir
+// named "my-user" or "web-app-ios"), it tries the longest run of tokens that
+// names an existing subdirectory first and backtracks on a dead end, so the
+// greedy choice never traps a resolvable path. It returns the deepest resolved
+// path when all tokens are consumed, or false when no split matches on disk.
+func resolveTokens(base string, tokens []string) (string, bool) {
+	if len(tokens) == 0 {
+		return base, true
+	}
+	for k := len(tokens); k >= 1; k-- {
+		candidate := filepath.Join(base, strings.Join(tokens[:k], "-"))
+		if fi, err := os.Stat(candidate); err == nil && fi.IsDir() {
+			if got, ok := resolveTokens(candidate, tokens[k:]); ok {
+				return got, true
+			}
+		}
+	}
+	return "", false
+}
+
 // opensFrontmatterFence reports whether the file's first line is a `---` fence
 // (tolerating a trailing CR), i.e. it intends to carry frontmatter. It lets an
 // importer tell a genuinely frontmatter-less file (recoverable from its filename)

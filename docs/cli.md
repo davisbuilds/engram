@@ -83,7 +83,8 @@ engram [global flags] <command> [args]
     share        Promote a memory to a wider scope tier (writes canonical).
     sync         Render canonical → harnesses. Dry-run; --apply to write.
     import       Reverse-sync a harness's native memory into canonical
-                 (explicit, one-shot; dry-run, --apply to write).
+                 (explicit, one-shot; dry-run, --apply to write; --all to
+                 sweep every Claude project slug, not just the cwd's).
     curate       Run a headless agent over the corpus; it proposes
                  add/merge/remove/rescope, engram validates and applies
                  (dry-run; --apply to write). The one command that runs an agent.
@@ -162,6 +163,11 @@ explicit rather than ambient.
   `data.dropped` (with a reason) — a file with no frontmatter is recovered from
   its filename and first heading, and one whose frontmatter will not parse is
   reported in `data.dropped` and warned about, never dropped unreported.
+  **`--all` (Claude) sweeps every project slug**, not just the cwd's: each slug is
+  reconstructed to its real path (resolving the lossy `-`-for-`/` encoding against
+  the filesystem) so scope is derived per project; an orphaned slug whose project
+  is gone falls back to `global`. Codex keeps one consolidated source, so `--all`
+  is accepted there but changes nothing.
 - **`show <harness>`** — permissive on a disabled harness (proceeds, stderr note);
   contrast `import` (strict). Read vs write, mapped to filesystem semantics.
 - **`review`** — never mutates; every finding is a `next_step` the agent may run.
