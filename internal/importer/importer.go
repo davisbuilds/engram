@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/davisbuilds/engram/internal/schema"
+	slug2 "github.com/davisbuilds/engram/internal/slug"
 )
 
 // Result is what an importer produced: the canonical memories it mapped, the
@@ -100,50 +101,58 @@ func deriveCodexScope(body string) string {
 }
 
 // pathFromClaudeSlug reconstructs the absolute project path a Claude project slug
-// encodes. The slug replaces every non-alphanumeric run with '-', so '/' and a
-// literal '-' are indistinguishable in the slug; this resolves that ambiguity
-// against the live filesystem, returning the real path (and true) when one exists,
-// or ("", false) when no reconstruction does — e.g. the project was deleted. The
-// caller maps a false result to global scope, exactly as a non-existent cwd would.
+// encodes. The slug maps every non-alphanumeric character — '/', but also '-',
+// '.', '_', spaces, … — to '-', so it is lossy and not invertible by string
+// surgery. This resolves it against the live filesystem: it walks real
+// directories and matches each candidate by re-encoding its name with the same
+// rule (slug.ForCwd). It returns the path (and true) only when *exactly one*
+// reconstruction exists; zero matches (e.g. a deleted project) or two-or-more
+// (an ambiguous slug like "-a-b" for both "/a-b" and "/a/b") both yield false, so
+// the caller falls back to global rather than guess a wrong project.
 func pathFromClaudeSlug(slug string) (string, bool) {
-	tokens := splitSlugTokens(slug)
-	if len(tokens) == 0 {
+	matches := resolveSlugMatches(string(filepath.Separator), slug)
+	if len(matches) != 1 {
 		return "", false
 	}
-	return resolveTokens(string(filepath.Separator), tokens)
+	return matches[0], true
 }
 
-// splitSlugTokens splits a slug into its '-'-separated tokens, dropping the empty
-// tokens that a leading '-' or any '-' run produces.
-func splitSlugTokens(slug string) []string {
+// resolveSlugMatches returns every real path under base whose Claude encoding is
+// slug. Each path component in the slug is introduced by the '-' that encodes its
+// leading separator; at each level it re-encodes every real child directory name
+// with slug.ForCwd and descends into those whose encoding is a whole leading
+// component of the remaining slug. Collecting *all* matches (not the first) is
+// what lets the caller detect ambiguity instead of silently narrowing to one repo.
+func resolveSlugMatches(base, slug string) []string {
+	if slug == "" {
+		return []string{base}
+	}
+	if slug[0] != '-' {
+		return nil // a component must be introduced by its encoded separator
+	}
+	rest := slug[1:]
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return nil
+	}
 	var out []string
-	for _, t := range strings.Split(slug, "-") {
-		if t != "" {
-			out = append(out, t)
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
 		}
+		enc := slug2.ForCwd(e.Name())
+		if !strings.HasPrefix(rest, enc) {
+			continue
+		}
+		// enc must be a whole component: the slug ends here, or the next character
+		// is the '-' that encodes the following separator.
+		tail := rest[len(enc):]
+		if tail != "" && tail[0] != '-' {
+			continue
+		}
+		out = append(out, resolveSlugMatches(filepath.Join(base, e.Name()), tail)...)
 	}
 	return out
-}
-
-// resolveTokens walks the filesystem from base, consuming slug tokens into real
-// directory components. Because a component may itself contain '-' (e.g. a dir
-// named "my-user" or "web-app-ios"), it tries the longest run of tokens that
-// names an existing subdirectory first and backtracks on a dead end, so the
-// greedy choice never traps a resolvable path. It returns the deepest resolved
-// path when all tokens are consumed, or false when no split matches on disk.
-func resolveTokens(base string, tokens []string) (string, bool) {
-	if len(tokens) == 0 {
-		return base, true
-	}
-	for k := len(tokens); k >= 1; k-- {
-		candidate := filepath.Join(base, strings.Join(tokens[:k], "-"))
-		if fi, err := os.Stat(candidate); err == nil && fi.IsDir() {
-			if got, ok := resolveTokens(candidate, tokens[k:]); ok {
-				return got, true
-			}
-		}
-	}
-	return "", false
 }
 
 // opensFrontmatterFence reports whether the file's first line is a `---` fence

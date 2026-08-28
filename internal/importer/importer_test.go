@@ -185,48 +185,67 @@ func TestImportClaudeAccountsForEveryFile(t *testing.T) {
 	}
 }
 
-// The slug→path resolver must reconstruct real directories whose names contain
-// '-' (which the slug can't distinguish from a path separator), backtracking so a
-// greedy prefix never traps a resolvable path.
-func TestResolveTokensBacktracksHyphenatedComponents(t *testing.T) {
+// The resolver must match real directories whose names contain '-' (which the
+// slug can't distinguish from a path separator).
+func TestResolveSlugMatchesHyphenatedComponents(t *testing.T) {
 	base := t.TempDir()
-	// A tree with hyphens in two components (what the slug can't disambiguate).
 	full := filepath.Join(base, "my-user", "code", "web-app-ios")
 	if err := os.MkdirAll(full, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	tokens := []string{"my", "user", "code", "web", "app", "ios"}
-	got, ok := resolveTokens(base, tokens)
-	if !ok || got != full {
-		t.Errorf("resolveTokens = (%q, %v), want (%q, true)", got, ok, full)
+	// Slug for base/my-user/code/web-app-ios, relative to base: every separator and
+	// every literal '-' becomes '-'.
+	got := resolveSlugMatches(base, "-my-user-code-web-app-ios")
+	if len(got) != 1 || got[0] != full {
+		t.Errorf("resolveSlugMatches = %v, want [%q]", got, full)
 	}
 }
 
-// When both a shorter and a longer hyphenated dir exist, a slug for the shorter
-// one must still resolve via backtracking rather than being captured by the longer.
-func TestResolveTokensPrefersResolvablePath(t *testing.T) {
+// P1: a component whose real name contains a non-hyphen non-alphanumeric char
+// (underscore, dot, space) still encodes to '-' in the slug and must resolve —
+// the resolver re-encodes real names rather than rebuilding only hyphenated ones.
+func TestResolveSlugMatchesNonHyphenChars(t *testing.T) {
 	base := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(base, "proj", "web-app-ios"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(base, "proj", "web-app", "sub"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// Longest match: proj/web-app-ios.
-	if got, ok := resolveTokens(base, []string{"proj", "web", "app", "ios"}); !ok || got != filepath.Join(base, "proj", "web-app-ios") {
-		t.Errorf("longest: got (%q,%v)", got, ok)
-	}
-	// Backtrack: proj/web-app/sub (web-app-sub does not exist, so it must fall back
-	// to web-app then sub).
-	if got, ok := resolveTokens(base, []string{"proj", "web", "app", "sub"}); !ok || got != filepath.Join(base, "proj", "web-app", "sub") {
-		t.Errorf("backtrack: got (%q,%v)", got, ok)
+	for _, real := range []string{"my_project", "app.v2", "two words"} {
+		if err := os.MkdirAll(filepath.Join(base, real), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// All three encode to the same shape "<sep>my-project" etc.
+		enc := "-" + strings.Map(func(r rune) rune {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+				return r
+			}
+			return '-'
+		}, real)
+		got := resolveSlugMatches(base, enc)
+		want := filepath.Join(base, real)
+		if len(got) != 1 || got[0] != want {
+			t.Errorf("resolveSlugMatches(%q) = %v, want [%q]", enc, got, want)
+		}
 	}
 }
 
-func TestResolveTokensReturnsFalseWhenNoPathExists(t *testing.T) {
+// P2: when two real paths encode to the same slug ("-a-b" ← both "/a-b" and
+// "/a/b"), the resolver reports both, so pathFromClaudeSlug falls back to global
+// rather than silently narrowing to one repo.
+func TestResolveSlugAmbiguousYieldsNoUniquePath(t *testing.T) {
 	base := t.TempDir()
-	if _, ok := resolveTokens(base, []string{"nonexistent", "project"}); ok {
-		t.Error("a slug with no matching directory must not resolve")
+	if err := os.MkdirAll(filepath.Join(base, "foo-bar"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(base, "foo", "bar"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got := resolveSlugMatches(base, "-foo-bar")
+	if len(got) != 2 {
+		t.Fatalf("both encodings should match; got %v", got)
+	}
+}
+
+func TestResolveSlugNoMatchIsEmpty(t *testing.T) {
+	base := t.TempDir()
+	if got := resolveSlugMatches(base, "-nonexistent-project"); len(got) != 0 {
+		t.Errorf("a slug with no matching directory must not resolve; got %v", got)
 	}
 }
 
