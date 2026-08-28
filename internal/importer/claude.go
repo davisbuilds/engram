@@ -52,7 +52,15 @@ func ImportClaude(memoryDir, cwd string) (Result, error) {
 
 		front, body, ok := frontmatterAndBody(data)
 		if !ok {
-			// No frontmatter fences: recover the memory rather than lose it. The
+			if opensFrontmatterFence(data) {
+				// An opening `---` with no parseable closing fence — truncated, or
+				// CRLF/alternate line endings we don't split on. This is malformed
+				// frontmatter, not an absence of it: report it rather than force-import
+				// the raw document (which would also bypass the origin loop guard).
+				res.Dropped = append(res.Dropped, Dropped{Source: fname, Reason: "malformed frontmatter: opening fence without a parseable closing fence (check line endings)"})
+				continue
+			}
+			// Genuinely no frontmatter: recover the memory rather than lose it. The
 			// filename supplies the name, the first heading the description, and the
 			// whole file the body.
 			name := slugify(fileBase)

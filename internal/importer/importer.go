@@ -99,6 +99,20 @@ func deriveCodexScope(body string) string {
 	return "global"
 }
 
+// opensFrontmatterFence reports whether the file's first line is a `---` fence
+// (tolerating a trailing CR), i.e. it intends to carry frontmatter. It lets an
+// importer tell a genuinely frontmatter-less file (recoverable from its filename)
+// apart from one whose frontmatter is malformed — an opening fence with no
+// parseable close — which must be reported rather than force-imported.
+func opensFrontmatterFence(data []byte) bool {
+	s := string(data)
+	first := s
+	if nl := strings.IndexByte(s, '\n'); nl >= 0 {
+		first = s[:nl]
+	}
+	return strings.TrimRight(first, "\r") == "---"
+}
+
 // frontmatterAndBody splits a canonical/native memory file into its YAML
 // frontmatter bytes and its markdown body.
 func frontmatterAndBody(data []byte) (front []byte, body string, ok bool) {

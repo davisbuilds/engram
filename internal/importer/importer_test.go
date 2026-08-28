@@ -108,6 +108,35 @@ func TestImportClaudeRecoversFrontmatterlessFile(t *testing.T) {
 	}
 }
 
+// A file that opens a frontmatter fence but has no parseable closing fence —
+// truncated, or CRLF line endings frontmatterAndBody can't split — is malformed,
+// not frontmatter-less. It must be reported in Dropped, never force-imported as a
+// filename-named memory whose body is the raw document (which would also bypass
+// the metadata.origin loop guard for CRLF engram output). Codex PR #3 P2.
+func TestImportClaudeDropsMalformedFrontmatter(t *testing.T) {
+	dir := t.TempDir()
+	// Opening fence, no closing fence.
+	if err := os.WriteFile(filepath.Join(dir, "truncated.md"),
+		[]byte("---\nname: foo\ndescription: bar\nno closing fence here\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// CRLF frontmatter: the fences are there but not in the LF form we split on.
+	if err := os.WriteFile(filepath.Join(dir, "crlf.md"),
+		[]byte("---\r\nname: baz\r\n---\r\nbody\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := ImportClaude(dir, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Memories) != 0 {
+		t.Errorf("malformed frontmatter must not be imported; got %d memories: %+v", len(res.Memories), res.Memories)
+	}
+	if len(res.Dropped) != 2 {
+		t.Fatalf("both malformed files must be reported in Dropped; got %+v", res.Dropped)
+	}
+}
+
 // A file whose frontmatter fences are present but whose YAML does not parse must
 // be reported in Dropped, never silently discarded.
 func TestImportClaudeReportsUnparseableFrontmatter(t *testing.T) {
