@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/davisbuilds/engram/internal/lock"
 	"github.com/davisbuilds/engram/internal/render"
 	"github.com/davisbuilds/engram/internal/schema"
 )
@@ -185,9 +186,11 @@ func TestConcurrentApplyIsMutuallyExclusive(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Simulate a concurrent apply already holding the lock.
-	if err := os.WriteFile(filepath.Join(dir, ".engram.lock"), []byte("held"), 0o644); err != nil {
+	release, err := lock.Acquire(dir)
+	if err != nil {
 		t.Fatal(err)
 	}
+	defer release()
 	if _, err := target(dir, mem("alpha-lesson")).Apply(); err == nil {
 		t.Error("apply should fail when the lock is already held")
 	}

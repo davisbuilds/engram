@@ -12,9 +12,12 @@ only; shipped items live in the git history.
   consolidated engram Task Group. That fixture requires observing what Codex's
   consolidator actually preserves when it folds an extension note; capture one
   and add the fallback + differential test before relying on import in anger.
-- **Stale apply lock.** `sync` uses an exclusive `.engram.lock` file removed on
-  completion. A crash mid-apply leaves the lock behind and blocks the next apply.
-  Add staleness detection (age/PID) or a `--force-unlock` escape hatch.
+- **Codex curate output extraction is naive.** `ExtractCodexText` returns all of
+  `codex exec` stdout and leans on fenced-`json` recovery to find the proposal
+  inside the session-log preamble. If Codex ever emits a stray ```json block
+  before the real one, the wrong block wins. Prefer `codex exec`'s structured/
+  `--json` event stream (confirm the flag exists in the installed version) and
+  parse the final assistant message explicitly, as the Claude path already does.
 
 ## Import quality
 
@@ -27,10 +30,13 @@ only; shipped items live in the git history.
 
 ## Modelling
 
-- **Imported scope defaults to `global`.** Both importers set `scope: global`;
-  Claude memories are per-project and could map to `project:<repo>` from the cwd
-  slug, and Codex groups carry `applies_to: cwd=...`. For now the user re-scopes
-  with `engram share`. Consider deriving project scope on import.
+- **Codex scope derivation depends on the live filesystem.** Import now derives a
+  memory's scope by resolving a cwd to a real git repo (Claude: the import cwd;
+  Codex: the Task Group's `applies_to: cwd=`). A repo → `project:<base>`, anything
+  else → `global`. That makes Codex import non-reproducible: a Task Group whose
+  project has since been deleted or that references another machine's path falls
+  back to `global`. Safe (never a wrong project), but worth a content-hash or
+  path-cache alternative if reproducibility matters later.
 - **`remember` provenance timestamps.** `remember` sets `provenance.origin` but
   not `created`/`modified`, to keep render output deterministic and idempotent.
   A "preserve created, bump modified on change" policy would restore timestamps

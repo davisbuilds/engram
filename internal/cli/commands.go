@@ -10,12 +10,27 @@ import (
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/discover"
 	"github.com/davisbuilds/engram/internal/harness"
+	"github.com/davisbuilds/engram/internal/lock"
 	"github.com/davisbuilds/engram/internal/marker"
 	"github.com/davisbuilds/engram/internal/schema"
 	"github.com/davisbuilds/engram/internal/scope"
 	"github.com/davisbuilds/engram/internal/slug"
 	"github.com/davisbuilds/engram/internal/sync"
 )
+
+// canonLock takes the exclusive canonical-root lock shared by every canonical
+// mutator (remember, share, import --apply, curate --apply), so no two writers
+// interleave — closing the load-then-write race in store.Save between two
+// concurrent same-name writes, and keeping a multi-file batch atomic against a
+// single write. A held lock yields a retryable "locked" error rather than a
+// silent second writer.
+func canonLock(root string) (func(), *RespError) {
+	release, err := lock.Acquire(root)
+	if err != nil {
+		return nil, &RespError{Code: "locked", Message: err.Error()}
+	}
+	return release, nil
+}
 
 // session resolves the cwd/host context and loads config once, shared by the
 // sync/audit/list/discover commands.

@@ -41,7 +41,7 @@ func ImportCodex(memoryFile string) (Result, error) {
 			Name:        name,
 			Description: g.title,
 			Type:        schema.TypeReference,
-			Scope:       "global",
+			Scope:       deriveCodexScope(g.body),
 			Body:        g.body,
 			Provenance:  schema.Provenance{Origin: "import:codex"},
 		})

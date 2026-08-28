@@ -30,11 +30,40 @@ type Harness struct {
 // Enabled reports whether engram may act on this harness.
 func (h Harness) Enabled() bool { return !h.Disabled }
 
+// ModelChoice pins the model and reasoning effort a headless curate run uses for
+// one harness. Empty fields fall back to the built-in defaults.
+type ModelChoice struct {
+	Model  string `yaml:"model"`
+	Effort string `yaml:"effort"`
+}
+
+// CurateConfig holds the per-harness model defaults for `engram curate`. These
+// are ordinary defaults (model names, not machine state) and are safe to compile
+// in; a config file or a per-run flag overrides them.
+type CurateConfig struct {
+	Models map[string]ModelChoice `yaml:"models"`
+}
+
 // Config is the fully-resolved configuration.
 type Config struct {
 	CanonicalRoot string             `yaml:"canonical_root"`
 	Hosts         map[string]string  `yaml:"hosts"`
 	Harnesses     map[string]Harness `yaml:"harnesses"`
+	Curate        CurateConfig       `yaml:"curate"`
+}
+
+// CurateModel returns the resolved model choice for a harness, falling back to
+// the built-in default for any field the config left empty.
+func (c *Config) CurateModel(harness string) ModelChoice {
+	def := defaults().Curate.Models[harness]
+	got := c.Curate.Models[harness]
+	if got.Model == "" {
+		got.Model = def.Model
+	}
+	if got.Effort == "" {
+		got.Effort = def.Effort
+	}
+	return got
 }
 
 // HostLabel maps a `hostname -s` value to its configured label. A missing entry
@@ -56,6 +85,10 @@ func defaults() Config {
 			HarnessClaude: {Home: filepath.Join(home, ".claude")},
 			HarnessCodex:  {Home: filepath.Join(home, ".codex")},
 		},
+		Curate: CurateConfig{Models: map[string]ModelChoice{
+			HarnessClaude: {Model: "claude-sonnet-5", Effort: "high"},
+			HarnessCodex:  {Model: "gpt-5.6-terra", Effort: "high"},
+		}},
 	}
 }
 

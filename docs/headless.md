@@ -1,8 +1,19 @@
 # Headless agent workflows
 
-engram is plumbing; a headless agent is the intelligence. Read commands emit
-`--json` (a stable envelope with a `next_steps` array), and the agent consumes
-that and calls engram's write primitives. engram never invokes an agent itself.
+engram is plumbing; a headless agent is the intelligence. Two integration
+shapes realize that split:
+
+1. **Leads (default).** Read commands emit `--json` — a stable envelope with a
+   `next_steps` array. An outer agent consumes the leads and calls engram's write
+   primitives. engram supplies the facts; the agent decides and acts.
+2. **`curate` (self-contained).** The one command that runs an agent itself.
+   engram gathers the corpus deterministically, invokes a headless agent to
+   *propose* operations, then validates and applies them. The trust boundary is
+   preserved by construction: the model only proposes, engram is the sole mutator
+   (see "Curate" below).
+
+Both keep the same invariant — a model never mutates canonical directly; every
+change goes through engram's validated, idempotent write-path.
 
 ## The `--` separator (required for `claude -p`)
 
@@ -35,6 +46,40 @@ engram review --json | jq -c '.next_steps[]'
 Each `next_steps[].command` is runnable: an `engram share ...` for a promotion
 candidate, or a `--`-guarded `claude -p ... -- "..."` comparison pass for a
 near-duplicate. The `agent-memory-review` skill covers the judgment.
+
+## Curate: engram runs the agent, engram applies
+
+`curate` is the proposer/applier loop. Unlike every other command, it invokes a
+headless agent — but the agent only returns *proposed operations*; engram
+validates and applies them.
+
+```
+engram curate --json                 # dry-run: agent proposes, engram shows the validated plan
+engram curate --apply --json         # commit the plan (fail-closed if any op is invalid)
+engram curate --harness codex --json # run the codex agent instead of claude
+engram curate --model claude-opus-5 --effort high --json   # override the model/effort
+```
+
+Flow, and where each layer's authority begins and ends:
+
+1. **engram (deterministic):** gathers every canonical memory + `review`
+   findings into a corpus and builds the prompt.
+2. **agent (judgment):** returns JSON `operations` — `add` / `update` / `merge` /
+   `remove` / `rescope`, each with a `reason`. It is handed the corpus as text
+   and needs no tools; it never touches the filesystem.
+3. **engram (deterministic):** validates every operation against the corpus and
+   the schema. Dry-run emits the per-op verdicts as `data.operations`; `--apply`
+   executes the batch through `store` under the canonical write-path.
+
+**Fail closed.** If any proposed operation is invalid (unknown op, target that
+does not exist, a memory that fails the schema, a rename smuggled through
+`update`), `--apply` applies *nothing* and exits `3`, listing the offenders as
+`next_steps`. engram never partially applies a proposal it could not fully
+validate.
+
+The default models are `claude-sonnet-5`/`high` and `gpt-5.6-terra`/`high`;
+set per-harness defaults under `curate.models.<harness>` in config, or override
+per run with `--model` / `--effort`.
 
 ## Session-boundary sync (Claude Code hooks)
 

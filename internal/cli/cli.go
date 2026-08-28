@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/davisbuilds/engram/internal/agentexec"
 	"github.com/davisbuilds/engram/internal/version"
 )
 
@@ -60,6 +61,10 @@ type env struct {
 	cwd      string
 	agent    string
 	host     string
+	// runner executes a headless agent argv. It defaults to the real subprocess
+	// runner in Run and is swapped for a fake in tests so the curate loop is
+	// exercised without spawning a paid model.
+	runner agentexec.Runner
 }
 
 // command is one entry in engram's subcommand table.
@@ -83,6 +88,7 @@ func commands() []command {
 		{"diff", "Show the cross-state difference for each render target.", cmdDiff},
 		{"show", "Dump a harness's engram-rendered memories.", cmdShow},
 		{"review", "Health report: near-dupe names + promotion candidates, emitted as agent next_steps.", cmdReview},
+		{"curate", "Run a headless agent over the corpus; it proposes add/merge/remove/rescope, engram applies (dry-run; --apply).", cmdCurate},
 		{"hook", "Print harness lifecycle wiring for session-boundary sync.", cmdHook},
 		{"config", "Show config + per-harness readiness (is each harness set up to read what engram writes?).", cmdConfig},
 		{"schema", "Emit engram's JSON schemas (self-describing).", cmdSchema},
@@ -92,7 +98,7 @@ func commands() []command {
 
 // Run dispatches a single stateless invocation and returns its exit code.
 func Run(args []string) int {
-	e := &env{jsonMode: !isTTY(os.Stdout)}
+	e := &env{jsonMode: !isTTY(os.Stdout), runner: agentexec.ExecRunner}
 
 	var sub string
 	rest := make([]string, 0, len(args))
@@ -210,6 +216,16 @@ func cmdSchema(e *env, _ string, _ []string) int {
 			"scopes":   []string{"global", "project:<repo>"},
 			"applies_to": []string{
 				"cwd:glob[]", "agents:[claude|codex]", "hosts:string[]",
+			},
+		},
+		"curate_operation": map[string]any{
+			"note": "the JSON an agent returns from `engram curate`; engram validates each op and, under --apply, applies the whole batch or nothing (fail closed)",
+			"ops": map[string]string{
+				"add":     "{op, memory, reason} — memory.name must not already exist",
+				"update":  "{op, name, memory, reason} — memory.name must equal name (no rename)",
+				"merge":   "{op, sources[>=2], memory, reason} — sources replaced by memory; a source reusing memory.name is kept",
+				"remove":  "{op, name, reason} — name must exist",
+				"rescope": "{op, name, to_scope, reason} — to_scope is 'global' or 'project:<repo>'",
 			},
 		},
 	}

@@ -24,10 +24,13 @@ type claudeNative struct {
 }
 
 // ImportClaude reads Claude Code's per-project memory directory and maps each
-// native memory file into canonical form. Files engram itself rendered (origin
-// marker) are skipped as the loop guard; the index and non-markdown files are
-// ignored. A missing directory yields an empty result.
-func ImportClaude(memoryDir string) (Result, error) {
+// native memory file into canonical form. cwd is the project directory the
+// memory dir belongs to; it is used to derive a project scope (repo root →
+// project:<repo>, non-repo container → global). Files engram itself rendered
+// (origin marker) are skipped as the loop guard; the index and non-markdown
+// files are ignored. A missing directory yields an empty result.
+func ImportClaude(memoryDir, cwd string) (Result, error) {
+	scope := projectScopeFromRepo(cwd)
 	var res Result
 	entries, err := os.ReadDir(memoryDir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -60,7 +63,7 @@ func ImportClaude(memoryDir string) (Result, error) {
 			Name:        n.Name,
 			Description: n.Description,
 			Type:        importedType(n.Metadata.Type),
-			Scope:       "global",
+			Scope:       scope,
 			Body:        body,
 			Provenance:  schema.Provenance{Origin: "import:claude-code"},
 		})

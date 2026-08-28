@@ -38,18 +38,17 @@ func TestAnalyzeFlagsNearDuplicateNames(t *testing.T) {
 	}
 }
 
-func TestAnalyzeFlagsPromotionCandidate(t *testing.T) {
+// A project-scoped memory with no cwd glob is the normal, correct shape (tier
+// matching uses the scope's path segment, not the cwd axis), so review must NOT
+// flag it — scope judgment belongs to curate, not a static heuristic.
+func TestAnalyzeDoesNotFlagProjectScopeAsFinding(t *testing.T) {
 	mems := []*schema.CanonicalMemory{
-		mem("proj-no-cwd", "project:acme"),                 // project-scoped, no cwd -> candidate
-		mem("proj-with-cwd", "project:acme", "/work/acme"), // constrained -> not a candidate
-		mem("a-global", "global"),                          // already global -> not a candidate
+		mem("alpha-widget", "project:acme"),
+		mem("beta-gadget", "project:acme", "/work/acme"),
+		mem("gamma-global", "global"),
 	}
-	cands := findingsOfKind(Analyze(mems), "promotion-candidate")
-	if len(cands) != 1 || cands[0].Names[0] != "proj-no-cwd" {
-		t.Errorf("expected only proj-no-cwd as a promotion candidate; got %+v", cands)
-	}
-	if cands[0].Suggested == "" {
-		t.Error("a promotion candidate should carry a suggested command")
+	if got := Analyze(mems); len(got) != 0 {
+		t.Errorf("project scope must not produce findings; got %+v", got)
 	}
 }
 

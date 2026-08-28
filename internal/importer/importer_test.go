@@ -3,6 +3,7 @@ package importer
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,7 +29,8 @@ func TestImportClaudeMapsNativeFrontmatter(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("- [x](x.md)\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res, err := ImportClaude(dir)
+	// cwd is a bare temp dir with no .git above it → global scope.
+	res, err := ImportClaude(dir, dir)
 	if err != nil {
 		t.Fatalf("ImportClaude: %v", err)
 	}
@@ -40,7 +42,7 @@ func TestImportClaudeMapsNativeFrontmatter(t *testing.T) {
 		t.Errorf("mapping wrong: %+v", m)
 	}
 	if m.Scope != "global" {
-		t.Errorf("imported scope = %q, want global default", m.Scope)
+		t.Errorf("imported scope = %q, want global (no repo above cwd)", m.Scope)
 	}
 	if m.Body != "Body stays.\n" {
 		t.Errorf("body not preserved: %q", m.Body)
@@ -53,7 +55,7 @@ func TestImportClaudeSkipsEngramOrigin(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "ours.md"), []byte(ours), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res, err := ImportClaude(dir)
+	res, err := ImportClaude(dir, dir)
 	if err != nil {
 		t.Fatalf("ImportClaude: %v", err)
 	}
@@ -148,4 +150,101 @@ func keys(m map[string]*schema.CanonicalMemory) []string {
 		ks = append(ks, k)
 	}
 	return ks
+}
+
+func TestDeriveClaudeScopeRepoRootBecomesProject(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mdir := filepath.Join(repo, ".claude", "memory")
+	if err := os.MkdirAll(mdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	native := "---\nname: repo-lesson\ndescription: d\nmetadata:\n  type: lesson\n---\nb\n"
+	if err := os.WriteFile(filepath.Join(mdir, "repo-lesson.md"), []byte(native), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// cwd is a subdirectory inside the repo: scope resolves to the repo's base.
+	res, err := ImportClaude(mdir, filepath.Join(repo, "src", "pkg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The subdir does not exist on disk, but the walk finds .git at repo root.
+	want := "project:" + filepath.Base(repo)
+	if len(res.Memories) != 1 || res.Memories[0].Scope != want {
+		t.Errorf("scope = %q, want %q", res.Memories[0].Scope, want)
+	}
+}
+
+// mkRepo makes a temp dir named <name> containing a .git marker and returns its
+// path, so scope derivation (which requires a real repo) has something to find.
+func mkRepo(t *testing.T, name string) string {
+	t.Helper()
+	repo := filepath.Join(t.TempDir(), name)
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return repo
+}
+
+func TestDeriveCodexScopeFromRealRepo(t *testing.T) {
+	repo := mkRepo(t, "dotfiles")
+	got := deriveCodexScope("applies_to: cwd=" + repo + "; reuse_rule=x\nmore body")
+	if got != "project:dotfiles" {
+		t.Errorf("got %q, want project:dotfiles", got)
+	}
+	// Only the base name enters the scope; the full path never does.
+	if strings.Contains(got, string(filepath.Separator)) {
+		t.Errorf("scope %q leaked a path separator", got)
+	}
+}
+
+func TestDeriveCodexScopeNonRepoPathStaysGlobal(t *testing.T) {
+	// A container directory (no .git) must not become a project scope, and a
+	// group with no applies_to line stays global.
+	container := t.TempDir() // exists but has no .git
+	if got := deriveCodexScope("applies_to: cwd=" + container + "\n"); got != "global" {
+		t.Errorf("non-repo cwd: got %q, want global", got)
+	}
+	if got := deriveCodexScope("scope: apply a theme\n## Task 1\n"); got != "global" {
+		t.Errorf("no applies_to: got %q, want global", got)
+	}
+}
+
+func TestProjectScopeFromRepoGuardsDegenerate(t *testing.T) {
+	// "." is not degenerate — it resolves to the real cwd (covered separately);
+	// these are the paths that must always yield global.
+	for _, p := range []string{"", "/", "  "} {
+		if got := projectScopeFromRepo(p); got != "global" {
+			t.Errorf("projectScopeFromRepo(%q) = %q, want global", p, got)
+		}
+	}
+}
+
+func TestImportCodexDerivesProjectScope(t *testing.T) {
+	repo := mkRepo(t, "dotfiles")
+	dir := t.TempDir()
+	mem := "# Task Group: Dotfiles theme\n\n" +
+		"applies_to: cwd=" + repo + "; reuse_rule=x\n\n## Task 1\nbody\n"
+	path := filepath.Join(dir, "MEMORY.md")
+	if err := os.WriteFile(path, []byte(mem), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := ImportCodex(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Memories) != 1 || res.Memories[0].Scope != "project:dotfiles" {
+		t.Errorf("scope = %q, want project:dotfiles", res.Memories[0].Scope)
+	}
+}
+
+func TestProjectScopeFromRepoResolvesRelativeCwd(t *testing.T) {
+	repo := mkRepo(t, "myrepo")
+	t.Chdir(repo) // run as if invoked from inside the repo
+	// A relative "." must resolve to the absolute repo root, not "project:.".
+	if got := projectScopeFromRepo("."); got != "project:myrepo" {
+		t.Errorf("projectScopeFromRepo(\".\") = %q, want project:myrepo", got)
+	}
 }

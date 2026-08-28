@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/davisbuilds/engram/internal/lock"
 )
 
 // captureStdout runs fn with os.Stdout redirected and returns what it wrote.
@@ -222,5 +224,53 @@ func TestRunUnknownCommandIsUsageError(t *testing.T) {
 	defer silenceStdout(t)()
 	if code := Run([]string{"bogus", "--json"}); code != exitUsage {
 		t.Errorf("unknown command exit = %d, want %d", code, exitUsage)
+	}
+}
+
+// TestCanonicalMutatorsBlockUnderHeldLock pins that every canonical writer —
+// remember, share, import --apply — refuses to mutate while another apply holds
+// the canonical-root lock, so no writer slips past the exclusion.
+func TestCanonicalMutatorsBlockUnderHeldLock(t *testing.T) {
+	dir := t.TempDir()
+	canon := filepath.Join(dir, "canonical")
+	claude := filepath.Join(dir, "claude")
+	// Seed one canonical memory so share has a target.
+	writeFile(t, filepath.Join(canon, "a-mem.md"),
+		"---\nname: a-mem\ndescription: d\ntype: lesson\nscope: global\n---\nb\n")
+	// A hand-authored native Claude memory so import has something to write.
+	writeFile(t, filepath.Join(claude, "projects", "-work-x", "memory", "human.md"),
+		"---\nname: human-lesson\ndescription: d\nmetadata:\n  type: lesson\n---\nb\n")
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+canon+"\nharnesses:\n  claude-code:\n    home: "+claude+"\n")
+
+	// A concurrent apply already holds the canonical lock.
+	release, err := lock.Acquire(canon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	defer silenceStdout(t)()
+
+	cases := [][]string{
+		{"remember", "--name", "new-mem", "--description", "d", "--type", "lesson", "--scope", "global"},
+		{"share", "a-mem", "--to", "project:acme"},
+		{"import", "claude-code", "--apply", "--cwd", "/work/x"},
+	}
+	for _, args := range cases {
+		full := append(args, "--config", cfg, "--json")
+		if code := Run(full); code != exitError {
+			t.Errorf("%s under held lock: exit = %d, want %d", args[0], code, exitError)
+		}
+	}
+	// Nothing should have been written: new-mem absent, a-mem scope unchanged.
+	if _, err := os.Stat(filepath.Join(canon, "new-mem.md")); !os.IsNotExist(err) {
+		t.Error("remember wrote new-mem.md despite the held lock")
+	}
+	got, _ := os.ReadFile(filepath.Join(canon, "a-mem.md"))
+	if strings.Contains(string(got), "project:acme") {
+		t.Error("share mutated a-mem despite the held lock")
+	}
+	if _, err := os.Stat(filepath.Join(canon, "human-lesson.md")); !os.IsNotExist(err) {
+		t.Error("import wrote human-lesson.md despite the held lock")
 	}
 }
