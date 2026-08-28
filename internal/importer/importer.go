@@ -13,14 +13,24 @@ import (
 )
 
 // Result is what an importer produced: the canonical memories it mapped, the
-// names/titles it skipped as engram-origin (the loop guard), and — for Codex —
-// whether the consolidated source looks stale.
+// names/titles it skipped as engram-origin (the loop guard), the sources it could
+// not import (with reasons), and — for Codex — whether the source looks stale.
+// Every candidate source is accounted for in exactly one of Memories, Skipped, or
+// Dropped: import never loses a file silently.
 type Result struct {
 	Memories []*schema.CanonicalMemory
 	Skipped  []string
+	Dropped  []Dropped
 	// StaleWarning is set when the Codex MEMORY.md being imported is older than
 	// 30 days, i.e. the consolidator may be stalled and the source may lag reality.
 	StaleWarning bool
+}
+
+// Dropped records a native source (a Claude file name, or a Codex Task Group
+// title) that could not be imported, with why — so nothing vanishes unreported.
+type Dropped struct {
+	Source string `json:"source"`
+	Reason string `json:"reason"`
 }
 
 // projectScopeFromRepo maps a directory path to a project scope, but only when
@@ -87,6 +97,20 @@ func deriveCodexScope(body string) string {
 		return projectScopeFromRepo(rest)
 	}
 	return "global"
+}
+
+// opensFrontmatterFence reports whether the file's first line is a `---` fence
+// (tolerating a trailing CR), i.e. it intends to carry frontmatter. It lets an
+// importer tell a genuinely frontmatter-less file (recoverable from its filename)
+// apart from one whose frontmatter is malformed — an opening fence with no
+// parseable close — which must be reported rather than force-imported.
+func opensFrontmatterFence(data []byte) bool {
+	s := string(data)
+	first := s
+	if nl := strings.IndexByte(s, '\n'); nl >= 0 {
+		first = s[:nl]
+	}
+	return strings.TrimRight(first, "\r") == "---"
 }
 
 // frontmatterAndBody splits a canonical/native memory file into its YAML

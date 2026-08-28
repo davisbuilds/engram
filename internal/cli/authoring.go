@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -191,12 +192,16 @@ func cmdImport(e *env, name string, args []string) int {
 
 	base := map[string]any{
 		"harness": harness, "apply": e.apply,
-		"skipped": orEmpty(res.Skipped), "would_import": len(res.Memories),
+		"skipped": orEmpty(res.Skipped), "dropped": orEmpty(res.Dropped),
+		"would_import": len(res.Memories),
 	}
 	var warns []string
 	if res.StaleWarning {
 		base["stale_warning"] = true
 		warns = append(warns, "Codex MEMORY.md is older than 30 days; the consolidator may be stalled and this import may lag reality")
+	}
+	if len(res.Dropped) > 0 {
+		warns = append(warns, fmt.Sprintf("%d source(s) could not be imported and were dropped; see data.dropped", len(res.Dropped)))
 	}
 	if !e.apply {
 		base["memories"] = memoryItems(res.Memories)

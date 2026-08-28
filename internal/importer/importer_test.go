@@ -49,6 +49,142 @@ func TestImportClaudeMapsNativeFrontmatter(t *testing.T) {
 	}
 }
 
+// Real Claude native names are free text — sentences and snake_case — but
+// canonical requires kebab-case. Import must normalize them (as the Codex path
+// already does) so the memory is valid, instead of passing the raw name through
+// to fail at apply time. Names taken from the real corpus dogfood.
+func TestImportClaudeNormalizesNamesToKebab(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"obsidian_vault.md": "---\nname: Obsidian vault location\ndescription: where the vault is\nmetadata:\n  type: reference\n---\nBody.\n",
+		"feedback.md":       "---\nname: feedback_pr_review_monitor\ndescription: monitor endpoint\nmetadata:\n  type: feedback\n---\nBody.\n",
+	}
+	for fn, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, fn), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := ImportClaude(dir, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := byName(res.Memories)
+	for _, want := range []string{"obsidian-vault-location", "feedback-pr-review-monitor"} {
+		m, ok := names[want]
+		if !ok {
+			t.Fatalf("expected normalized name %q; got %v", want, keys(names))
+		}
+		if err := m.Validate(); err != nil {
+			t.Errorf("normalized memory %q must pass canonical validation: %v", want, err)
+		}
+	}
+}
+
+// A native file with no YAML frontmatter (rust-gotchas.md in the real corpus) was
+// silently dropped. It must be recovered: the filename supplies the name, the
+// first heading the description, and the whole file the body.
+func TestImportClaudeRecoversFrontmatterlessFile(t *testing.T) {
+	dir := t.TempDir()
+	content := "# Rust Backend Gotchas\n\nAvoid the thing.\n"
+	if err := os.WriteFile(filepath.Join(dir, "rust-gotchas.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := ImportClaude(dir, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Memories) != 1 {
+		t.Fatalf("frontmatter-less file should be recovered; got %d memories, %d dropped", len(res.Memories), len(res.Dropped))
+	}
+	m := res.Memories[0]
+	if m.Name != "rust-gotchas" {
+		t.Errorf("recovered name = %q, want rust-gotchas (from filename)", m.Name)
+	}
+	if !strings.Contains(m.Body, "Avoid the thing.") {
+		t.Errorf("recovered body must keep the file content: %q", m.Body)
+	}
+	if err := m.Validate(); err != nil {
+		t.Errorf("recovered memory must be valid: %v", err)
+	}
+}
+
+// A file that opens a frontmatter fence but has no parseable closing fence —
+// truncated, or CRLF line endings frontmatterAndBody can't split — is malformed,
+// not frontmatter-less. It must be reported in Dropped, never force-imported as a
+// filename-named memory whose body is the raw document (which would also bypass
+// the metadata.origin loop guard for CRLF engram output). Codex PR #3 P2.
+func TestImportClaudeDropsMalformedFrontmatter(t *testing.T) {
+	dir := t.TempDir()
+	// Opening fence, no closing fence.
+	if err := os.WriteFile(filepath.Join(dir, "truncated.md"),
+		[]byte("---\nname: foo\ndescription: bar\nno closing fence here\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// CRLF frontmatter: the fences are there but not in the LF form we split on.
+	if err := os.WriteFile(filepath.Join(dir, "crlf.md"),
+		[]byte("---\r\nname: baz\r\n---\r\nbody\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := ImportClaude(dir, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Memories) != 0 {
+		t.Errorf("malformed frontmatter must not be imported; got %d memories: %+v", len(res.Memories), res.Memories)
+	}
+	if len(res.Dropped) != 2 {
+		t.Fatalf("both malformed files must be reported in Dropped; got %+v", res.Dropped)
+	}
+}
+
+// A file whose frontmatter fences are present but whose YAML does not parse must
+// be reported in Dropped, never silently discarded.
+func TestImportClaudeReportsUnparseableFrontmatter(t *testing.T) {
+	dir := t.TempDir()
+	bad := "---\nname: [unclosed\n---\nbody\n"
+	if err := os.WriteFile(filepath.Join(dir, "broken.md"), []byte(bad), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := ImportClaude(dir, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Memories) != 0 {
+		t.Errorf("a file with broken frontmatter must not be imported; got %d", len(res.Memories))
+	}
+	if len(res.Dropped) != 1 || res.Dropped[0].Source != "broken.md" {
+		t.Fatalf("broken file must be reported in Dropped; got %+v", res.Dropped)
+	}
+}
+
+// The no-silent-drops invariant: every candidate file (excluding the MEMORY.md
+// index) is accounted for in exactly one of Memories, Skipped, or Dropped.
+func TestImportClaudeAccountsForEveryFile(t *testing.T) {
+	dir := t.TempDir()
+	write := func(n, c string) {
+		if err := os.WriteFile(filepath.Join(dir, n), []byte(c), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("good.md", "---\nname: Good One\ndescription: d\nmetadata:\n  type: lesson\n---\nb\n")
+	write("ours.md", "---\nname: ours\ndescription: d\nmetadata:\n  type: lesson\n  origin: engram-sync\n---\nx\n")
+	write("no-frontmatter.md", "# Heading\n\ntext\n")
+	write("broken.md", "---\nname: [unclosed\n---\nb\n")
+	write("MEMORY.md", "- index\n") // ignored, not a candidate
+	res, err := ImportClaude(dir, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total := len(res.Memories) + len(res.Skipped) + len(res.Dropped); total != 4 {
+		t.Errorf("every candidate accounted for once; memories=%d skipped=%d dropped=%d (sum %d, want 4)",
+			len(res.Memories), len(res.Skipped), len(res.Dropped), total)
+	}
+	if len(res.Memories) != 2 || len(res.Skipped) != 1 || len(res.Dropped) != 1 {
+		t.Errorf("split: memories=%d (good+recovered) skipped=%d (engram) dropped=%d (broken)",
+			len(res.Memories), len(res.Skipped), len(res.Dropped))
+	}
+}
+
 func TestImportClaudeSkipsEngramOrigin(t *testing.T) {
 	dir := t.TempDir()
 	ours := "---\nname: ours\ndescription: d\nmetadata:\n  type: lesson\n  origin: engram-sync\n---\nx\n"

@@ -155,6 +155,13 @@ explicit rather than ambient.
   Group's `applies_to: cwd=`) is a real git repository, else `global`. Only the
   repo's base name enters the scope — the full path never does. A workspace
   container (a non-repo parent of many projects) correctly stays `global`.
+  **Native names are normalized to kebab-case** on the way in (a free-text or
+  snake_case native name becomes a valid canonical name, matching what the Codex
+  path already does). **Nothing is lost silently:** every candidate source lands
+  in exactly one of `data.memories`, `data.skipped` (loop guard), or
+  `data.dropped` (with a reason) — a file with no frontmatter is recovered from
+  its filename and first heading, and one whose frontmatter will not parse is
+  reported in `data.dropped` and warned about, never dropped unreported.
 - **`show <harness>`** — permissive on a disabled harness (proceeds, stderr note);
   contrast `import` (strict). Read vs write, mapped to filesystem semantics.
 - **`review`** — never mutates; every finding is a `next_step` the agent may run.

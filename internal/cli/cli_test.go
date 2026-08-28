@@ -156,6 +156,37 @@ func TestRunImportClaude(t *testing.T) {
 	}
 }
 
+// End-to-end: a native memory with a free-text name is normalized to kebab and
+// lands in canonical, while a file with broken frontmatter is reported in
+// data.dropped rather than silently lost.
+func TestRunImportNormalizesNameAndReportsDropped(t *testing.T) {
+	dir := t.TempDir()
+	canon := filepath.Join(dir, "canonical")
+	claude := filepath.Join(dir, "claude")
+	cmem := filepath.Join(claude, "projects", "-work-x", "memory")
+	writeFile(t, filepath.Join(cmem, "obsidian_vault.md"),
+		"---\nname: Obsidian vault location\ndescription: where\nmetadata:\n  type: reference\n---\nb\n")
+	writeFile(t, filepath.Join(cmem, "broken.md"), "---\nname: [unclosed\n---\nb\n")
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+canon+"\nharnesses:\n  claude-code:\n    home: "+claude+"\n")
+	c := []string{"--config", cfg, "--cwd", "/work/x", "--json"}
+
+	var out string
+	code := -1
+	out = captureStdout(t, func() {
+		code = Run(append([]string{"import", "claude-code", "--apply"}, c...))
+	})
+	if code != exitOK {
+		t.Fatalf("import exit = %d, want %d", code, exitOK)
+	}
+	if _, err := os.Stat(filepath.Join(canon, "obsidian-vault-location.md")); err != nil {
+		t.Errorf("free-text name should be normalized to obsidian-vault-location.md: %v", err)
+	}
+	if !strings.Contains(out, "\"dropped\"") || !strings.Contains(out, "broken.md") {
+		t.Errorf("broken file must be surfaced in data.dropped; output:\n%s", out)
+	}
+}
+
 func TestRunImportDisabledHarnessIsStrict(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "c.yaml")
