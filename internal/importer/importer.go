@@ -13,14 +13,24 @@ import (
 )
 
 // Result is what an importer produced: the canonical memories it mapped, the
-// names/titles it skipped as engram-origin (the loop guard), and — for Codex —
-// whether the consolidated source looks stale.
+// names/titles it skipped as engram-origin (the loop guard), the sources it could
+// not import (with reasons), and — for Codex — whether the source looks stale.
+// Every candidate source is accounted for in exactly one of Memories, Skipped, or
+// Dropped: import never loses a file silently.
 type Result struct {
 	Memories []*schema.CanonicalMemory
 	Skipped  []string
+	Dropped  []Dropped
 	// StaleWarning is set when the Codex MEMORY.md being imported is older than
 	// 30 days, i.e. the consolidator may be stalled and the source may lag reality.
 	StaleWarning bool
+}
+
+// Dropped records a native source (a Claude file name, or a Codex Task Group
+// title) that could not be imported, with why — so nothing vanishes unreported.
+type Dropped struct {
+	Source string `json:"source"`
+	Reason string `json:"reason"`
 }
 
 // projectScopeFromRepo maps a directory path to a project scope, but only when

@@ -35,6 +35,7 @@ func ImportCodex(memoryFile string) (Result, error) {
 		}
 		name := slugify(g.title)
 		if name == "" {
+			res.Dropped = append(res.Dropped, Dropped{Source: g.title, Reason: "Task Group title yields an empty name"})
 			continue
 		}
 		res.Memories = append(res.Memories, &schema.CanonicalMemory{
