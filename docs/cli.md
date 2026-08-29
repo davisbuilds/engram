@@ -185,7 +185,12 @@ explicit rather than ambient.
   adopted only when its body is byte-identical to canonical, so taking ownership
   loses nothing; a file whose body diverged (edited since import, or canonical
   changed) is reported as `diverged` and left byte-for-byte untouched, and a
-  non-one-to-one match is reported as `ambiguous` and left alone. `migrate` is the
+  non-one-to-one match is reported as `ambiguous` and left alone. Adoption is
+  **non-lossy**: it sets only engram's managed frontmatter fields (name,
+  description, metadata.type, metadata.origin) and preserves every other key the
+  harness wrote (e.g. Claude Code's `node_type` / `originSessionId`) — the same
+  preservation `sync` applies on every render, so a migrated file stays idempotent
+  and its harness-native metadata survives. `migrate` is the
   **only** command permitted to modify or delete an unmarked file, and only under
   `--apply`; dry-run classifies every candidate (`adopt` / `diverged` /
   `ambiguous` / `skip`) and writes nothing. It emits a `curate` `next_step` for
