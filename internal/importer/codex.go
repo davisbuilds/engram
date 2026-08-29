@@ -33,7 +33,7 @@ func ImportCodex(memoryFile string) (Result, error) {
 			res.Skipped = append(res.Skipped, g.title)
 			continue
 		}
-		name := slugify(g.title)
+		name := Slugify(g.title)
 		if name == "" {
 			res.Dropped = append(res.Dropped, Dropped{Source: g.title, Reason: "Task Group title yields an empty name"})
 			continue

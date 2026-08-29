@@ -59,7 +59,13 @@ type AppliesTo struct {
 // Provenance records where a memory came from. All fields are ISO-8601 strings
 // or free identifiers; none are load-bearing for scope decisions.
 type Provenance struct {
-	Origin   string `yaml:"origin,omitempty" json:"origin,omitempty"`
+	Origin string `yaml:"origin,omitempty" json:"origin,omitempty"`
+	// Source is the native source identity a memory was imported from — for Claude
+	// Code, the basename of the origin file within its project memory dir. It lets
+	// migrate match a canonical memory back to the exact hand-authored file it came
+	// from even after the name was normalized, so adoption is provenance-driven and
+	// deterministic. Empty for memories not produced by import.
+	Source   string `yaml:"source,omitempty" json:"source,omitempty"`
 	Session  string `yaml:"session,omitempty" json:"session,omitempty"`
 	Author   string `yaml:"author,omitempty" json:"author,omitempty"`
 	Created  string `yaml:"created,omitempty" json:"created,omitempty"`

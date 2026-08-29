@@ -82,6 +82,7 @@ func commands() []command {
 		{"share", "Move a memory to a different scope tier (writes canonical).", cmdShare},
 		{"sync", "Render canonical memories into the harnesses (dry-run; --apply to write).", cmdSync},
 		{"import", "Reverse-sync a harness's native memory into canonical (one-shot; --apply).", cmdImport},
+		{"migrate", "Adopt hand-authored native memory canonical supersedes, in place (dry-run; --apply). Claude Code only.", cmdMigrate},
 		{"discover", "Parse and list every canonical memory, with parse errors.", cmdDiscover},
 		{"list", "List memories relevant to a given cwd / agent / host.", cmdList},
 		{"audit", "Report pending render actions for a harness without writing.", cmdAudit},

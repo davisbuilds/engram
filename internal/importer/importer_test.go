@@ -47,6 +47,11 @@ func TestImportClaudeMapsNativeFrontmatter(t *testing.T) {
 	if m.Body != "Body stays.\n" {
 		t.Errorf("body not preserved: %q", m.Body)
 	}
+	// provenance.source records the native filename so migrate can match this
+	// memory back to the exact hand-authored file even after name normalization.
+	if m.Provenance.Source != "rg-gotcha.md" {
+		t.Errorf("provenance.source = %q, want rg-gotcha.md", m.Provenance.Source)
+	}
 }
 
 // Real Claude native names are free text — sentences and snake_case — but
@@ -385,8 +390,8 @@ func TestSlugify(t *testing.T) {
 		"Already-kebab-2":              "already-kebab-2",
 	}
 	for in, want := range cases {
-		if got := slugify(in); got != want {
-			t.Errorf("slugify(%q) = %q, want %q", in, got, want)
+		if got := Slugify(in); got != want {
+			t.Errorf("Slugify(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
