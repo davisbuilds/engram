@@ -184,8 +184,10 @@ func frontmatterAndBody(data []byte) (front []byte, body string, ok bool) {
 	return []byte(rest[:i]), rest[i+len("\n---\n"):], true
 }
 
-// slugify converts a free-text title into a valid kebab-case memory name.
-func slugify(s string) string {
+// Slugify converts a free-text title into a valid kebab-case memory name. It is
+// the single source of truth for how native names are normalized on import, so
+// migrate reuses it to match a hand-authored file back to its canonical name.
+func Slugify(s string) string {
 	var b strings.Builder
 	prevDash := false
 	for _, r := range strings.ToLower(s) {

@@ -48,6 +48,26 @@ Each near-duplicate finding's `next_steps[].command` is a runnable, `--`-guarded
 merge them if warranted. The `agent-memory-review` skill covers the judgment;
 broader scope/promotion calls are left to `curate`.
 
+`migrate` emits a lead too: when it finds a hand-authored file that `diverged`
+from canonical, it cannot adopt it deterministically (adopting would overwrite
+hand-authored edits), so it reports the file and hands a `curate` `next_step` to
+the agent to reconcile. Adopt/ambiguous/skip classifications are surfaced in
+`data` for inspection; only divergence needs a judgment call.
+
+## Migrate: adopt what canonical already supersedes
+
+When engram is pointed at a harness that already holds the hand-authored memory
+it was imported from, a plain `sync` would duplicate normalized-name lessons and
+conflict on same-named ones. `migrate` converts those originals to engram-owned
+in place — deterministically (provenance/slug-equality) and only when the body is
+identical, so nothing hand-authored is lost.
+
+```
+engram migrate claude-code --json          # dry-run: classify adopt/diverged/ambiguous/skip
+engram migrate claude-code --apply --json  # adopt the body-identical, provably-superseded originals
+engram sync claude-code --apply --json     # now duplicate-free and conflict-free
+```
+
 ## Curate: engram runs the agent, engram applies
 
 `curate` is the proposer/applier loop. Unlike every other command, it invokes a

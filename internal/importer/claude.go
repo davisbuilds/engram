@@ -63,7 +63,7 @@ func ImportClaude(memoryDir, cwd string) (Result, error) {
 			// Genuinely no frontmatter: recover the memory rather than lose it. The
 			// filename supplies the name, the first heading the description, and the
 			// whole file the body.
-			name := slugify(fileBase)
+			name := Slugify(fileBase)
 			if name == "" {
 				res.Dropped = append(res.Dropped, Dropped{Source: fname, Reason: "no frontmatter and no usable name from the filename"})
 				continue
@@ -74,7 +74,7 @@ func ImportClaude(memoryDir, cwd string) (Result, error) {
 				Type:        schema.TypeReference,
 				Scope:       scope,
 				Body:        string(data),
-				Provenance:  schema.Provenance{Origin: "import:claude-code:no-frontmatter"},
+				Provenance:  schema.Provenance{Origin: "import:claude-code:no-frontmatter", Source: fname},
 			})
 			continue
 		}
@@ -90,9 +90,9 @@ func ImportClaude(memoryDir, cwd string) (Result, error) {
 		// Normalize the native name to kebab-case: real Claude names are free text
 		// (sentences, snake_case), which canonical rejects. Fall back to the
 		// filename when the frontmatter name is absent or all punctuation.
-		name := slugify(n.Name)
+		name := Slugify(n.Name)
 		if name == "" {
-			name = slugify(fileBase)
+			name = Slugify(fileBase)
 		}
 		if name == "" {
 			res.Dropped = append(res.Dropped, Dropped{Source: fname, Reason: "empty name after normalization"})
@@ -108,7 +108,7 @@ func ImportClaude(memoryDir, cwd string) (Result, error) {
 			Type:        importedType(n.Metadata.Type),
 			Scope:       scope,
 			Body:        body,
-			Provenance:  schema.Provenance{Origin: "import:claude-code"},
+			Provenance:  schema.Provenance{Origin: "import:claude-code", Source: fname},
 		})
 	}
 	return res, nil

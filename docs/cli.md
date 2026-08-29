@@ -85,6 +85,11 @@ engram [global flags] <command> [args]
     import       Reverse-sync a harness's native memory into canonical
                  (explicit, one-shot; dry-run, --apply to write; --all to
                  sweep every Claude project slug, not just the cwd's).
+    migrate      Adopt hand-authored native memory canonical supersedes,
+                 converting it to engram-owned in place so a later sync
+                 neither duplicates nor conflicts (dry-run; --apply to write;
+                 Claude Code only). The one command allowed to rewrite an
+                 unmarked file.
     curate       Run a headless agent over the corpus; it proposes
                  add/merge/remove/rescope, engram validates and applies
                  (dry-run; --apply to write). The one command that runs an agent.
@@ -168,6 +173,25 @@ explicit rather than ambient.
   the filesystem) so scope is derived per project; an orphaned slug whose project
   is gone falls back to `global`. Codex keeps one consolidated source, so `--all`
   is accepted there but changes nothing.
+- **`migrate <harness>`** — the steady-state bridge for a harness that already
+  holds hand-authored memory (the slug engram imported *from*). Plain `sync`
+  refuses to touch an unmarked file, so a canonical name normalized away from its
+  original filename would render as a duplicate, and a same-named original blocks
+  updates as a `CONFLICT` forever. `migrate` resolves both by **adopting** the
+  hand-authored file — converting it to engram-owned in place — but only when it
+  can *prove* canonical supersedes it. Matching is deterministic: recorded import
+  `provenance.source`, or slug-equality of the native name (no content similarity —
+  that is `curate`'s job). Adoption is gated on **body-identity**: a file is
+  adopted only when its body is byte-identical to canonical, so taking ownership
+  loses nothing; a file whose body diverged (edited since import, or canonical
+  changed) is reported as `diverged` and left byte-for-byte untouched, and a
+  non-one-to-one match is reported as `ambiguous` and left alone. `migrate` is the
+  **only** command permitted to modify or delete an unmarked file, and only under
+  `--apply`; dry-run classifies every candidate (`adopt` / `diverged` /
+  `ambiguous` / `skip`) and writes nothing. It emits a `curate` `next_step` for
+  diverged files, whose reconciliation is a judgment call engram does not make
+  deterministically. Claude Code only — Codex keeps one consolidated `MEMORY.md`
+  folded by its own consolidator, a separate follow-up.
 - **`show <harness>`** — permissive on a disabled harness (proceeds, stderr note);
   contrast `import` (strict). Read vs write, mapped to filesystem semantics.
 - **`review`** — never mutates; every finding is a `next_step` the agent may run.

@@ -46,6 +46,15 @@ only; shipped items live in the git history.
 
 ## Surface not yet built
 
+- **`migrate` for Codex.** `migrate` adopts hand-authored Claude files (per-file
+  per-slug memory) that canonical supersedes, so a re-sync into the source slug
+  neither duplicates nor conflicts. Codex keeps one consolidated `MEMORY.md`
+  folded by its own consolidator, a different duplication shape: engram writes
+  marked notes and Codex folds them, so the "hand-authored original vs engram
+  render" collision does not arise the same way. Whether Codex needs a migrate
+  analogue at all — and if so, what "adopt" means against a consolidated file —
+  is unresolved. Decide once real consolidated Codex fixtures exist (ties to the
+  content-hash loop-guard item above).
 - Skills are project-scoped only (in-repo symlinks). Global install via the
   workspace `~/.agents/skills` + skill-standardizer flow is a later promotion.
 - `review` heuristics are deliberately simple (name-token Jaccard for near-dupes,
