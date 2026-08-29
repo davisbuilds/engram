@@ -199,6 +199,37 @@ func TestMigrateEV04AmbiguousOneFileTwoMemories(t *testing.T) {
 	}
 }
 
+// --- destination-collision guard (P1): never clobber an unrelated file --------
+
+func TestMigrateDestinationOccupiedIsAmbiguous(t *testing.T) {
+	dir := t.TempDir()
+	body := "shared body\n"
+	// Source normalizes to "foo-bar"; a *different* hand-authored foo-bar.md
+	// already occupies that destination name with unrelated content.
+	writeHand(t, dir, "foo_bar", "Foo bar", body) // slugify -> foo-bar
+	writeHand(t, dir, "foo-bar", "unrelated other lesson", "totally different body\n")
+	m := memBody("foo-bar", body)
+
+	plan := migrateActions(t, dir, m)
+	if len(plan[Adopt]) != 0 {
+		t.Fatalf("must not adopt when destination is occupied by a different file: %+v", plan)
+	}
+	// Apply must leave the unrelated foo-bar.md byte-for-byte intact.
+	unrelated := filepath.Join(dir, "foo-bar.md")
+	before, _ := os.ReadFile(unrelated)
+	if _, err := (ClaudeMigrateTarget{MemoryDir: dir, Desired: []*schema.CanonicalMemory{m}}).Apply(); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	after, _ := os.ReadFile(unrelated)
+	if string(before) != string(after) {
+		t.Errorf("unrelated foo-bar.md was clobbered:\nbefore=%q\nafter=%q", before, after)
+	}
+	// The source file is also left untouched (not deleted).
+	if _, err := os.Stat(filepath.Join(dir, "foo_bar.md")); err != nil {
+		t.Errorf("source foo_bar.md should remain: %v", err)
+	}
+}
+
 // --- EV-05: no local original -> not a migrate candidate ----------------------
 
 func TestMigrateEV05NoLocalOriginSkipped(t *testing.T) {

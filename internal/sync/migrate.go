@@ -117,6 +117,16 @@ func (t ClaudeMigrateTarget) Plan() ([]MigrateAction, error) {
 				actions = append(actions, MigrateAction{Kind: Ambiguous, Source: base, Path: c.path, Name: name, Reason: "canonical " + name + " is matched by multiple files: " + strings.Join(others, ", ")})
 				continue
 			}
+			// Destination-collision guard: adopting normalizes the filename to
+			// <name>.md. If a *different* hand-authored file already occupies that
+			// name, the write would silently destroy it — refuse rather than clobber
+			// an unrelated file the matcher never linked to this memory.
+			if base != name {
+				if occPath, occupied := unmarked[name]; occupied && occPath != c.path {
+					actions = append(actions, MigrateAction{Kind: Ambiguous, Source: base, Path: c.path, Name: name, Reason: "adopting would write " + name + ".md, which is occupied by a different hand-authored file"})
+					continue
+				}
+			}
 			if nativeBody(c.content) == byName[name].Body {
 				actions = append(actions, MigrateAction{Kind: Adopt, Source: base, Path: c.path, Name: name})
 			} else {

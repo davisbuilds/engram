@@ -86,25 +86,28 @@ func cmdMigrate(e *env, name string, args []string) int {
 }
 
 // migrateNotes turns diverged/ambiguous classifications into non-fatal warnings
-// and a curate lead — these are decisions engram deliberately does not make
-// deterministically, so it surfaces them for the agent rather than acting.
+// and, for each diverged file, a runnable reconciliation lead — these are
+// decisions engram deliberately does not make deterministically, so it surfaces
+// them for the agent rather than acting. The lead supplies *both* versions (the
+// native file path and the canonical name) so the agent can actually compare
+// them, rather than pointing at curate, which only ever sees canonical.
 func migrateNotes(actions []sync.MigrateAction, warns []string) ([]string, []NextStep) {
 	var diverged, ambiguous int
+	var next []NextStep
 	for _, a := range actions {
 		switch a.Kind {
 		case sync.Diverged:
 			diverged++
+			next = append(next, NextStep{
+				Reason:  "hand-authored " + a.Source + ".md diverged from canonical " + a.Name + "; reconcile the two versions",
+				Command: "claude -p --allowedTools Read Edit -- \"The hand-authored Claude memory at " + a.Path + " has diverged from canonical memory " + a.Name + ". Compare them; if the native version carries a better lesson, update canonical (engram remember --from-json -), otherwise leave canonical as-is. Do not blindly overwrite.\"",
+			})
 		case sync.Ambiguous:
 			ambiguous++
 		}
 	}
-	var next []NextStep
 	if diverged > 0 {
-		warns = append(warns, plural(diverged, "hand-authored file")+" diverged from canonical and were left untouched; see data for details")
-		next = append(next, NextStep{
-			Reason:  "diverged hand-authored files need a merge decision engram will not make automatically",
-			Command: "engram curate --harness claude-code",
-		})
+		warns = append(warns, plural(diverged, "hand-authored file")+" diverged from canonical and were left untouched; see next_steps to reconcile")
 	}
 	if ambiguous > 0 {
 		warns = append(warns, plural(ambiguous, "hand-authored file")+" had ambiguous matches and were left untouched")

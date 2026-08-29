@@ -65,7 +65,7 @@ func TestRunMigrateRoundTrip(t *testing.T) {
 
 	// 4) A subsequent sync into the same slug is clean — no CONFLICT, no duplicate.
 	out = captureStdout(t, func() {
-		if code := Run(append([]string{"sync", "claude-code"}, c...)); code != exitOK {
+		if code := Run(append([]string{"sync"}, c...)); code != exitOK {
 			t.Fatalf("post-migrate sync exit = %d", code)
 		}
 	})

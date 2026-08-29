@@ -65,7 +65,7 @@ identical, so nothing hand-authored is lost.
 ```
 engram migrate claude-code --json          # dry-run: classify adopt/diverged/ambiguous/skip
 engram migrate claude-code --apply --json  # adopt the body-identical, provably-superseded originals
-engram sync claude-code --apply --json     # now duplicate-free and conflict-free
+engram sync --apply --json                 # now duplicate-free and conflict-free
 ```
 
 ## Curate: engram runs the agent, engram applies
