@@ -166,8 +166,20 @@ func (t ClaudeMigrateTarget) Apply() (MigrateResult, error) {
 			if rerr != nil {
 				return res, rerr
 			}
+			// Preserve the native file's unmanaged frontmatter (Claude's node_type,
+			// originSessionId, …) rather than replacing it with the schema-only render;
+			// engram sets only its managed fields + the ownership marker. Body-identity
+			// already holds, so no content is lost.
+			native, readErr := os.ReadFile(a.Path)
+			if readErr != nil {
+				return res, readErr
+			}
+			content, cerr := claudeContent(native, byName[a.Name])
+			if cerr != nil {
+				return res, cerr
+			}
 			newPath := filepath.Join(t.MemoryDir, rr.FileName)
-			if werr := atomicWrite(newPath, rr.Content); werr != nil {
+			if werr := atomicWrite(newPath, content); werr != nil {
 				return res, werr
 			}
 			// If the canonical name normalized away from the original filename, the

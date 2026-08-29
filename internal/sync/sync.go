@@ -109,8 +109,16 @@ func (t ClaudeTarget) Plan() ([]Action, error) {
 		switch {
 		case !exists:
 			actions = append(actions, Action{Create, m.Name, path, ""})
-		case !bytes.Equal(cur.content, rr.Content) || !indexInSync(t.MemoryDir, m.Name, rr.IndexLine):
-			actions = append(actions, Action{Update, m.Name, path, ""})
+		default:
+			// Desired content is derived from the existing file so unmanaged
+			// frontmatter keys are preserved; a file already in that shape is a no-op.
+			want, cerr := claudeContent(cur.content, m)
+			if cerr != nil {
+				return nil, cerr
+			}
+			if !bytes.Equal(cur.content, want) || !indexInSync(t.MemoryDir, m.Name, rr.IndexLine) {
+				actions = append(actions, Action{Update, m.Name, path, ""})
+			}
 		}
 	}
 	for name, cur := range owned {
@@ -136,14 +144,20 @@ func (t ClaudeTarget) Apply() (Result, error) {
 		return Result{}, err
 	}
 
+	owned, _, err := scanMemoryDir(t.MemoryDir)
+	if err != nil {
+		return Result{}, err
+	}
 	renderer := render.ClaudeRenderer{}
 	rendered := map[string]render.ClaudeRender{}
+	byName := map[string]*schema.CanonicalMemory{}
 	for _, m := range t.Desired {
 		rr, err := renderer.Render(m)
 		if err != nil {
 			return Result{}, err
 		}
 		rendered[m.Name] = rr
+		byName[m.Name] = m
 	}
 
 	var res Result
@@ -152,11 +166,15 @@ func (t ClaudeTarget) Apply() (Result, error) {
 		case Conflict:
 			res.Conflicts = append(res.Conflicts, a)
 		case Create, Update:
-			rr := rendered[a.Name]
-			if err := atomicWrite(a.Path, rr.Content); err != nil {
+			// Merge onto the existing file (if any) so unmanaged frontmatter keys survive.
+			content, cerr := claudeContent(owned[a.Name].content, byName[a.Name])
+			if cerr != nil {
+				return res, cerr
+			}
+			if err := atomicWrite(a.Path, content); err != nil {
 				return res, err
 			}
-			if err := upsertIndexLine(t.MemoryDir, a.Name, rr.IndexLine); err != nil {
+			if err := upsertIndexLine(t.MemoryDir, a.Name, rendered[a.Name].IndexLine); err != nil {
 				return res, err
 			}
 			res.Applied = append(res.Applied, a)

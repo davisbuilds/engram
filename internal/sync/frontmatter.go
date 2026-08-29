@@ -1,0 +1,95 @@
+package sync
+
+import (
+	"fmt"
+
+	"gopkg.in/yaml.v3"
+
+	"github.com/davisbuilds/engram/internal/marker"
+	"github.com/davisbuilds/engram/internal/render"
+	"github.com/davisbuilds/engram/internal/schema"
+)
+
+// claudeContent produces the engram-owned file content for memory m, preserving
+// any frontmatter keys the existing on-disk file already carries that engram does
+// not manage (e.g. Claude Code's own node_type / originSessionId). engram sets
+// only its managed fields — name, description, metadata.type, metadata.origin —
+// and leaves every other key and its order untouched. When existing has no
+// frontmatter (a fresh create, or a frontmatter-less native file), it falls back
+// to the pure renderer's schema-only output. The renderer stays pure; this merge
+// lives in sync/migrate because only they see what is already on disk.
+//
+// Preserving keys here is what keeps sync idempotent after a migrate adoption:
+// re-deriving an owned file from itself is a no-op, so the extra keys survive
+// every subsequent sync instead of being stripped on the next render.
+func claudeContent(existing []byte, m *schema.CanonicalMemory) ([]byte, error) {
+	front := frontmatterBytes(existing)
+	if front == nil {
+		rr, err := render.ClaudeRenderer{}.Render(m)
+		if err != nil {
+			return nil, err
+		}
+		return rr.Content, nil
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(front, &doc); err != nil || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		// Existing frontmatter is unparseable as a mapping; do not risk mangling
+		// it — fall back to the schema-only render.
+		rr, rerr := render.ClaudeRenderer{}.Render(m)
+		if rerr != nil {
+			return nil, rerr
+		}
+		return rr.Content, nil
+	}
+	root := doc.Content[0]
+	upsertScalar(root, "name", m.Name)
+	upsertScalar(root, "description", m.Description)
+	meta := childMapping(root, "metadata")
+	upsertScalar(meta, "type", string(m.Type))
+	upsertScalar(meta, "origin", marker.Origin)
+
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return nil, fmt.Errorf("marshal merged frontmatter: %w", err)
+	}
+	return []byte("---\n" + string(out) + "---\n" + m.Body), nil
+}
+
+// upsertScalar sets key to a string-tagged scalar value in a mapping node,
+// replacing the value in place (preserving key position) or appending the pair
+// when absent. The explicit "!!str" tag keeps a canonical value that looks like a
+// bool/int/null (e.g. name "true", description "123") emitted — and re-parsed — as
+// a string, since these fields are strings in the frontmatter contract.
+func upsertScalar(mapping *yaml.Node, key, value string) {
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			mapping.Content[i+1] = strNode(value)
+			return
+		}
+	}
+	mapping.Content = append(mapping.Content, strNode(key), strNode(value))
+}
+
+func strNode(value string) *yaml.Node {
+	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
+}
+
+// childMapping returns the mapping node stored under key. When the key exists but
+// its value is not a mapping (a scalar/sequence/alias), the value is replaced in
+// place with a fresh mapping — appending a second key would produce duplicate
+// mapping keys, which then fail to parse and break ownership detection. When the
+// key is absent, an empty mapping is appended, preserving other keys.
+func childMapping(mapping *yaml.Node, key string) *yaml.Node {
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			if mapping.Content[i+1].Kind != yaml.MappingNode {
+				mapping.Content[i+1] = &yaml.Node{Kind: yaml.MappingNode}
+			}
+			return mapping.Content[i+1]
+		}
+	}
+	child := &yaml.Node{Kind: yaml.MappingNode}
+	mapping.Content = append(mapping.Content, strNode(key), child)
+	return child
+}
