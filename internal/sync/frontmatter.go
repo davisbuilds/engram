@@ -56,33 +56,40 @@ func claudeContent(existing []byte, m *schema.CanonicalMemory) ([]byte, error) {
 	return []byte("---\n" + string(out) + "---\n" + m.Body), nil
 }
 
-// upsertScalar sets key to a scalar value in a mapping node, replacing the value
-// in place (preserving key position) or appending the pair when absent.
+// upsertScalar sets key to a string-tagged scalar value in a mapping node,
+// replacing the value in place (preserving key position) or appending the pair
+// when absent. The explicit "!!str" tag keeps a canonical value that looks like a
+// bool/int/null (e.g. name "true", description "123") emitted — and re-parsed — as
+// a string, since these fields are strings in the frontmatter contract.
 func upsertScalar(mapping *yaml.Node, key, value string) {
 	for i := 0; i+1 < len(mapping.Content); i += 2 {
 		if mapping.Content[i].Value == key {
-			mapping.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Value: value}
+			mapping.Content[i+1] = strNode(value)
 			return
 		}
 	}
-	mapping.Content = append(mapping.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Value: key},
-		&yaml.Node{Kind: yaml.ScalarNode, Value: value},
-	)
+	mapping.Content = append(mapping.Content, strNode(key), strNode(value))
 }
 
-// childMapping returns the mapping node stored under key, creating an empty one
-// (and appending it, preserving other keys) when the key is absent or not a map.
+func strNode(value string) *yaml.Node {
+	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
+}
+
+// childMapping returns the mapping node stored under key. When the key exists but
+// its value is not a mapping (a scalar/sequence/alias), the value is replaced in
+// place with a fresh mapping — appending a second key would produce duplicate
+// mapping keys, which then fail to parse and break ownership detection. When the
+// key is absent, an empty mapping is appended, preserving other keys.
 func childMapping(mapping *yaml.Node, key string) *yaml.Node {
 	for i := 0; i+1 < len(mapping.Content); i += 2 {
-		if mapping.Content[i].Value == key && mapping.Content[i+1].Kind == yaml.MappingNode {
+		if mapping.Content[i].Value == key {
+			if mapping.Content[i+1].Kind != yaml.MappingNode {
+				mapping.Content[i+1] = &yaml.Node{Kind: yaml.MappingNode}
+			}
 			return mapping.Content[i+1]
 		}
 	}
 	child := &yaml.Node{Kind: yaml.MappingNode}
-	mapping.Content = append(mapping.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Value: key},
-		child,
-	)
+	mapping.Content = append(mapping.Content, strNode(key), child)
 	return child
 }

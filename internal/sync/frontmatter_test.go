@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/davisbuilds/engram/internal/render"
 	"github.com/davisbuilds/engram/internal/schema"
 )
@@ -166,5 +168,50 @@ func TestSyncPreservesUnknownKeysAndStaysIdempotent(t *testing.T) {
 	}
 	if !strings.Contains(string(got), "changed description") {
 		t.Errorf("UPDATE did not apply the new description:\n%s", got)
+	}
+}
+
+// P2: a canonical value that resolves as bool/int/null must stay a string after
+// merge, not flip type. (name "true" and "123" are both valid kebab names.)
+func TestClaudeContentKeepsManagedValuesAsStrings(t *testing.T) {
+	existing := []byte("---\nname: x\ndescription: d\nmetadata:\n  type: lesson\n  origin: engram-sync\n---\nb\n")
+	for _, tc := range []struct{ name, desc string }{
+		{"true", "null"},
+		{"123", "42"},
+	} {
+		m := &schema.CanonicalMemory{Name: tc.name, Description: tc.desc, Type: schema.TypeLesson, Scope: "global", Body: "b\n"}
+		got, err := claudeContent(existing, m)
+		if err != nil {
+			t.Fatalf("claudeContent: %v", err)
+		}
+		// Re-parse via the ownership path's frontmatter and assert string identity.
+		var fm struct {
+			Name        string `yaml:"name"`
+			Description string `yaml:"description"`
+		}
+		if err := yaml.Unmarshal(frontmatterBytes(got), &fm); err != nil {
+			t.Fatalf("reparse: %v\n%s", err, got)
+		}
+		if fm.Name != tc.name || fm.Description != tc.desc {
+			t.Errorf("type flipped: name=%q desc=%q, want %q/%q\n%s", fm.Name, fm.Description, tc.name, tc.desc, got)
+		}
+	}
+}
+
+// P2: a native file whose `metadata` is a non-mapping (scalar) must not produce
+// duplicate `metadata` keys — the result must still parse and be engram-owned.
+func TestClaudeContentReplacesNonMappingMetadata(t *testing.T) {
+	existing := []byte("---\nname: x\ndescription: d\nmetadata: just-a-scalar\ntop_keep: v\n---\nb\n")
+	m := &schema.CanonicalMemory{Name: "x", Description: "d", Type: schema.TypeLesson, Scope: "global", Body: "b\n"}
+	got, err := claudeContent(existing, m)
+	if err != nil {
+		t.Fatalf("claudeContent: %v", err)
+	}
+	if !isEngramOwned(got) {
+		t.Errorf("result not parseable/engram-owned (duplicate metadata key?):\n%s", got)
+	}
+	// The unrelated top-level key still survives the metadata replacement.
+	if !strings.Contains(string(got), "top_keep: v") {
+		t.Errorf("unrelated key dropped:\n%s", got)
 	}
 }
