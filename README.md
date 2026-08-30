@@ -42,6 +42,15 @@ make install    # -> $PREFIX/bin/engram (default ~/.local/bin; override PREFIX)
 ./bin/engram schema --json
 ```
 
+Cut a release tag (bumps the latest `vX.Y.Z`, creates an annotated tag locally;
+push it explicitly):
+
+```bash
+make next-version           # print the next patch version, create nothing
+make tag-patch              # v0.1.0 -> v0.1.1   (also tag-minor / tag-major)
+git push origin v0.1.1      # publish the tag when ready
+```
+
 `curate` additionally shells out to a headless agent CLI (`claude` and/or
 `codex`); every other command is self-contained.
 
