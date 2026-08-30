@@ -90,6 +90,10 @@ engram [global flags] <command> [args]
                  neither duplicates nor conflicts (dry-run; --apply to write;
                  Claude Code only). The one command allowed to rewrite an
                  unmarked file.
+    reconcile    Cross-harness one-shot: import every enabled harness into
+                 canonical, surface review leads, and propagate canonical into
+                 the *other* harness(es) (dry-run; --apply to write). The enricher
+                 flow in one command; curate stays a separate, explicit step.
     curate       Run a headless agent over the corpus; it proposes
                  add/merge/remove/rescope, engram validates and applies
                  (dry-run; --apply to write). The one command that runs an agent.
@@ -197,6 +201,18 @@ explicit rather than ambient.
   diverged files, whose reconciliation is a judgment call engram does not make
   deterministically. Claude Code only — Codex keeps one consolidated `MEMORY.md`
   folded by its own consolidator, a separate follow-up.
+- **`reconcile`** — the on-demand cross-harness convenience: it runs the enricher
+  flow — `import` every enabled harness into canonical, `review` for leads, then
+  propagate canonical back into the harnesses — in one invocation. Dry-run by
+  default; `--apply` writes (all imports save under one canonical lock, then each
+  harness is synced). Two policies make it safe and useful: it **never runs
+  curate** (near-duplicate/overlap findings are emitted as `next_steps`, judgment
+  left explicit), and propagation is **cross-harness only** — a memory imported
+  *from* a harness is not rendered back into that same harness, so reconcile
+  enriches each harness with the *others'* lessons without conflicting on or
+  overwriting native memory. (Plain `sync` still renders everything, for a fresh
+  machine where a harness has no native originals.) Exit follows the same codes as
+  `sync`: `3` if any propagation `CONFLICT` remains.
 - **`show <harness>`** — permissive on a disabled harness (proceeds, stderr note);
   contrast `import` (strict). Read vs write, mapped to filesystem semantics.
 - **`review`** — never mutates; every finding is a `next_step` the agent may run.

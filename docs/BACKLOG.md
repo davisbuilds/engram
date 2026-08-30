@@ -60,11 +60,6 @@ only; shipped items live in the git history.
   with no context. engram could write a one-line managed-by-engram header comment
   at the top of an index it touches, pointing at how the markers work — so any
   agent reading the index gets the pointer inline without an external doc.
-- **On-demand `reconcile` convenience.** The steady-state cross-harness flow is
-  `import` (each harness) → `review`/`curate` → `sync` (each harness). A single
-  `engram reconcile` wrapper could chain the deterministic steps (import both,
-  sync both) and print the review/curate leads in between, so the operator runs
-  one command instead of five. Keep curate's judgment step explicit, not implicit.
 - Skills are project-scoped only (in-repo symlinks). Global install via the
   workspace `~/.agents/skills` + skill-standardizer flow is a later promotion.
 - `review` heuristics are deliberately simple (name-token Jaccard for near-dupes,
