@@ -154,7 +154,12 @@ explicit rather than ambient.
   `CONFLICT`) for the relevant memories against the current cwd/agent/host and,
   with `--apply`, executes them under an exclusive lock (idempotent; a second
   concurrent `--apply` blocks or exits non-zero). Without `--apply`: reports and
-  writes nothing.
+  writes nothing. When it writes entries into a Claude `MEMORY.md`, it keeps a
+  one-line self-documenting header at the top explaining what the per-line `<!--
+  engram name=… -->` markers mean and where those memories are authored, so an
+  agent reading the index in a later session has that context inline. The header
+  is added lazily (only when an entry is written) and removed once no engram
+  entries remain, and it never triggers a re-sync on its own.
 - **`audit`** — `sync`'s read-only projection: the `Action` list as data, always
   zero side effects.
 - **`import <harness>`** — reverse-sync, explicit and one-shot. Dry-run lists the

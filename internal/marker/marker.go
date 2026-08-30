@@ -9,6 +9,7 @@ package marker
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 var (
@@ -41,6 +42,29 @@ func ClaudeIndexName(line string) (string, bool) {
 		return "", false
 	}
 	return m[1], true
+}
+
+// claudeIndexHeaderPrefix is the reserved sentinel identifying the one-line
+// self-documenting header engram prepends to any Claude MEMORY.md it manages. It
+// is a distinctive engram-owned token — not a phrase a human would type in a
+// casual comment — so recognition never captures unrelated, unowned index
+// content (a hand-authored `<!-- engram: note -->` is not a header). Detection is
+// prefix-based on this sentinel so the human-readable tail can be reworded
+// without stranding headers written by older versions.
+const claudeIndexHeaderPrefix = "<!-- engram-index-header:"
+
+// ClaudeIndexHeader is the self-documenting banner engram writes as the first
+// line of a Claude MEMORY.md it manages, so an agent reading the index sees
+// inline what the per-line markers mean and where those memories are authored —
+// no external doc required. It is a plain HTML comment (invisible when rendered)
+// and never matches ClaudeIndexName, so it is not mistaken for an index entry.
+const ClaudeIndexHeader = claudeIndexHeaderPrefix + ` entries below marked "engram name=<slug>" are managed by engram (github.com/davisbuilds/engram); edit the canonical memory, not these lines. -->`
+
+// IsClaudeIndexHeader reports whether a line is an engram-generated index header
+// (any wording of it), so it can be repositioned or removed rather than
+// duplicated. It matches only the reserved sentinel, never an unowned comment.
+func IsClaudeIndexHeader(line string) bool {
+	return strings.HasPrefix(strings.TrimSpace(line), claudeIndexHeaderPrefix)
 }
 
 // CodexNoteMarker returns the marker prefixing a Codex extension note. It carries

@@ -22,12 +22,16 @@ only; shipped items live in the git history.
 
 ## Import quality
 
-- **Codex slug truncation cuts mid-word.** Task Group titles slugify to kebab and
-  are capped at 60 chars, which can truncate mid-token
-  (`...connector-availab`). Valid kebab, but ugly. Prefer trimming at a token
-  boundary, or derive the name from a shorter signal than the full title.
-  Surfaced by a read-only import dry-run against the real Codex MEMORY.md
-  (36 Task Groups parsed cleanly).
+- **Slug truncation is ugly-but-lossless; the real fix is a shorter signal.**
+  Task Group titles slugify to kebab and hard-cap at 60 chars. A cut that lands
+  mid-token (`...connector-availab`) reads badly but is deliberate: the slug is
+  an identity, and the trailing partial token is what keeps two long titles that
+  share their leading tokens distinct. Trimming back to the last token boundary
+  reads cleaner but can collapse both to the same slug — on import the second
+  then loses to a `store.Save` name conflict and never reaches canonical (tried
+  and reverted; see `Slugify`). The right fix is to derive the name from a
+  shorter signal than the full title, not to trim the title. Surfaced by a
+  read-only import dry-run against the real Codex MEMORY.md (36 Task Groups).
 
 ## Modelling
 
@@ -55,11 +59,6 @@ only; shipped items live in the git history.
   analogue at all — and if so, what "adopt" means against a consolidated file —
   is unresolved. Decide once real consolidated Codex fixtures exist (ties to the
   content-hash loop-guard item above).
-- **Self-documenting `MEMORY.md` header.** When engram manages entries in a
-  Claude `MEMORY.md`, an agent in another session sees `<!-- engram … -->` markers
-  with no context. engram could write a one-line managed-by-engram header comment
-  at the top of an index it touches, pointing at how the markers work — so any
-  agent reading the index gets the pointer inline without an external doc.
 - Skills are project-scoped only (in-repo symlinks). Global install via the
   workspace `~/.agents/skills` + skill-standardizer flow is a later promotion.
 - `review` heuristics are deliberately simple (name-token Jaccard for near-dupes,

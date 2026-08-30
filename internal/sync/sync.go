@@ -300,10 +300,10 @@ func upsertIndexLine(dir, name, line string) error {
 	for i, ln := range lines {
 		if n, ok := marker.ClaudeIndexName(ln); ok && n == name {
 			lines[i] = line
-			return writeIndexLines(dir, lines)
+			return writeIndexLines(dir, ensureIndexHeader(lines))
 		}
 	}
-	return writeIndexLines(dir, append(lines, line))
+	return writeIndexLines(dir, ensureIndexHeader(append(lines, line)))
 }
 
 // removeIndexLine drops the engram line anchored to name, leaving foreign lines.
@@ -316,7 +316,31 @@ func removeIndexLine(dir, name string) error {
 		}
 		out = append(out, ln)
 	}
-	return writeIndexLines(dir, out)
+	return writeIndexLines(dir, ensureIndexHeader(out))
+}
+
+// ensureIndexHeader keeps the self-documenting engram header as the first line
+// whenever the index carries at least one engram-managed entry, and drops it
+// when none remain. It first strips any existing header so a reworded or
+// misplaced one is not duplicated, then re-asserts a single header at the top;
+// foreign lines keep their relative order. Idempotent: an index already in the
+// desired shape round-trips unchanged, so a re-sync produces no header churn.
+func ensureIndexHeader(lines []string) []string {
+	out := make([]string, 0, len(lines)+1)
+	hasEntry := false
+	for _, ln := range lines {
+		if marker.IsClaudeIndexHeader(ln) {
+			continue
+		}
+		if _, ok := marker.ClaudeIndexName(ln); ok {
+			hasEntry = true
+		}
+		out = append(out, ln)
+	}
+	if !hasEntry {
+		return out
+	}
+	return append([]string{marker.ClaudeIndexHeader}, out...)
 }
 
 // atomicWrite writes data to a temp file in the same directory and renames it

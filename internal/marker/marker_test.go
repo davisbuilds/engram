@@ -46,6 +46,38 @@ func TestCodexNoteNameRejectsForeign(t *testing.T) {
 	}
 }
 
+func TestClaudeIndexHeaderIsDetectableAndNotAnEntry(t *testing.T) {
+	if !IsClaudeIndexHeader(ClaudeIndexHeader) {
+		t.Error("ClaudeIndexHeader not recognized by IsClaudeIndexHeader")
+	}
+	if !IsClaudeIndexHeader("  " + ClaudeIndexHeader) {
+		t.Error("leading whitespace should not defeat header detection")
+	}
+	// The header must never be mistaken for a managed index entry, or a re-sync
+	// would try to update it as one.
+	if _, ok := ClaudeIndexName(ClaudeIndexHeader); ok {
+		t.Error("header matched the index-entry pattern")
+	}
+	// A real entry line and a foreign line are not headers.
+	if IsClaudeIndexHeader(ClaudeIndexMarker("x")) {
+		t.Error("an index entry marker was misread as a header")
+	}
+	if IsClaudeIndexHeader("- [hand](hand.md) — a human wrote this") {
+		t.Error("a foreign line was misread as a header")
+	}
+	// A hand-authored comment that merely mentions engram must NOT be treated as
+	// the generated header, or ensureIndexHeader would silently drop it.
+	for _, foreign := range []string{
+		"<!-- engram: local note -->",
+		"  <!-- engram: an indented example -->",
+		"<!-- engram is great -->",
+	} {
+		if IsClaudeIndexHeader(foreign) {
+			t.Errorf("unowned comment misread as generated header: %q", foreign)
+		}
+	}
+}
+
 func TestMarkersAreDistinct(t *testing.T) {
 	// A Claude index marker must not be misread as a Codex note marker or vice
 	// versa; the two harnesses' ownership checks must not cross-match.

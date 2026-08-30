@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/davisbuilds/engram/internal/lock"
+	"github.com/davisbuilds/engram/internal/marker"
 	"github.com/davisbuilds/engram/internal/render"
 	"github.com/davisbuilds/engram/internal/schema"
 )
@@ -177,6 +178,104 @@ func TestApplyPreservesForeignIndexLines(t *testing.T) {
 	}
 	if !containsLineFor(string(idx), "alpha-lesson") {
 		t.Errorf("engram index line missing:\n%s", idx)
+	}
+}
+
+func TestApplyWritesSelfDocumentingHeader(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := target(dir, mem("alpha-lesson")).Apply(); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	idx, err := os.ReadFile(filepath.Join(dir, "MEMORY.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(idx), "\n"), "\n")
+	if len(lines) == 0 || lines[0] != marker.ClaudeIndexHeader {
+		t.Errorf("first line is not the engram header:\n%s", idx)
+	}
+	if n := strings.Count(string(idx), marker.ClaudeIndexHeader); n != 1 {
+		t.Errorf("header appears %d times, want exactly 1:\n%s", n, idx)
+	}
+	// The header is a plain comment, never mistaken for an index entry.
+	if _, ok := marker.ClaudeIndexName(marker.ClaudeIndexHeader); ok {
+		t.Error("header line matches ClaudeIndexName; it must not be parsed as an entry")
+	}
+}
+
+func TestHeaderNotDuplicatedAcrossSyncs(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := target(dir, mem("alpha-lesson"), mem("beta-lesson")).Apply(); err != nil {
+		t.Fatalf("first apply: %v", err)
+	}
+	// Adding a memory re-runs upsert; the header must not stack.
+	if _, err := target(dir, mem("alpha-lesson"), mem("beta-lesson"), mem("gamma-lesson")).Apply(); err != nil {
+		t.Fatalf("second apply: %v", err)
+	}
+	idx, err := os.ReadFile(filepath.Join(dir, "MEMORY.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(idx), marker.ClaudeIndexHeader); n != 1 {
+		t.Errorf("header appears %d times across syncs, want exactly 1:\n%s", n, idx)
+	}
+}
+
+func TestApplyPreservesForeignEngramMentioningComment(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A hand-authored comment that merely mentions engram must survive apply — it
+	// is not the reserved generated header and ensureIndexHeader must not drop it.
+	foreign := "<!-- engram: local note, human-written -->"
+	seed := "# Memory Index\n\n" + foreign + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := target(dir, mem("alpha-lesson")).Apply(); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	idx, err := os.ReadFile(filepath.Join(dir, "MEMORY.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsSub(string(idx), foreign) {
+		t.Errorf("foreign engram-mentioning comment was dropped:\n%s", idx)
+	}
+}
+
+func TestHeaderRemovedWhenNoEntriesRemain(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	foreign := "- [hand](hand.md) — a human wrote this"
+	if err := os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(foreign+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// An engram entry brings the header in alongside the foreign line.
+	if _, err := target(dir, mem("alpha-lesson")).Apply(); err != nil {
+		t.Fatalf("apply with entry: %v", err)
+	}
+	idx, _ := os.ReadFile(filepath.Join(dir, "MEMORY.md"))
+	if !strings.Contains(string(idx), marker.ClaudeIndexHeader) {
+		t.Fatalf("header should be present while an entry exists:\n%s", idx)
+	}
+	// Empty desired set stales the owned entry; the header goes with it, the
+	// foreign line stays.
+	if _, err := target(dir).Apply(); err != nil {
+		t.Fatalf("apply empty: %v", err)
+	}
+	idx, err := os.ReadFile(filepath.Join(dir, "MEMORY.md"))
+	if err != nil {
+		t.Fatalf("index should remain for the foreign line: %v", err)
+	}
+	if strings.Contains(string(idx), marker.ClaudeIndexHeader) {
+		t.Errorf("header should be gone once no engram entries remain:\n%s", idx)
+	}
+	if !containsSub(string(idx), foreign) {
+		t.Errorf("foreign line must be preserved:\n%s", idx)
 	}
 }
 
