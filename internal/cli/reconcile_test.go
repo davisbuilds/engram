@@ -73,6 +73,26 @@ func TestRunReconcileApplyCrossPropagates(t *testing.T) {
 	}
 }
 
+// Preview parity (regression for the dry-run-vs-apply gap): on a first run with
+// empty canonical, the dry-run must already show the cross-harness propagation
+// CREATEs that --apply will perform — computed from the merged (canonical +
+// imports) set, not the pre-import canonical.
+func TestRunReconcileDryRunPreviewsPostImportPropagation(t *testing.T) {
+	_, _, _, args := setupTwoHarnesses(t)
+	out := captureStdout(t, func() {
+		if code := Run(append([]string{"reconcile"}, args...)); code != exitOK {
+			t.Fatalf("dry-run exit = %d", code)
+		}
+	})
+	// Codex's lesson would be CREATE-d into Claude, and Claude's into Codex —
+	// both must appear in the dry-run sync preview.
+	for _, want := range []string{"\"CREATE\"", "codex-lesson", "claude-lesson"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("dry-run preview missing %q (post-import propagation not simulated):\n%s", want, out)
+		}
+	}
+}
+
 // Dry-run reconcile writes nothing to canonical.
 func TestRunReconcileDryRunWritesNothing(t *testing.T) {
 	canon, _, _, args := setupTwoHarnesses(t)

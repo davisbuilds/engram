@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"path/filepath"
 	"strings"
 	"time"
@@ -34,52 +35,28 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		return exitError
 	}
 
-	// 1. Import each enabled harness into canonical (read-only gather first).
+	// 1. Import each enabled harness (read-only gather) and read current canonical.
 	imports, warns, ierr := s.gatherImports()
 	if ierr != nil {
 		e.emit(name, false, nil, warns, ierr, nil)
 		return exitError
 	}
+	mems, perrs, derr := discover.Discover(s.cfg.CanonicalRoot)
+	if derr != nil {
+		e.emit(name, false, nil, warns, &RespError{Code: "discover", Message: derr.Error()}, nil)
+		return exitError
+	}
+	warns = append(warns, warnParseErrors(perrs)...)
+
+	// Simulate the imports against current canonical (same rule as store.Save:
+	// new name -> created, identical -> unchanged, differing name-collision ->
+	// conflict, keeping the existing memory). The merged set is what review and
+	// propagation run against in *both* dry-run and apply, so the preview reflects
+	// what apply will do rather than the pre-import canonical.
 	exit := exitOK
-	importEntries := make([]map[string]any, 0, len(imports))
-	if e.apply {
-		release, lerr := canonLock(s.cfg.CanonicalRoot)
-		if lerr != nil {
-			e.emit(name, false, nil, warns, lerr, nil)
-			return exitError
-		}
-		for _, imp := range imports {
-			entry := map[string]any{"harness": imp.harness, "would_import": len(imp.result.Memories), "skipped": orEmpty(imp.result.Skipped), "dropped": orEmpty(imp.result.Dropped)}
-			outcomes := make([]map[string]string, 0, len(imp.result.Memories))
-			for _, m := range imp.result.Memories {
-				if verr := m.Validate(); verr != nil {
-					outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": "invalid", "error": verr.Error()})
-					exit = worseExit(exit, exitConflicts)
-					continue
-				}
-				outcome, _, serr := store.Save(s.cfg.CanonicalRoot, m, false)
-				if serr != nil {
-					release()
-					e.emit(name, false, nil, warns, &RespError{Code: "save", Message: serr.Error()}, nil)
-					return exitError
-				}
-				if outcome == store.Conflict {
-					exit = worseExit(exit, exitConflicts)
-				}
-				outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": string(outcome)})
-			}
-			entry["results"] = outcomes
-			importEntries = append(importEntries, entry)
-		}
-		release()
-	} else {
-		for _, imp := range imports {
-			importEntries = append(importEntries, map[string]any{
-				"harness": imp.harness, "would_import": len(imp.result.Memories),
-				"memories": memoryItems(imp.result.Memories),
-				"skipped":  orEmpty(imp.result.Skipped), "dropped": orEmpty(imp.result.Dropped),
-			})
-		}
+	merged, importEntries, hadConflict := mergeImports(mems, imports)
+	if hadConflict {
+		exit = worseExit(exit, exitConflicts)
 	}
 	for _, imp := range imports {
 		if len(imp.result.Dropped) > 0 {
@@ -87,14 +64,29 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		}
 	}
 
-	// 2. Review the (now-updated under --apply) canonical set for leads.
-	mems, perrs, derr := discover.Discover(s.cfg.CanonicalRoot)
-	if derr != nil {
-		e.emit(name, false, nil, warns, &RespError{Code: "discover", Message: derr.Error()}, nil)
-		return exitError
+	// 2. Under --apply, persist the imports to canonical (same outcomes as simulated).
+	if e.apply {
+		release, lerr := canonLock(s.cfg.CanonicalRoot)
+		if lerr != nil {
+			e.emit(name, false, nil, warns, lerr, nil)
+			return exitError
+		}
+		for _, imp := range imports {
+			for _, m := range imp.result.Memories {
+				if m.Validate() != nil {
+					continue // already counted as invalid in the simulation
+				}
+				if _, _, serr := store.Save(s.cfg.CanonicalRoot, m, false); serr != nil {
+					release()
+					e.emit(name, false, nil, warns, &RespError{Code: "save", Message: serr.Error()}, nil)
+					return exitError
+				}
+			}
+		}
+		release()
 	}
-	warns = append(warns, warnParseErrors(perrs)...)
-	findings := review.Analyze(mems)
+	// 3. Review + propagate against the merged set (identical for dry-run and apply).
+	findings := review.Analyze(merged)
 	reviewItems := make([]map[string]any, 0, len(findings))
 	var next []NextStep
 	for _, f := range findings {
@@ -112,8 +104,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		})
 	}
 
-	// 3. Propagate canonical into the *other* harness(es): cross-harness only.
-	targets, twarns := s.enricherTargets(mems)
+	targets, twarns := s.enricherTargets(merged)
 	warns = append(warns, twarns...)
 	syncEntries := make([]map[string]any, 0, len(targets))
 	for _, tg := range targets {
@@ -144,10 +135,6 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		syncEntries = append(syncEntries, entry)
 	}
 
-	if !e.apply {
-		warns = append(warns, "dry-run: the sync preview reflects canonical before import; run --apply to reconcile imported memories into the harnesses")
-	}
-
 	e.emit(name, exit == exitOK, map[string]any{
 		"apply": e.apply, "cwd": s.cwd, "host": s.host,
 		"import": importEntries,
@@ -155,6 +142,70 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		"sync":   syncEntries,
 	}, warns, nil, next)
 	return exit
+}
+
+// mergeImports simulates saving each harness's import candidates into the current
+// canonical set using store.Save's rule (new name -> created, identical ->
+// unchanged, differing name-collision -> conflict, keeping the existing memory),
+// without writing. The merged set it returns is what review and propagation run
+// against in both dry-run and apply, so the preview reflects what apply will do.
+// It also returns a per-harness import summary and whether anything conflicted
+// or was invalid (which maps to a non-zero exit).
+func mergeImports(existing []*schema.CanonicalMemory, imports []importGather) (merged []*schema.CanonicalMemory, entries []map[string]any, hadConflict bool) {
+	byName := make(map[string]*schema.CanonicalMemory, len(existing))
+	order := make([]string, 0, len(existing))
+	add := func(m *schema.CanonicalMemory) {
+		if _, ok := byName[m.Name]; !ok {
+			order = append(order, m.Name)
+		}
+		byName[m.Name] = m
+	}
+	for _, m := range existing {
+		add(m)
+	}
+	for _, imp := range imports {
+		outcomes := make([]map[string]string, 0, len(imp.result.Memories))
+		for _, m := range imp.result.Memories {
+			if verr := m.Validate(); verr != nil {
+				outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": "invalid", "error": verr.Error()})
+				hadConflict = true
+				continue
+			}
+			outcome := simulateSave(byName[m.Name], m)
+			switch outcome {
+			case store.Created:
+				add(m)
+			case store.Conflict:
+				hadConflict = true
+			}
+			outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": string(outcome)})
+		}
+		entries = append(entries, map[string]any{
+			"harness": imp.harness, "would_import": len(imp.result.Memories),
+			"results": outcomes,
+			"skipped": orEmpty(imp.result.Skipped), "dropped": orEmpty(imp.result.Dropped),
+		})
+	}
+	merged = make([]*schema.CanonicalMemory, 0, len(order))
+	for _, n := range order {
+		merged = append(merged, byName[n])
+	}
+	return merged, entries, hadConflict
+}
+
+// simulateSave mirrors store.Save(force=false) without touching disk: an absent
+// name is created, byte-identical rendered content is unchanged, and a differing
+// name-collision is a conflict (the existing memory is kept).
+func simulateSave(existing, candidate *schema.CanonicalMemory) store.Outcome {
+	if existing == nil {
+		return store.Created
+	}
+	er, err1 := existing.Render()
+	cr, err2 := candidate.Render()
+	if err1 == nil && err2 == nil && bytes.Equal(er, cr) {
+		return store.Unchanged
+	}
+	return store.Conflict
 }
 
 // importGather is one harness's read-only import result, before any canonical write.
