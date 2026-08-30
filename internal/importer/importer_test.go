@@ -388,9 +388,6 @@ func TestSlugify(t *testing.T) {
 		"Dotfiles / Tokyo Night theme": "dotfiles-tokyo-night-theme",
 		"  Trailing/leading  ":         "trailing-leading",
 		"Already-kebab-2":              "already-kebab-2",
-		// Over the 60-char cap: trim back to the last token boundary rather than
-		// slicing mid-word (would otherwise keep a partial "iiii").
-		"aaaaaa bbbbbb cccccc dddddd eeeeee ffffff gggggg hhhhhh iiiiii": "aaaaaa-bbbbbb-cccccc-dddddd-eeeeee-ffffff-gggggg-hhhhhh",
 	}
 	for in, want := range cases {
 		if got := Slugify(in); got != want {
@@ -398,9 +395,20 @@ func TestSlugify(t *testing.T) {
 		}
 	}
 
-	// A single oversized token has no boundary to trim to, so it hard-caps at 60.
-	if got := Slugify(strings.Repeat("a", 65)); got != strings.Repeat("a", 60) {
-		t.Errorf("oversized single token = %q (len %d), want 60 'a's", got, len(got))
+	// The 60-char cap must never exceed the cap and must not leave a trailing dash.
+	long := Slugify(strings.Repeat("a", 65))
+	if len(long) != 60 || strings.HasSuffix(long, "-") {
+		t.Errorf("over-cap slug = %q (len %d), want <=60 with no trailing dash", long, len(long))
+	}
+
+	// Distinguishability: two long titles that share every token before the cap
+	// but differ afterwards must slugify to DISTINCT names. A mid-token cut keeps
+	// the distinguishing fragment; trimming back to a token boundary would collapse
+	// both to one slug and lose the second memory to an import name-collision.
+	base := "aaaaaa bbbbbb cccccc dddddd eeeeee ffffff gggggg hhhhhh "
+	a, b := Slugify(base+"iiiiii"), Slugify(base+"jjjjjj")
+	if a == b {
+		t.Errorf("distinct long titles collapsed to the same slug %q (import would drop one)", a)
 	}
 }
 

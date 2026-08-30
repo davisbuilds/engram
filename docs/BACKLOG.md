@@ -20,6 +20,19 @@ only; shipped items live in the git history.
   because the error-event shape has not been observed and captured. Capture a real
   failing run and map its event to a specific error message.
 
+## Import quality
+
+- **Slug truncation is ugly-but-lossless; the real fix is a shorter signal.**
+  Task Group titles slugify to kebab and hard-cap at 60 chars. A cut that lands
+  mid-token (`...connector-availab`) reads badly but is deliberate: the slug is
+  an identity, and the trailing partial token is what keeps two long titles that
+  share their leading tokens distinct. Trimming back to the last token boundary
+  reads cleaner but can collapse both to the same slug — on import the second
+  then loses to a `store.Save` name conflict and never reaches canonical (tried
+  and reverted; see `Slugify`). The right fix is to derive the name from a
+  shorter signal than the full title, not to trim the title. Surfaced by a
+  read-only import dry-run against the real Codex MEMORY.md (36 Task Groups).
+
 ## Modelling
 
 - **Scope derivation depends on the live filesystem.** Import derives a memory's

@@ -221,6 +221,30 @@ func TestHeaderNotDuplicatedAcrossSyncs(t *testing.T) {
 	}
 }
 
+func TestApplyPreservesForeignEngramMentioningComment(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A hand-authored comment that merely mentions engram must survive apply — it
+	// is not the reserved generated header and ensureIndexHeader must not drop it.
+	foreign := "<!-- engram: local note, human-written -->"
+	seed := "# Memory Index\n\n" + foreign + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := target(dir, mem("alpha-lesson")).Apply(); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	idx, err := os.ReadFile(filepath.Join(dir, "MEMORY.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsSub(string(idx), foreign) {
+		t.Errorf("foreign engram-mentioning comment was dropped:\n%s", idx)
+	}
+}
+
 func TestHeaderRemovedWhenNoEntriesRemain(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
