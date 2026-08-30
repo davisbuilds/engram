@@ -83,6 +83,7 @@ func commands() []command {
 		{"sync", "Render canonical memories into the harnesses (dry-run; --apply to write).", cmdSync},
 		{"import", "Reverse-sync a harness's native memory into canonical (one-shot; --apply).", cmdImport},
 		{"migrate", "Adopt hand-authored native memory canonical supersedes, in place (dry-run; --apply). Claude Code only.", cmdMigrate},
+		{"reconcile", "Cross-harness one-shot: import every harness → review leads → sync back (dry-run; --apply). Enricher flow in one command.", cmdReconcile},
 		{"discover", "Parse and list every canonical memory, with parse errors.", cmdDiscover},
 		{"list", "List memories relevant to a given cwd / agent / host.", cmdList},
 		{"audit", "Report pending render actions for a harness without writing.", cmdAudit},
