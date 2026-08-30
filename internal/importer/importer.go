@@ -204,7 +204,14 @@ func Slugify(s string) string {
 	}
 	out := strings.Trim(b.String(), "-")
 	if len(out) > 60 {
-		out = strings.Trim(out[:60], "-")
+		// Cap at 60 chars, but trim back to the last token boundary within the
+		// cap rather than slicing mid-word (`...connector-availab`). A single
+		// oversized token with no boundary in range falls back to the hard cut.
+		cut := out[:60]
+		if i := strings.LastIndexByte(cut, '-'); i > 0 {
+			cut = cut[:i]
+		}
+		out = strings.Trim(cut, "-")
 	}
 	return out
 }

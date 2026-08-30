@@ -9,6 +9,7 @@ package marker
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 var (
@@ -41,6 +42,24 @@ func ClaudeIndexName(line string) (string, bool) {
 		return "", false
 	}
 	return m[1], true
+}
+
+// claudeIndexHeaderPrefix identifies the one-line self-documenting header engram
+// prepends to any Claude MEMORY.md it manages. Detection is prefix-based so the
+// header wording can change without stranding headers written by older versions.
+const claudeIndexHeaderPrefix = "<!-- engram: "
+
+// ClaudeIndexHeader is the self-documenting banner engram writes as the first
+// line of a Claude MEMORY.md it manages, so an agent reading the index sees
+// inline what the per-line markers mean and where those memories are authored —
+// no external doc required. It is a plain HTML comment (invisible when rendered)
+// and never matches ClaudeIndexName, so it is not mistaken for an index entry.
+const ClaudeIndexHeader = claudeIndexHeaderPrefix + `entries marked "engram name=<slug>" below are managed by engram (github.com/davisbuilds/engram); edit the canonical memory, not these lines. -->`
+
+// IsClaudeIndexHeader reports whether a line is an engram index header (any
+// version of it), so it can be repositioned or removed rather than duplicated.
+func IsClaudeIndexHeader(line string) bool {
+	return strings.HasPrefix(strings.TrimSpace(line), claudeIndexHeaderPrefix)
 }
 
 // CodexNoteMarker returns the marker prefixing a Codex extension note. It carries

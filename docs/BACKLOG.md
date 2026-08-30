@@ -20,15 +20,6 @@ only; shipped items live in the git history.
   because the error-event shape has not been observed and captured. Capture a real
   failing run and map its event to a specific error message.
 
-## Import quality
-
-- **Codex slug truncation cuts mid-word.** Task Group titles slugify to kebab and
-  are capped at 60 chars, which can truncate mid-token
-  (`...connector-availab`). Valid kebab, but ugly. Prefer trimming at a token
-  boundary, or derive the name from a shorter signal than the full title.
-  Surfaced by a read-only import dry-run against the real Codex MEMORY.md
-  (36 Task Groups parsed cleanly).
-
 ## Modelling
 
 - **Scope derivation depends on the live filesystem.** Import derives a memory's
@@ -55,11 +46,6 @@ only; shipped items live in the git history.
   analogue at all — and if so, what "adopt" means against a consolidated file —
   is unresolved. Decide once real consolidated Codex fixtures exist (ties to the
   content-hash loop-guard item above).
-- **Self-documenting `MEMORY.md` header.** When engram manages entries in a
-  Claude `MEMORY.md`, an agent in another session sees `<!-- engram … -->` markers
-  with no context. engram could write a one-line managed-by-engram header comment
-  at the top of an index it touches, pointing at how the markers work — so any
-  agent reading the index gets the pointer inline without an external doc.
 - Skills are project-scoped only (in-repo symlinks). Global install via the
   workspace `~/.agents/skills` + skill-standardizer flow is a later promotion.
 - `review` heuristics are deliberately simple (name-token Jaccard for near-dupes,

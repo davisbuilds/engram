@@ -388,11 +388,19 @@ func TestSlugify(t *testing.T) {
 		"Dotfiles / Tokyo Night theme": "dotfiles-tokyo-night-theme",
 		"  Trailing/leading  ":         "trailing-leading",
 		"Already-kebab-2":              "already-kebab-2",
+		// Over the 60-char cap: trim back to the last token boundary rather than
+		// slicing mid-word (would otherwise keep a partial "iiii").
+		"aaaaaa bbbbbb cccccc dddddd eeeeee ffffff gggggg hhhhhh iiiiii": "aaaaaa-bbbbbb-cccccc-dddddd-eeeeee-ffffff-gggggg-hhhhhh",
 	}
 	for in, want := range cases {
 		if got := Slugify(in); got != want {
 			t.Errorf("Slugify(%q) = %q, want %q", in, got, want)
 		}
+	}
+
+	// A single oversized token has no boundary to trim to, so it hard-caps at 60.
+	if got := Slugify(strings.Repeat("a", 65)); got != strings.Repeat("a", 60) {
+		t.Errorf("oversized single token = %q (len %d), want 60 'a's", got, len(got))
 	}
 }
 
