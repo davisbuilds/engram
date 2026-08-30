@@ -42,3 +42,8 @@ jobs:
             echo "::error::gofumpt formatting differences found — run 'gofumpt -w .'"
             exit 1
           fi
+
+      - name: Shell scripts (shellcheck + tests)
+        run: |
+          shellcheck scripts/*.sh
+          scripts/semver-tag_test.sh
