@@ -8,7 +8,7 @@ PREFIX ?= $(HOME)/.local
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -X github.com/davisbuilds/engram/internal/version.Version=$(VERSION)
 
-.PHONY: build install test lint fmt vet clean tag-patch tag-minor tag-major next-version
+.PHONY: build install test test-scripts lint fmt vet clean tag-patch tag-minor tag-major next-version
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) ./cmd/engram
@@ -21,6 +21,10 @@ install:
 
 test:
 	go test ./...
+
+test-scripts:
+	shellcheck scripts/*.sh
+	scripts/semver-tag_test.sh
 
 vet:
 	go vet ./...

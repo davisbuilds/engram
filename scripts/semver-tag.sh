@@ -11,7 +11,6 @@
 set -euo pipefail
 
 level="${1:-}"
-mode="${2:-create}"
 case "$level" in
 	patch | minor | major) ;;
 	*)
@@ -19,7 +18,17 @@ case "$level" in
 		exit 2
 		;;
 esac
-[ "$mode" = "--print" ] && mode="print"
+# Validate the optional flag explicitly: an unrecognized second argument (e.g. a
+# misspelled --print) must not silently fall through to tag creation.
+case "${2:-}" in
+	"") mode="create" ;;
+	--print) mode="print" ;;
+	*)
+		echo "error: unknown option: $2 (expected --print)" >&2
+		echo "usage: $0 <patch|minor|major> [--print]" >&2
+		exit 2
+		;;
+esac
 
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
 	echo "error: not a git repository" >&2
