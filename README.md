@@ -36,7 +36,8 @@ the others on the next sync.
 Requires Go 1.26+; the only dependency is `gopkg.in/yaml.v3`.
 
 ```bash
-make build      # -> bin/engram
+make build      # -> bin/engram (version-stamped from git)
+make install    # -> $PREFIX/bin/engram (default ~/.local/bin; override PREFIX)
 ./bin/engram help
 ./bin/engram schema --json
 ```
