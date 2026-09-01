@@ -17,6 +17,10 @@ const staleAfter = 30 * 24 * time.Hour
 // through the consolidator are skipped as the loop guard. A missing file yields
 // an empty result.
 func ImportCodex(memoryFile string) (Result, error) {
+	// Scope derives from each Task Group's recorded `applies_to: cwd=<path>`, a
+	// historical path that may not resolve on this machine, so a Codex import is
+	// provisional (ScopeAuthoritative stays false): it preserves an existing
+	// memory's scope rather than re-deriving it. See cli.decideImportScope.
 	var res Result
 	data, err := os.ReadFile(memoryFile)
 	if errors.Is(err, os.ErrNotExist) {

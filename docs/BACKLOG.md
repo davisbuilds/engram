@@ -35,14 +35,19 @@ only; shipped items live in the git history.
 
 ## Modelling
 
-- **Scope derivation depends on the live filesystem.** Import derives a memory's
-  scope by resolving a path to a real git repo (single Claude import: the cwd;
-  `import --all`: each project slug reconstructed against the filesystem; Codex:
-  the Task Group's `applies_to: cwd=`). A repo → `project:<base>`, anything else →
-  `global`. That makes import non-reproducible: a project since deleted (or on
-  another machine) falls back to `global` — e.g. an orphaned Claude slug whose
-  project dir is gone. Safe (never a wrong project), but worth a content-hash or
-  path-cache alternative if reproducibility matters later.
+- **Scope derivation depends on the live filesystem** (mitigated). Import derives
+  a memory's scope by resolving a path to a real git repo (single Claude import:
+  the cwd; `import --all`: each project slug reconstructed against the filesystem;
+  Codex: the Task Group's `applies_to: cwd=`). A repo → `project:<base>`, anything
+  else → `global`. The **re-scoping** hazard is now closed: a *provisional* import
+  (`import --all`, Codex, reconcile), whose paths may not resolve on this machine,
+  never overwrites an existing memory's scope — it preserves the stored scope and
+  surfaces a warning; only a *live single import* may revise scope, and only when
+  scope is the sole difference (see `internal/cli/decideImportScope`). Residual,
+  deferred: a memory imported *for the first time* from a machine lacking its repo
+  is still seeded `global` (no prior scope to preserve). A content-hash /
+  path-cache / "unresolved vs genuinely-global" signal would let that first import
+  distinguish "not a repo here" from "not a repo anywhere" and flag it.
 - **`remember` provenance timestamps.** `remember` sets `provenance.origin` but
   not `created`/`modified`, to keep render output deterministic and idempotent.
   A "preserve created, bump modified on change" policy would restore timestamps

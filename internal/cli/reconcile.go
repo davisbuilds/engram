@@ -54,10 +54,11 @@ func cmdReconcile(e *env, name string, _ []string) int {
 	// propagation run against in *both* dry-run and apply, so the preview reflects
 	// what apply will do rather than the pre-import canonical.
 	exit := exitOK
-	merged, importEntries, hadConflict := mergeImports(mems, imports)
+	merged, importEntries, hadConflict, scopeNotes := mergeImports(mems, imports)
 	if hadConflict {
 		exit = worseExit(exit, exitConflicts)
 	}
+	warns = append(warns, scopeNotes...)
 	for _, imp := range imports {
 		if len(imp.result.Dropped) > 0 {
 			warns = append(warns, imp.harness+": some sources could not be imported and were dropped; see data.import[].dropped")
@@ -149,9 +150,11 @@ func cmdReconcile(e *env, name string, _ []string) int {
 // unchanged, differing name-collision -> conflict, keeping the existing memory),
 // without writing. The merged set it returns is what review and propagation run
 // against in both dry-run and apply, so the preview reflects what apply will do.
-// It also returns a per-harness import summary and whether anything conflicted
-// or was invalid (which maps to a non-zero exit).
-func mergeImports(existing []*schema.CanonicalMemory, imports []importGather) (merged []*schema.CanonicalMemory, entries []map[string]any, hadConflict bool) {
+// It also returns a per-harness import summary, whether anything conflicted or
+// was invalid (which maps to a non-zero exit), and any scope-preservation notes
+// (a provisional import held back from re-scoping an existing memory), which the
+// caller surfaces as warnings.
+func mergeImports(existing []*schema.CanonicalMemory, imports []importGather) (merged []*schema.CanonicalMemory, entries []map[string]any, hadConflict bool, notes []string) {
 	byName := make(map[string]*schema.CanonicalMemory, len(existing))
 	order := make([]string, 0, len(existing))
 	add := func(m *schema.CanonicalMemory) {
@@ -166,6 +169,14 @@ func mergeImports(existing []*schema.CanonicalMemory, imports []importGather) (m
 	for _, imp := range imports {
 		outcomes := make([]map[string]string, 0, len(imp.result.Memories))
 		for _, m := range imp.result.Memories {
+			// Resolve scope against existing canonical before simulating the save, so
+			// a reconstructed-path import never silently re-scopes a memory and the
+			// preview matches what apply (which reuses these candidates) will do.
+			scp, _, note := decideImportScope(byName[m.Name], m, imp.result.ScopeAuthoritative)
+			m.Scope = scp
+			if note != "" {
+				notes = append(notes, note)
+			}
 			if verr := m.Validate(); verr != nil {
 				outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": "invalid", "error": verr.Error()})
 				hadConflict = true
@@ -190,7 +201,7 @@ func mergeImports(existing []*schema.CanonicalMemory, imports []importGather) (m
 	for _, n := range order {
 		merged = append(merged, byName[n])
 	}
-	return merged, entries, hadConflict
+	return merged, entries, hadConflict, notes
 }
 
 // simulateSave mirrors store.Save(force=false) without touching disk: an absent

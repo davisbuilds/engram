@@ -25,6 +25,13 @@ type Result struct {
 	// StaleWarning is set when the Codex MEMORY.md being imported is older than
 	// 30 days, i.e. the consolidator may be stalled and the source may lag reality.
 	StaleWarning bool
+	// ScopeAuthoritative reports whether the derived scope may revise an existing
+	// memory's scope. It is true only for a live single import, whose cwd is the
+	// real session directory and whose repo probe is ground truth; a full-tree
+	// sweep or a Codex import derives scope from reconstructed/recorded paths that
+	// may not resolve on this machine, so those are provisional (false) and must
+	// not silently re-scope an existing memory. See cli.decideImportScope.
+	ScopeAuthoritative bool
 }
 
 // Dropped records a native source (a Claude file name, or a Codex Task Group

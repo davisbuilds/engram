@@ -214,6 +214,27 @@ func cmdImport(e *env, name string, args []string) int {
 	if len(res.Dropped) > 0 {
 		warns = append(warns, fmt.Sprintf("%d source(s) could not be imported and were dropped; see data.dropped", len(res.Dropped)))
 	}
+
+	// Resolve each candidate's scope against existing canonical so import never
+	// lets this machine's filesystem state silently re-scope a memory: a provisional
+	// (sweep/codex) import preserves the stored scope, a live single import may
+	// revise it. See decideImportScope. The decided scope drives both the dry-run
+	// preview and the apply below, so they agree.
+	forceScope := make(map[string]bool, len(res.Memories))
+	for _, m := range res.Memories {
+		existing, _, _, lerr := store.Load(s.cfg.CanonicalRoot, m.Name)
+		if lerr != nil {
+			e.emit(name, false, base, warns, &RespError{Code: "load", Message: lerr.Error()}, nil)
+			return exitError
+		}
+		scp, force, note := decideImportScope(existing, m, res.ScopeAuthoritative)
+		m.Scope = scp
+		forceScope[m.Name] = force
+		if note != "" {
+			warns = append(warns, note)
+		}
+	}
+
 	if !e.apply {
 		base["memories"] = memoryItems(res.Memories)
 		e.emit(name, true, base, warns, nil, nil)
@@ -234,7 +255,7 @@ func cmdImport(e *env, name string, args []string) int {
 			outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": "invalid", "error": verr.Error()})
 			continue
 		}
-		outcome, _, serr := store.Save(s.cfg.CanonicalRoot, m, false)
+		outcome, _, serr := store.Save(s.cfg.CanonicalRoot, m, forceScope[m.Name])
 		if serr != nil {
 			e.emit(name, false, base, nil, &RespError{Code: "save", Message: serr.Error()}, nil)
 			return exitError
