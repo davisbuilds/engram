@@ -231,7 +231,7 @@ func Slugify(s string) string {
 		// their leading tokens distinct. Trimming back to a token boundary would
 		// read cleaner but can collapse both to the same slug, and on import the
 		// second then loses to a store.Save name conflict and never reaches
-		// canonical. Cosmetics lose to not dropping a memory. See docs/BACKLOG.md.
+		// canonical. Cosmetics lose to not dropping a memory. See docs/project/BACKLOG.md.
 		out = strings.Trim(out[:60], "-")
 	}
 	return out

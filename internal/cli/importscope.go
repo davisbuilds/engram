@@ -26,7 +26,7 @@ func resolveImportScope(root string, m *schema.CanonicalMemory, authoritative bo
 
 // decideImportScope resolves how an imported candidate interacts with an existing
 // canonical memory's scope, so import never lets a machine's filesystem state
-// silently re-scope a memory (see docs/BACKLOG.md — "Scope derivation depends on
+// silently re-scope a memory (see docs/project/BACKLOG.md — "Scope derivation depends on
 // the live filesystem").
 //
 // The rule follows the live-vs-provisional split. A *provisional* import (a
