@@ -11,7 +11,7 @@ is the intelligence. See `README.md` for the user-facing overview.
   exit codes, scope model, configuration, example invocations.
 - `docs/headless.md` — how a headless agent drives engram: `next_steps` leads and
   the `curate` proposer/applier loop.
-- `docs/BACKLOG.md` — future-only friction points and deferred follow-ups noted
+- `docs/project/BACKLOG.md` — future-only friction points and deferred follow-ups noted
   during implementation.
 
 ## Architecture (load-bearing invariants)
@@ -67,4 +67,4 @@ is the intelligence. See `README.md` for the user-facing overview.
   commit messages. Host identity and harness home directories are configuration,
   not code.
 - Keep `docs/` current when behavior changes, and log deferred work in
-  `docs/BACKLOG.md` rather than leaving it implicit.
+  `docs/project/BACKLOG.md` rather than leaving it implicit.

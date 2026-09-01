@@ -74,10 +74,11 @@ git branch --merged main | grep -v ' main$' | xargs -n 1 git branch -d
 - Prefer executable source-of-truth references (for example, `go test ./...`,
   `.github/workflows/ci.yml`).
 - Keep `docs/` current when behavior changes, and log deferred work in
-  [`docs/BACKLOG.md`](docs/BACKLOG.md) rather than leaving it implicit.
+  [`docs/project/BACKLOG.md`](docs/project/BACKLOG.md) rather than leaving it implicit.
 
 ## Related Docs
 
+- Git history and branch hygiene config: [`docs/project/GIT_HISTORY_POLICY.md`](docs/project/GIT_HISTORY_POLICY.md)
 - Agent implementation guidance and architecture invariants: [`AGENTS.md`](AGENTS.md)
 - CLI interface contract (commands, envelope, exit codes, scope): [`docs/cli.md`](docs/cli.md)
 - How a headless agent drives engram: [`docs/headless.md`](docs/headless.md)
