@@ -58,6 +58,53 @@ func TestImportClaudeMapsNativeFrontmatter(t *testing.T) {
 // canonical requires kebab-case. Import must normalize them (as the Codex path
 // already does) so the memory is valid, instead of passing the raw name through
 // to fail at apply time. Names taken from the real corpus dogfood.
+// A live single import is authoritative (its cwd repo probe is ground truth, so
+// it may revise scope); a full-tree sweep is provisional (reconstructed paths may
+// not resolve on this machine, so it must not silently re-scope). The apply layer
+// keys the preserve-vs-revise decision on this flag.
+func TestImportScopeAuthoritativeFlag(t *testing.T) {
+	dir := t.TempDir()
+	native := "---\nname: m\ndescription: d\nmetadata:\n  type: reference\n---\nb\n"
+	if err := os.WriteFile(filepath.Join(dir, "m.md"), []byte(native), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	single, err := ImportClaude(dir, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !single.ScopeAuthoritative {
+		t.Error("single ImportClaude from a live cwd should be scope-authoritative")
+	}
+
+	// A single import whose cwd does not exist on this machine (a deleted or
+	// unmounted project) must NOT be authoritative: the repo probe would yield
+	// global without erroring, and an authoritative global would force-widen an
+	// existing project-scoped memory. Read the same memory dir, bogus cwd.
+	ghost, err := ImportClaude(dir, filepath.Join(dir, "does-not-exist"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ghost.ScopeAuthoritative {
+		t.Error("single import from a nonexistent cwd must be provisional, not authoritative")
+	}
+
+	home := t.TempDir()
+	memDir := filepath.Join(home, "projects", "-tmp-proj", "memory")
+	if err := os.MkdirAll(memDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(memDir, "m.md"), []byte(native), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sweep, err := ImportClaudeAll(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sweep.ScopeAuthoritative {
+		t.Error("ImportClaudeAll sweep must be provisional, not scope-authoritative")
+	}
+}
+
 func TestImportClaudeNormalizesNamesToKebab(t *testing.T) {
 	dir := t.TempDir()
 	files := map[string]string{

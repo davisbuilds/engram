@@ -214,7 +214,21 @@ func cmdImport(e *env, name string, args []string) int {
 	if len(res.Dropped) > 0 {
 		warns = append(warns, fmt.Sprintf("%d source(s) could not be imported and were dropped; see data.dropped", len(res.Dropped)))
 	}
+
 	if !e.apply {
+		// Dry-run: resolve scope against current canonical (unlocked — this is a
+		// projection, not a write) so the preview shows the scope apply will land on
+		// and any preservation notes. See decideImportScope.
+		for _, m := range res.Memories {
+			_, note, derr := resolveImportScope(s.cfg.CanonicalRoot, m, res.ScopeAuthoritative)
+			if derr != nil {
+				e.emit(name, false, base, warns, &RespError{Code: "load", Message: derr.Error()}, nil)
+				return exitError
+			}
+			if note != "" {
+				warns = append(warns, note)
+			}
+		}
 		base["memories"] = memoryItems(res.Memories)
 		e.emit(name, true, base, warns, nil, nil)
 		return exitOK
@@ -234,7 +248,19 @@ func cmdImport(e *env, name string, args []string) int {
 			outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": "invalid", "error": verr.Error()})
 			continue
 		}
-		outcome, _, serr := store.Save(s.cfg.CanonicalRoot, m, false)
+		// Resolve scope per candidate *inside* the lock so a forced scope-only
+		// revision decides against the serialized current state, never a stale read a
+		// concurrent writer has since superseded. Per-candidate (not name-keyed) so
+		// two natives normalizing to one name don't cross force decisions.
+		force, note, derr := resolveImportScope(s.cfg.CanonicalRoot, m, res.ScopeAuthoritative)
+		if derr != nil {
+			e.emit(name, false, base, warns, &RespError{Code: "load", Message: derr.Error()}, nil)
+			return exitError
+		}
+		if note != "" {
+			warns = append(warns, note)
+		}
+		outcome, _, serr := store.Save(s.cfg.CanonicalRoot, m, force)
 		if serr != nil {
 			e.emit(name, false, base, nil, &RespError{Code: "save", Message: serr.Error()}, nil)
 			return exitError

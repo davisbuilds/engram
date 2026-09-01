@@ -31,7 +31,12 @@ type claudeNative struct {
 // files are ignored. A missing directory yields an empty result.
 func ImportClaude(memoryDir, cwd string) (Result, error) {
 	scope := projectScopeFromRepo(cwd)
-	var res Result
+	// A single import may revise an existing memory's scope only when its cwd is a
+	// live directory on this machine — then the repo probe is ground truth. A --cwd
+	// naming a deleted or unmounted project resolves to global without erroring, so
+	// treat it as provisional (never authoritative) lest it force-widen exactly the
+	// project-scoped memory this guard protects. See cli.decideImportScope.
+	res := Result{ScopeAuthoritative: cwdIsLiveDir(cwd)}
 	entries, err := os.ReadDir(memoryDir)
 	if errors.Is(err, os.ErrNotExist) {
 		return res, nil
@@ -140,6 +145,10 @@ func deriveTitle(body, fileBase string) string {
 // project. Results across all slugs are merged; a missing projects dir yields an
 // empty result. Unlike single import, this needs no cwd — the slug carries it.
 func ImportClaudeAll(claudeHome string) (Result, error) {
+	// A full-tree sweep derives each project's scope from a reconstructed slug path
+	// that may not resolve on this machine, so the aggregate is provisional (it
+	// preserves, rather than revises, an existing memory's scope) even though the
+	// inner single imports it aggregates are individually authoritative.
 	var res Result
 	projectsDir := filepath.Join(claudeHome, "projects")
 	entries, err := os.ReadDir(projectsDir)

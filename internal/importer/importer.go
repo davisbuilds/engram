@@ -25,6 +25,13 @@ type Result struct {
 	// StaleWarning is set when the Codex MEMORY.md being imported is older than
 	// 30 days, i.e. the consolidator may be stalled and the source may lag reality.
 	StaleWarning bool
+	// ScopeAuthoritative reports whether the derived scope may revise an existing
+	// memory's scope. It is true only for a live single import, whose cwd is the
+	// real session directory and whose repo probe is ground truth; a full-tree
+	// sweep or a Codex import derives scope from reconstructed/recorded paths that
+	// may not resolve on this machine, so those are provisional (false) and must
+	// not silently re-scope an existing memory. See cli.decideImportScope.
+	ScopeAuthoritative bool
 }
 
 // Dropped records a native source (a Claude file name, or a Codex Task Group
@@ -32,6 +39,20 @@ type Result struct {
 type Dropped struct {
 	Source string `json:"source"`
 	Reason string `json:"reason"`
+}
+
+// cwdIsLiveDir reports whether path names an existing directory on this machine —
+// the condition under which projectScopeFromRepo's .git probe is ground truth
+// rather than a guess. A single import may revise scope only from a live cwd; a
+// path pointing at a deleted or unmounted project is provisional, so it cannot
+// force-widen an existing memory's scope.
+func cwdIsLiveDir(path string) bool {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 // projectScopeFromRepo maps a directory path to a project scope, but only when

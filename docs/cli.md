@@ -170,6 +170,15 @@ explicit rather than ambient.
   Group's `applies_to: cwd=`) is a real git repository, else `global`. Only the
   repo's base name enters the scope — the full path never does. A workspace
   container (a non-repo parent of many projects) correctly stays `global`.
+  **A re-import never silently re-scopes an existing memory.** Because that repo
+  probe reads the live filesystem, an `import --all` or Codex import run on a
+  machine that lacks the repo would derive `global` for a memory that is really
+  `project:<repo>`. Such a *provisional* import preserves the memory's stored
+  scope and emits a warning naming both scopes, rather than widening it. Only a
+  *live single* `import <harness>` (whose cwd is the real session directory) may
+  revise scope — an intentional project rename honored — and only when scope is
+  the sole change; if the body also diverges it is reported as a `3` conflict for
+  a human or `curate` to resolve, never force-overwritten.
   **Native names are normalized to kebab-case** on the way in (a free-text or
   snake_case native name becomes a valid canonical name, matching what the Codex
   path already does). **Nothing is lost silently:** every candidate source lands
