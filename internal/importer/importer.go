@@ -41,6 +41,20 @@ type Dropped struct {
 	Reason string `json:"reason"`
 }
 
+// cwdIsLiveDir reports whether path names an existing directory on this machine —
+// the condition under which projectScopeFromRepo's .git probe is ground truth
+// rather than a guess. A single import may revise scope only from a live cwd; a
+// path pointing at a deleted or unmounted project is provisional, so it cannot
+// force-widen an existing memory's scope.
+func cwdIsLiveDir(path string) bool {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
 // projectScopeFromRepo maps a directory path to a project scope, but only when
 // the path resolves to a real git repository — the single principled signal that
 // separates a project from a multi-project container (a workspace parent like

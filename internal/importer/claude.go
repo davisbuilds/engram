@@ -31,9 +31,12 @@ type claudeNative struct {
 // files are ignored. A missing directory yields an empty result.
 func ImportClaude(memoryDir, cwd string) (Result, error) {
 	scope := projectScopeFromRepo(cwd)
-	// A single import's cwd is the live session directory, so its repo probe is
-	// ground truth and may revise an existing memory's scope (a rename honored).
-	res := Result{ScopeAuthoritative: true}
+	// A single import may revise an existing memory's scope only when its cwd is a
+	// live directory on this machine — then the repo probe is ground truth. A --cwd
+	// naming a deleted or unmounted project resolves to global without erroring, so
+	// treat it as provisional (never authoritative) lest it force-widen exactly the
+	// project-scoped memory this guard protects. See cli.decideImportScope.
+	res := Result{ScopeAuthoritative: cwdIsLiveDir(cwd)}
 	entries, err := os.ReadDir(memoryDir)
 	if errors.Is(err, os.ErrNotExist) {
 		return res, nil

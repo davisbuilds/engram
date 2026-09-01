@@ -5,7 +5,24 @@ import (
 	"fmt"
 
 	"github.com/davisbuilds/engram/internal/schema"
+	"github.com/davisbuilds/engram/internal/store"
 )
+
+// resolveImportScope loads the existing canonical memory named m.Name, decides
+// m's effective scope against it via decideImportScope, and mutates m.Scope to
+// the result. It returns whether a forced scope-only revision is warranted and a
+// non-empty note when a provisional import was held back from re-scoping. Callers
+// that may act on the force result must invoke this under the canonical lock so
+// the decision is made against the serialized current state.
+func resolveImportScope(root string, m *schema.CanonicalMemory, authoritative bool) (force bool, note string, err error) {
+	existing, _, _, lerr := store.Load(root, m.Name)
+	if lerr != nil {
+		return false, "", lerr
+	}
+	scp, force, note := decideImportScope(existing, m, authoritative)
+	m.Scope = scp
+	return force, note, nil
+}
 
 // decideImportScope resolves how an imported candidate interacts with an existing
 // canonical memory's scope, so import never lets a machine's filesystem state

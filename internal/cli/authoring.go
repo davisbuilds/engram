@@ -215,27 +215,20 @@ func cmdImport(e *env, name string, args []string) int {
 		warns = append(warns, fmt.Sprintf("%d source(s) could not be imported and were dropped; see data.dropped", len(res.Dropped)))
 	}
 
-	// Resolve each candidate's scope against existing canonical so import never
-	// lets this machine's filesystem state silently re-scope a memory: a provisional
-	// (sweep/codex) import preserves the stored scope, a live single import may
-	// revise it. See decideImportScope. The decided scope drives both the dry-run
-	// preview and the apply below, so they agree.
-	forceScope := make(map[string]bool, len(res.Memories))
-	for _, m := range res.Memories {
-		existing, _, _, lerr := store.Load(s.cfg.CanonicalRoot, m.Name)
-		if lerr != nil {
-			e.emit(name, false, base, warns, &RespError{Code: "load", Message: lerr.Error()}, nil)
-			return exitError
-		}
-		scp, force, note := decideImportScope(existing, m, res.ScopeAuthoritative)
-		m.Scope = scp
-		forceScope[m.Name] = force
-		if note != "" {
-			warns = append(warns, note)
-		}
-	}
-
 	if !e.apply {
+		// Dry-run: resolve scope against current canonical (unlocked — this is a
+		// projection, not a write) so the preview shows the scope apply will land on
+		// and any preservation notes. See decideImportScope.
+		for _, m := range res.Memories {
+			_, note, derr := resolveImportScope(s.cfg.CanonicalRoot, m, res.ScopeAuthoritative)
+			if derr != nil {
+				e.emit(name, false, base, warns, &RespError{Code: "load", Message: derr.Error()}, nil)
+				return exitError
+			}
+			if note != "" {
+				warns = append(warns, note)
+			}
+		}
 		base["memories"] = memoryItems(res.Memories)
 		e.emit(name, true, base, warns, nil, nil)
 		return exitOK
@@ -255,7 +248,19 @@ func cmdImport(e *env, name string, args []string) int {
 			outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": "invalid", "error": verr.Error()})
 			continue
 		}
-		outcome, _, serr := store.Save(s.cfg.CanonicalRoot, m, forceScope[m.Name])
+		// Resolve scope per candidate *inside* the lock so a forced scope-only
+		// revision decides against the serialized current state, never a stale read a
+		// concurrent writer has since superseded. Per-candidate (not name-keyed) so
+		// two natives normalizing to one name don't cross force decisions.
+		force, note, derr := resolveImportScope(s.cfg.CanonicalRoot, m, res.ScopeAuthoritative)
+		if derr != nil {
+			e.emit(name, false, base, warns, &RespError{Code: "load", Message: derr.Error()}, nil)
+			return exitError
+		}
+		if note != "" {
+			warns = append(warns, note)
+		}
+		outcome, _, serr := store.Save(s.cfg.CanonicalRoot, m, force)
 		if serr != nil {
 			e.emit(name, false, base, nil, &RespError{Code: "save", Message: serr.Error()}, nil)
 			return exitError

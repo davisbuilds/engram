@@ -73,7 +73,19 @@ func TestImportScopeAuthoritativeFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !single.ScopeAuthoritative {
-		t.Error("single ImportClaude should be scope-authoritative")
+		t.Error("single ImportClaude from a live cwd should be scope-authoritative")
+	}
+
+	// A single import whose cwd does not exist on this machine (a deleted or
+	// unmounted project) must NOT be authoritative: the repo probe would yield
+	// global without erroring, and an authoritative global would force-widen an
+	// existing project-scoped memory. Read the same memory dir, bogus cwd.
+	ghost, err := ImportClaude(dir, filepath.Join(dir, "does-not-exist"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ghost.ScopeAuthoritative {
+		t.Error("single import from a nonexistent cwd must be provisional, not authoritative")
 	}
 
 	home := t.TempDir()
