@@ -1,0 +1,19 @@
+# Keeps the SHA-pinned GitHub Actions (and the single Go dependency) current, so
+# the immutable pins in .github/workflows/ci.yml do not silently go stale. On every
+# action bump, review that the pinned SHA and its `# vX.Y.Z` version comment still
+# refer to the same release (Dependabot updates the SHA but not always the comment).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
