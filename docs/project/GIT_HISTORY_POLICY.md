@@ -37,10 +37,19 @@ Quality gates before merge:
 
 ## Branch Protection
 
-`main` branch protection is not currently enabled. This is a public repository, so
-branch protection is available and not blocked by any private-tier API limitation;
-enabling a required `build-test-lint` status check on `main` is the recommended
-next step. Until then, enforce checks and review discipline by convention.
+`main` is protected. The `build-test-lint` CI check is a required status check, so
+a PR cannot merge until CI passes.
+
+- `required_status_checks`: `build-test-lint` (`strict: false` — a PR need not be
+  rebased onto the latest `main`, only pass its own CI run).
+- `enforce_admins`: `false` — the repository owner can bypass protection for an
+  emergency direct push; normal work still goes through a green PR.
+- `required_pull_request_reviews`: none — this is a solo repository; review
+  discipline is provided by the Codex PR review pass rather than a required
+  second approver.
+
+Consider enabling `strict` (require branches up to date before merge) or a
+required review if the contributor set grows.
 
 ## Recommended Ongoing Hygiene
 
