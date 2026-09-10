@@ -1,0 +1,41 @@
+name: Workflow Security Audit
+
+# Static security audit of the repo's GitHub Actions workflows. Runs on any change
+# under .github/workflows/ so a hardening regression (unpinned action, missing
+# permissions, credential persistence, template injection) is caught before it
+# merges. zizmor's exit code encodes the highest finding severity, so a nonzero
+# exit fails the job.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: false
+
+      # uvx fetches zizmor hermetically at the pinned version; --offline skips
+      # zizmor's network audits so the gate is deterministic and needs no token.
+      - name: zizmor (workflow security audit)
+        run: uvx zizmor@1.30.0 --offline .github/workflows/
