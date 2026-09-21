@@ -151,8 +151,9 @@ explicit rather than ambient.
   intentionally (to refresh a canonical memory from an edited native, prefer
   `import --refresh`). A difference confined to `provenance`
   (where a memory came from, not what it says) is never a conflict: empty stored
-  provenance fields are backfilled from the incoming memory, a populated field
-  keeps its stored value, and incoming memory can never strip provenance. Every
+  provenance fields are backfilled from the incoming memory (only when the two
+  agree on origin, so `origin` and `source` never come from different harnesses), a
+  populated field keeps its stored value, and incoming memory can never strip provenance. Every
   canonical writer
   (`remember`, `share`, `import --apply`, `curate --apply`) takes the shared
   exclusive canonical-root lock, so no two writers interleave; a held lock is a

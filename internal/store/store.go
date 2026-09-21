@@ -121,8 +121,16 @@ func sameRender(a, b *schema.CanonicalMemory) bool {
 	return err1 == nil && err2 == nil && bytes.Equal(ar, br)
 }
 
-// fillProvenance returns stored with each empty field filled from cand.
+// fillProvenance returns stored with each empty field filled from cand, provided
+// the two agree on where the memory came from. Origin and Source together
+// identify the origin; backfilling Source under a different Origin would mint a
+// hybrid (say a Codex origin carrying a Claude filename) that origin-based
+// propagation and source-based migration would attribute to different harnesses.
+// Differing populated origins therefore leave stored untouched.
 func fillProvenance(stored, cand schema.Provenance) schema.Provenance {
+	if stored.Origin != "" && cand.Origin != "" && stored.Origin != cand.Origin {
+		return stored
+	}
 	fill := func(dst *string, v string) {
 		if *dst == "" {
 			*dst = v

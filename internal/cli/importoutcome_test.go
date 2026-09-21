@@ -289,3 +289,96 @@ func TestImportRefreshRejectsUnknownName(t *testing.T) {
 		t.Error("a rejected --refresh must not write anything")
 	}
 }
+
+func setCanonicalScope(t *testing.T, file, from, to string) {
+	t.Helper()
+	b, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "\nscope: "+from+"\n") {
+		t.Fatalf("fixture: %s has no `scope: %s`:\n%s", file, from, b)
+	}
+	writeFile(t, file, strings.Replace(string(b), "\nscope: "+from+"\n", "\nscope: "+to+"\n", 1))
+}
+
+func importRows(t *testing.T, args ...string) (int, map[string]map[string]string) {
+	t.Helper()
+	var code int
+	out := captureStdout(t, func() { code = Run(args) })
+	var env struct {
+		Data struct {
+			Memories []map[string]string `json:"memories"`
+			Results  []map[string]string `json:"results"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(out), &env); err != nil {
+		t.Fatalf("envelope: %v\n%s", err, out)
+	}
+	rows := map[string]map[string]string{}
+	for _, r := range append(env.Data.Memories, env.Data.Results...) {
+		rows[r["name"]] = r
+	}
+	return code, rows
+}
+
+// A provisional import (--all) keeps a stored project scope rather than the scope
+// it derives on a machine that cannot see the repo. The dry-run row must show the
+// scope apply will land on, not the pre-resolution derived one.
+func TestImportDryRunRowShowsThePreservedScope(t *testing.T) {
+	canon, _, _, args := setupTwoHarnesses(t)
+	func() {
+		defer silenceStdout(t)()
+		if code := Run(append([]string{"import", "claude-code", "--apply"}, args...)); code != exitOK {
+			t.Fatalf("seed import exit = %d", code)
+		}
+	}()
+	setCanonicalScope(t, filepath.Join(canon, "claude-lesson.md"), "global", "project:x")
+
+	_, rows := importRows(t, append([]string{"import", "claude-code", "--all"}, args...)...)
+	if got := rows["claude-lesson"]["scope"]; got != "project:x" {
+		t.Errorf("dry-run row scope = %q, want project:x (the scope apply preserves)", got)
+	}
+	if got := rows["claude-lesson"]["outcome"]; got != "unchanged" {
+		t.Errorf("dry-run outcome = %q, want unchanged", got)
+	}
+}
+
+// A live single import in a real repo may revise a stored scope when scope is the
+// only difference (a repo rename). Apply forces that as `updated`; the dry-run
+// must predict the same instead of reporting a conflict.
+func TestImportDryRunPredictsAForcedScopeRevision(t *testing.T) {
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "newname")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	canon, claude := filepath.Join(dir, "canonical"), filepath.Join(dir, "claude")
+	writeFile(t, filepath.Join(claudeMemoryDir(claude, repo), "lesson-a.md"),
+		"---\nname: renamed-lesson\ndescription: a lesson\nmetadata:\n  type: lesson\n---\nbody\n")
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+canon+"\nharnesses:\n  claude-code:\n    home: "+claude+"\n  codex:\n    home: "+filepath.Join(dir, "codex")+"\n")
+	args := []string{"--config", cfg, "--cwd", repo, "--json"}
+
+	func() {
+		defer silenceStdout(t)()
+		if code := Run(append([]string{"import", "claude-code", "--apply"}, args...)); code != exitOK {
+			t.Fatalf("seed import exit = %d", code)
+		}
+	}()
+	file := filepath.Join(canon, "renamed-lesson.md")
+	setCanonicalScope(t, file, "project:newname", "project:oldname")
+
+	_, dry := importRows(t, append([]string{"import", "claude-code"}, args...)...)
+	if got := dry["renamed-lesson"]["outcome"]; got != "updated" {
+		t.Errorf("dry-run outcome = %q, want updated (apply forces a scope-only revision)", got)
+	}
+
+	code, applied := importRows(t, append([]string{"import", "claude-code", "--apply"}, args...)...)
+	if code != exitOK || applied["renamed-lesson"]["outcome"] != "updated" {
+		t.Errorf("apply: exit=%d row=%v, want exit 0 and updated", code, applied["renamed-lesson"])
+	}
+	if b, _ := os.ReadFile(file); !strings.Contains(string(b), "\nscope: project:newname\n") {
+		t.Errorf("apply did not revise the scope:\n%s", b)
+	}
+}

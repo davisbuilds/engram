@@ -236,9 +236,9 @@ func cmdImport(e *env, name string, args []string) int {
 		// Dry-run: resolve scope against current canonical (unlocked — this is a
 		// projection, not a write) so the preview shows the scope apply will land on
 		// and any preservation notes. See decideImportScope.
-		items := memoryItems(res.Memories)
-		for i, m := range res.Memories {
-			_, note, derr := resolveImportScope(s.cfg.CanonicalRoot, m, res.ScopeAuthoritative)
+		items := make([]map[string]string, 0, len(res.Memories))
+		for _, m := range res.Memories {
+			force, note, derr := resolveImportScope(s.cfg.CanonicalRoot, m, res.ScopeAuthoritative)
 			if derr != nil {
 				e.emit(name, false, base, warns, &RespError{Code: "load", Message: derr.Error()}, nil)
 				return exitError
@@ -247,6 +247,9 @@ func cmdImport(e *env, name string, args []string) int {
 				warns = append(warns, note)
 			}
 			// Say what apply would do with each candidate, not just that it exists.
+			// The row is built after scope resolution so it carries the scope apply
+			// lands on, and `force` is honored so a scope-only revision that apply
+			// forces is previewed as `updated`, not a conflict.
 			stored, _, _, lerr := store.Load(s.cfg.CanonicalRoot, m.Name)
 			if lerr != nil {
 				e.emit(name, false, base, warns, &RespError{Code: "load", Message: lerr.Error()}, nil)
@@ -254,14 +257,19 @@ func cmdImport(e *env, name string, args []string) int {
 			}
 			outcome, _ := store.Plan(stored, m)
 			entry := outcomeEntry(m.Name, outcome, stored, m)
-			if refresh[m.Name] && outcome == store.Conflict {
+			switch {
+			case refresh[m.Name] && outcome == store.Conflict:
 				entry = refreshedEntry(m.Name, stored, m)
+			case force && outcome == store.Conflict:
+				entry = outcomeEntry(m.Name, store.Updated, stored, m)
 			}
+			item := memoryItems([]*schema.CanonicalMemory{m})[0]
 			for k, v := range entry {
 				if k != "name" {
-					items[i][k] = v
+					item[k] = v
 				}
 			}
+			items = append(items, item)
 		}
 		base["memories"] = items
 		e.emit(name, true, base, warns, nil, nil)

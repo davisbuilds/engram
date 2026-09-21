@@ -119,6 +119,28 @@ func TestPlanDecisionTable(t *testing.T) {
 			Unchanged, "",
 		},
 		{
+			// Origin and Source together identify where a memory came from; filling
+			// only Source under a different Origin would make a hybrid that two
+			// consumers (origin-based propagation, source-based migrate) read as
+			// different harnesses.
+			"a source is not backfilled under a different origin",
+			withProv(base, schema.Provenance{Origin: "import:codex"}),
+			withProv(base, schema.Provenance{Origin: "import:claude-code", Source: "a-mem.md"}),
+			Unchanged, "",
+		},
+		{
+			"a source is backfilled when the origins agree",
+			withProv(base, schema.Provenance{Origin: "import:claude-code"}),
+			withProv(base, schema.Provenance{Origin: "import:claude-code", Source: "a-mem.md"}),
+			Updated, "a-mem.md",
+		},
+		{
+			"an unattributed memory adopts the whole identity of an identical import",
+			base,
+			withProv(base, schema.Provenance{Origin: "import:claude-code", Source: "a-mem.md"}),
+			Updated, "a-mem.md",
+		},
+		{
 			"candidate with no provenance never strips the stored one",
 			withProv(base, schema.Provenance{Origin: "import:claude-code", Source: "a-mem.md"}),
 			base,
