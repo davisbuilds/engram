@@ -146,7 +146,13 @@ explicit rather than ambient.
   `--applies-agent`, `--applies-host`, …) **or** a complete `CanonicalMemory`
   as JSON on stdin via `--from-json -` (the agent path: construct once, pipe in).
   Refuses to overwrite a differing canonical of the same name → canonical-side
-  `CONFLICT` (exit `3`), never silent data loss. Every canonical writer
+  `CONFLICT` (exit `3`), never silent data loss; `--force` overwrites
+  intentionally, and is the deterministic way to refresh a canonical memory whose
+  native source was edited after import. A difference confined to `provenance`
+  (where a memory came from, not what it says) is never a conflict: empty stored
+  provenance fields are backfilled from the incoming memory, a populated field
+  keeps its stored value, and incoming memory can never strip provenance. Every
+  canonical writer
   (`remember`, `share`, `import --apply`, `curate --apply`) takes the shared
   exclusive canonical-root lock, so no two writers interleave; a held lock is a
   retryable error (exit `1`, `error.code = "locked"`), not a silent second write.
@@ -162,8 +168,13 @@ explicit rather than ambient.
   entries remain, and it never triggers a re-sync on its own.
 - **`audit`** — `sync`'s read-only projection: the `Action` list as data, always
   zero side effects.
-- **`import <harness>`** — reverse-sync, explicit and one-shot. Dry-run lists the
-  canonical memories it *would* create; `--apply` writes them. Marker/loop-guarded
+- **`import <harness>`** — reverse-sync, explicit and one-shot. Dry-run lists every
+  candidate memory with the `outcome` `--apply` would produce for it (`created` /
+  `updated` / `unchanged` / `conflict`); `--apply` writes them. Each `conflict`
+  result also carries `differs`, a comma-separated list of the fields that differ
+  (`description`, `type`, `scope`, `applies_to`, `related`, `provenance`, `body`),
+  so the cause is visible without diffing files. `reconcile` reports the same rows.
+  `updated` means a provenance-only backfill. Marker/loop-guarded
   so engram's own output never round-trips. `import` against a disabled harness
   exits `2`. **Scope is derived, not defaulted:** a memory's scope resolves to
   `project:<repo>` when its source cwd (Claude: the import cwd; Codex: the Task

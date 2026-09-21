@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"path/filepath"
 	"strings"
 	"time"
@@ -146,9 +145,10 @@ func cmdReconcile(e *env, name string, _ []string) int {
 }
 
 // mergeImports simulates saving each harness's import candidates into the current
-// canonical set using store.Save's rule (new name -> created, identical ->
-// unchanged, differing name-collision -> conflict, keeping the existing memory),
-// without writing. The merged set it returns is what review and propagation run
+// canonical set using store.Plan, the rule store.Save applies (new name ->
+// created, identical -> unchanged, provenance-only difference -> updated with the
+// backfilled provenance, any other name-collision -> conflict keeping the
+// existing memory), without writing. The merged set it returns is what review and propagation run
 // against in both dry-run and apply, so the preview reflects what apply will do.
 // It also returns a per-harness import summary, whether anything conflicted or
 // was invalid (which maps to a non-zero exit), and any scope-preservation notes
@@ -182,14 +182,15 @@ func mergeImports(existing []*schema.CanonicalMemory, imports []importGather) (m
 				hadConflict = true
 				continue
 			}
-			outcome := simulateSave(byName[m.Name], m)
+			stored := byName[m.Name]
+			outcome, planned := store.Plan(stored, m)
 			switch outcome {
-			case store.Created:
-				add(m)
+			case store.Created, store.Updated:
+				add(planned) // Updated carries the backfilled provenance apply will write
 			case store.Conflict:
 				hadConflict = true
 			}
-			outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": string(outcome)})
+			outcomes = append(outcomes, outcomeEntry(m.Name, outcome, stored, m))
 		}
 		entries = append(entries, map[string]any{
 			"harness": imp.harness, "would_import": len(imp.result.Memories),
@@ -204,19 +205,15 @@ func mergeImports(existing []*schema.CanonicalMemory, imports []importGather) (m
 	return merged, entries, hadConflict, notes
 }
 
-// simulateSave mirrors store.Save(force=false) without touching disk: an absent
-// name is created, byte-identical rendered content is unchanged, and a differing
-// name-collision is a conflict (the existing memory is kept).
-func simulateSave(existing, candidate *schema.CanonicalMemory) store.Outcome {
-	if existing == nil {
-		return store.Created
+// outcomeEntry is the per-memory result row shared by every import surface
+// (dry-run, apply, reconcile). A conflict also names the differing fields in
+// `differs`, so the cause is visible without diffing files by hand.
+func outcomeEntry(name string, outcome store.Outcome, stored, cand *schema.CanonicalMemory) map[string]string {
+	entry := map[string]string{"name": name, "outcome": string(outcome)}
+	if outcome == store.Conflict && stored != nil {
+		entry["differs"] = strings.Join(store.Diff(stored, cand), ",")
 	}
-	er, err1 := existing.Render()
-	cr, err2 := candidate.Render()
-	if err1 == nil && err2 == nil && bytes.Equal(er, cr) {
-		return store.Unchanged
-	}
-	return store.Conflict
+	return entry
 }
 
 // importGather is one harness's read-only import result, before any canonical write.

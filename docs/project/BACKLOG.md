@@ -52,6 +52,13 @@ only; shipped items live in the git history.
   not `created`/`modified`, to keep render output deterministic and idempotent.
   A "preserve created, bump modified on change" policy would restore timestamps
   without breaking idempotency.
+- **No first-class refresh of canonical from an edited native.** A native memory
+  edited after import surfaces as a `conflict` (`differs: body`), and the only
+  ways to update canonical are `remember --force` per name or a `curate` `update`.
+  An `import --refresh <name>…` would make the common case one command, but a
+  blanket refresh is unsafe: it would revert a hand-edited canonical whose native
+  source is stale (e.g. a Codex consolidated file that has stopped updating), so
+  it should be per-name and show the body diff in the dry-run first.
 
 ## Surface not yet built
 

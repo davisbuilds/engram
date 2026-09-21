@@ -219,7 +219,8 @@ func cmdImport(e *env, name string, args []string) int {
 		// Dry-run: resolve scope against current canonical (unlocked — this is a
 		// projection, not a write) so the preview shows the scope apply will land on
 		// and any preservation notes. See decideImportScope.
-		for _, m := range res.Memories {
+		items := memoryItems(res.Memories)
+		for i, m := range res.Memories {
 			_, note, derr := resolveImportScope(s.cfg.CanonicalRoot, m, res.ScopeAuthoritative)
 			if derr != nil {
 				e.emit(name, false, base, warns, &RespError{Code: "load", Message: derr.Error()}, nil)
@@ -228,8 +229,20 @@ func cmdImport(e *env, name string, args []string) int {
 			if note != "" {
 				warns = append(warns, note)
 			}
+			// Say what apply would do with each candidate, not just that it exists.
+			stored, _, _, lerr := store.Load(s.cfg.CanonicalRoot, m.Name)
+			if lerr != nil {
+				e.emit(name, false, base, warns, &RespError{Code: "load", Message: lerr.Error()}, nil)
+				return exitError
+			}
+			outcome, _ := store.Plan(stored, m)
+			for k, v := range outcomeEntry(m.Name, outcome, stored, m) {
+				if k != "name" {
+					items[i][k] = v
+				}
+			}
 		}
-		base["memories"] = memoryItems(res.Memories)
+		base["memories"] = items
 		e.emit(name, true, base, warns, nil, nil)
 		return exitOK
 	}
@@ -260,6 +273,11 @@ func cmdImport(e *env, name string, args []string) int {
 		if note != "" {
 			warns = append(warns, note)
 		}
+		stored, _, _, lerr := store.Load(s.cfg.CanonicalRoot, m.Name)
+		if lerr != nil {
+			e.emit(name, false, base, warns, &RespError{Code: "load", Message: lerr.Error()}, nil)
+			return exitError
+		}
 		outcome, _, serr := store.Save(s.cfg.CanonicalRoot, m, force)
 		if serr != nil {
 			e.emit(name, false, base, nil, &RespError{Code: "save", Message: serr.Error()}, nil)
@@ -268,7 +286,7 @@ func cmdImport(e *env, name string, args []string) int {
 		if outcome == store.Conflict {
 			conflicts++
 		}
-		outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": string(outcome)})
+		outcomes = append(outcomes, outcomeEntry(m.Name, outcome, stored, m))
 	}
 	base["results"] = outcomes
 	if conflicts > 0 {
