@@ -84,7 +84,8 @@ engram [global flags] <command> [args]
     sync         Render canonical → harnesses. Dry-run; --apply to write.
     import       Reverse-sync a harness's native memory into canonical
                  (explicit, one-shot; dry-run, --apply to write; --all to
-                 sweep every Claude project slug, not just the cwd's).
+                 sweep every Claude project slug, not just the cwd's;
+                 --refresh <name> to overwrite a conflicting canonical).
     migrate      Adopt hand-authored native memory canonical supersedes,
                  converting it to engram-owned in place so a later sync
                  neither duplicates nor conflicts (dry-run; --apply to write;
@@ -147,8 +148,8 @@ explicit rather than ambient.
   as JSON on stdin via `--from-json -` (the agent path: construct once, pipe in).
   Refuses to overwrite a differing canonical of the same name → canonical-side
   `CONFLICT` (exit `3`), never silent data loss; `--force` overwrites
-  intentionally, and is the deterministic way to refresh a canonical memory whose
-  native source was edited after import. A difference confined to `provenance`
+  intentionally (to refresh a canonical memory from an edited native, prefer
+  `import --refresh`). A difference confined to `provenance`
   (where a memory came from, not what it says) is never a conflict: empty stored
   provenance fields are backfilled from the incoming memory, a populated field
   keeps its stored value, and incoming memory can never strip provenance. Every
@@ -174,7 +175,13 @@ explicit rather than ambient.
   result also carries `differs`, a comma-separated list of the fields that differ
   (`description`, `type`, `scope`, `applies_to`, `related`, `provenance`, `body`),
   so the cause is visible without diffing files. `reconcile` reports the same rows.
-  `updated` means a provenance-only backfill. Marker/loop-guarded
+  `updated` means a provenance-only backfill. **`--refresh <name>`** (repeatable, or
+  comma-separated) is the explicit, per-name way to take an edited native's content
+  into canonical: a named memory that conflicts is overwritten (reported as
+  `updated`, with `differs` recording what was replaced), everything else behaves
+  as without the flag, and a name matching no candidate exits `2` (`unknown_refresh`)
+  before any write. Read the dry-run first: canonical may be *ahead* of a stale
+  native (a curated merge), and `--refresh` would revert it. Marker/loop-guarded
   so engram's own output never round-trips. `import` against a disabled harness
   exits `2`. **Scope is derived, not defaulted:** a memory's scope resolves to
   `project:<repo>` when its source cwd (Claude: the import cwd; Codex: the Task

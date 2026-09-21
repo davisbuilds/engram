@@ -148,16 +148,23 @@ func cmdShare(e *env, name string, args []string) int {
 func cmdImport(e *env, name string, args []string) int {
 	var harness string
 	all := false
-	for _, a := range args {
+	refresh := map[string]bool{}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
 		switch {
 		case a == "--all":
 			all = true
+		case a == "--refresh" && i+1 < len(args):
+			i++
+			addRefresh(refresh, args[i])
+		case strings.HasPrefix(a, "--refresh="):
+			addRefresh(refresh, strings.TrimPrefix(a, "--refresh="))
 		case !strings.HasPrefix(a, "-") && harness == "":
 			harness = a
 		}
 	}
 	if harness == "" {
-		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram import <claude-code|codex> [--all] [--apply]"}, nil)
+		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram import <claude-code|codex> [--all] [--refresh <name>]… [--apply]"}, nil)
 		return exitUsage
 	}
 	s, rerr := e.newSession()
@@ -215,6 +222,16 @@ func cmdImport(e *env, name string, args []string) int {
 		warns = append(warns, fmt.Sprintf("%d source(s) could not be imported and were dropped; see data.dropped", len(res.Dropped)))
 	}
 
+	// A --refresh name that matches no candidate is a typo or a stale plan; refusing
+	// it beats silently refreshing nothing. Checked before any write.
+	if missing := unmatchedRefresh(refresh, res.Memories); len(missing) > 0 {
+		e.emit(name, false, base, warns, &RespError{
+			Code:    "unknown_refresh",
+			Message: "--refresh names no imported memory: " + strings.Join(missing, ", "),
+		}, nil)
+		return exitUsage
+	}
+
 	if !e.apply {
 		// Dry-run: resolve scope against current canonical (unlocked — this is a
 		// projection, not a write) so the preview shows the scope apply will land on
@@ -236,7 +253,11 @@ func cmdImport(e *env, name string, args []string) int {
 				return exitError
 			}
 			outcome, _ := store.Plan(stored, m)
-			for k, v := range outcomeEntry(m.Name, outcome, stored, m) {
+			entry := outcomeEntry(m.Name, outcome, stored, m)
+			if refresh[m.Name] && outcome == store.Conflict {
+				entry = refreshedEntry(m.Name, stored, m)
+			}
+			for k, v := range entry {
 				if k != "name" {
 					items[i][k] = v
 				}
@@ -278,6 +299,15 @@ func cmdImport(e *env, name string, args []string) int {
 			e.emit(name, false, base, warns, &RespError{Code: "load", Message: lerr.Error()}, nil)
 			return exitError
 		}
+		// --refresh names memories whose canonical content the operator has chosen
+		// to replace with the native's; only those are forced, and only if they
+		// actually conflict (the plan is taken before the write to record why).
+		wasConflict := false
+		if refresh[m.Name] {
+			pre, _ := store.Plan(stored, m)
+			wasConflict = pre == store.Conflict
+			force = force || wasConflict
+		}
 		outcome, _, serr := store.Save(s.cfg.CanonicalRoot, m, force)
 		if serr != nil {
 			e.emit(name, false, base, nil, &RespError{Code: "save", Message: serr.Error()}, nil)
@@ -285,6 +315,10 @@ func cmdImport(e *env, name string, args []string) int {
 		}
 		if outcome == store.Conflict {
 			conflicts++
+		}
+		if wasConflict && outcome == store.Updated {
+			outcomes = append(outcomes, refreshedEntry(m.Name, stored, m))
+			continue
 		}
 		outcomes = append(outcomes, outcomeEntry(m.Name, outcome, stored, m))
 	}

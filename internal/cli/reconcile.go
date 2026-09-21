@@ -2,6 +2,7 @@ package cli
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -203,6 +204,41 @@ func mergeImports(existing []*schema.CanonicalMemory, imports []importGather) (m
 		merged = append(merged, byName[n])
 	}
 	return merged, entries, hadConflict, notes
+}
+
+// addRefresh records the comma-separated names of one --refresh value.
+func addRefresh(set map[string]bool, csv string) {
+	for _, n := range strings.Split(csv, ",") {
+		if n = strings.TrimSpace(n); n != "" {
+			set[n] = true
+		}
+	}
+}
+
+// unmatchedRefresh returns the --refresh names that match no import candidate,
+// sorted for a stable message.
+func unmatchedRefresh(refresh map[string]bool, cands []*schema.CanonicalMemory) []string {
+	seen := make(map[string]bool, len(cands))
+	for _, m := range cands {
+		seen[m.Name] = true
+	}
+	var missing []string
+	for n := range refresh {
+		if !seen[n] {
+			missing = append(missing, n)
+		}
+	}
+	sort.Strings(missing)
+	return missing
+}
+
+// refreshedEntry is the result row for a conflict the operator chose to overwrite
+// with --refresh: the memory is `updated`, and `differs` records what was replaced.
+func refreshedEntry(name string, stored, cand *schema.CanonicalMemory) map[string]string {
+	return map[string]string{
+		"name": name, "outcome": string(store.Updated),
+		"differs": strings.Join(store.Diff(stored, cand), ","),
+	}
 }
 
 // outcomeEntry is the per-memory result row shared by every import surface
