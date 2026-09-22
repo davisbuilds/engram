@@ -52,6 +52,18 @@ only; shipped items live in the git history.
   not `created`/`modified`, to keep render output deterministic and idempotent.
   A "preserve created, bump modified on change" policy would restore timestamps
   without breaking idempotency.
+- **Canonical curation of imported memories is not durable (no tombstones).**
+  `curate` `remove` deletes a canonical file, but while the memory's native source
+  still exists the next `import` re-creates it as new; a `merge`/`update` on an
+  imported memory instead becomes a standing `conflict` against its stale native.
+  Either the operator must also clean up the native, or import needs a record of
+  deliberate removal (a tombstone list keyed by name + source) and a way to mark a
+  canonical memory as superseding its native so the conflict is not re-reported.
+- **`curate --apply` re-invokes the agent rather than applying a reviewed plan.**
+  The proposer is non-deterministic, so the plan committed by `--apply` can differ
+  from the one the operator inspected in the dry-run. A `--plan <file>` (emit the
+  validated plan from the dry-run, apply exactly that) would close the
+  preview→apply gap the other write commands already guarantee.
 
 ## Surface not yet built
 
