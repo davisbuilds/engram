@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -74,12 +76,14 @@ func (s *session) targets() ([]sync.Target, []string, *RespError) {
 		return nil, nil, &RespError{Code: "discover", Message: err.Error()}
 	}
 	warns := warnParseErrors(perrs)
+	keepStale, hwarns := staleHold(s.cfg.CanonicalRoot, perrs)
+	warns = append(warns, hwarns...)
 
 	var targets []sync.Target
 	if h := s.cfg.Harnesses[config.HarnessClaude]; h.Enabled() {
 		rel := scope.RelevantFor(mems, s.cwd, s.agentFor("claude"), s.host)
 		targets = append(targets, sync.ClaudeTarget{
-			MemoryDir: claudeMemoryDir(h.Home, s.cwd), Desired: rel,
+			MemoryDir: claudeMemoryDir(h.Home, s.cwd), Desired: rel, KeepStale: keepStale,
 		})
 		warns = append(warns, harnessWarnings(harness.CheckClaude(h.Home, true))...)
 	} else {
@@ -88,7 +92,7 @@ func (s *session) targets() ([]sync.Target, []string, *RespError) {
 	if h := s.cfg.Harnesses[config.HarnessCodex]; h.Enabled() {
 		rel := scope.RelevantFor(mems, s.cwd, s.agentFor("codex"), s.host)
 		targets = append(targets, sync.CodexTarget{
-			ExtensionDir: codexExtDir(h.Home), Desired: rel, Now: time.Now,
+			ExtensionDir: codexExtDir(h.Home), Desired: rel, Now: time.Now, KeepStale: keepStale,
 		})
 		warns = append(warns, harnessWarnings(harness.CheckCodex(h.Home, true))...)
 	} else {
@@ -327,7 +331,7 @@ func showClaude(dir string) []map[string]string {
 		if err != nil {
 			continue
 		}
-		if strings.Contains(string(data), "origin: "+marker.Origin) {
+		if sync.IsEngramOwned(data) {
 			items = append(items, map[string]string{"name": strings.TrimSuffix(e.Name(), ".md"), "path": path})
 		}
 	}
@@ -438,4 +442,20 @@ func conflictNextSteps(actions []sync.Action) []NextStep {
 		}
 	}
 	return steps
+}
+
+// staleHold reports whether STALE removals must be held back this run. A missing
+// canonical root or an unparseable canonical file means the desired set may omit
+// memories that still exist, so pruning their renders would delete live lessons.
+func staleHold(root string, perrs []discover.ParseError) (bool, []string) {
+	reason := ""
+	if _, err := os.Stat(root); errors.Is(err, os.ErrNotExist) {
+		reason = "canonical root " + root + " does not exist"
+	} else if len(perrs) > 0 {
+		reason = fmt.Sprintf("%d canonical file(s) failed to parse or validate", len(perrs))
+	}
+	if reason == "" {
+		return false, nil
+	}
+	return true, []string{"stale renders kept, not removed: " + reason}
 }

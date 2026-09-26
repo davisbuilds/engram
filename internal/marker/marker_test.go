@@ -88,3 +88,16 @@ func TestMarkersAreDistinct(t *testing.T) {
 		t.Error("Codex note marker matched the Claude index pattern")
 	}
 }
+
+// Only a line that ends with the marker is engram's; a hand-written line that
+// merely quotes it mid-sentence is the user's and must not be rewritten.
+func TestClaudeIndexNameRequiresTrailingMarker(t *testing.T) {
+	quoted := "- note: engram tags lines with " + ClaudeIndexMarker("x") + " so leave those alone"
+	if n, ok := ClaudeIndexName(quoted); ok {
+		t.Errorf("mid-line quote claimed as engram's %q", n)
+	}
+	owned := "- [x](x.md) — hook " + ClaudeIndexMarker("x") + " "
+	if n, ok := ClaudeIndexName(owned); !ok || n != "x" {
+		t.Errorf("rendered line (trailing space) = %q, %v; want x, true", n, ok)
+	}
+}

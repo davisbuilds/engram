@@ -100,7 +100,8 @@ engram [global flags] <command> [args]
                  (dry-run; --apply to write). The one command that runs an agent.
 
   Introspection (read-only, --json everywhere):
-    discover     Parse and list every canonical memory, with parse errors.
+    discover     Parse and list every canonical memory, with parse errors
+                 (schema violations and duplicate names included).
     list         List memories relevant to a given cwd / agent / host.
     audit        Report pending render Actions for a harness without writing.
     diff         Cross-state difference for each render target.
@@ -168,6 +169,14 @@ explicit rather than ambient.
   agent reading the index in a later session has that context inline. The header
   is added lazily (only when an entry is written) and removed once no engram
   entries remain, and it never triggers a re-sync on its own.
+  `STALE` removal is held back (with a warning) whenever the canonical view may
+  be incomplete: the canonical root is missing, or any canonical file fails to
+  parse or validate, or two files claim one name (every copy of that name is
+  withheld). A render whose canonical merely failed to load is kept until it
+  loads again. A target path that already exists as a hand-authored file (on a
+  case-insensitive filesystem, including a case variant of the name) is a
+  `CONFLICT`, never an overwrite. Only a `MEMORY.md` line that *ends* with the
+  `<!-- engram name=… -->` marker is engram's; a line quoting it mid-text is not.
 - **`audit`** — `sync`'s read-only projection: the `Action` list as data, always
   zero side effects.
 - **`import <harness>`** — reverse-sync, explicit and one-shot. Dry-run lists every

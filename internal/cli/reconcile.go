@@ -47,6 +47,8 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		return exitError
 	}
 	warns = append(warns, warnParseErrors(perrs)...)
+	keepStale, hwarns := staleHold(s.cfg.CanonicalRoot, perrs)
+	warns = append(warns, hwarns...)
 
 	// Simulate the imports against current canonical (same rule as store.Save:
 	// new name -> created, identical -> unchanged, differing name-collision ->
@@ -105,7 +107,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		})
 	}
 
-	targets, twarns := s.enricherTargets(merged)
+	targets, twarns := s.enricherTargets(merged, keepStale)
 	warns = append(warns, twarns...)
 	syncEntries := make([]map[string]any, 0, len(targets))
 	for _, tg := range targets {
@@ -291,19 +293,19 @@ func (s *session) gatherImports() ([]importGather, []string, *RespError) {
 // native originals it already holds. (Plain `sync` renders everything; the origin
 // filter is a reconcile-specific enricher policy, right for the same-machine
 // cross-harness case reconcile serves.)
-func (s *session) enricherTargets(mems []*schema.CanonicalMemory) ([]sync.Target, []string) {
+func (s *session) enricherTargets(mems []*schema.CanonicalMemory, keepStale bool) ([]sync.Target, []string) {
 	var targets []sync.Target
 	var warns []string
 	if h := s.cfg.Harnesses[config.HarnessClaude]; h.Enabled() {
 		rel := excludeOrigin(scope.RelevantFor(mems, s.cwd, s.agentFor("claude"), s.host), config.HarnessClaude)
-		targets = append(targets, sync.ClaudeTarget{MemoryDir: claudeMemoryDir(h.Home, s.cwd), Desired: rel})
+		targets = append(targets, sync.ClaudeTarget{MemoryDir: claudeMemoryDir(h.Home, s.cwd), Desired: rel, KeepStale: keepStale})
 		warns = append(warns, harnessWarnings(harness.CheckClaude(h.Home, true))...)
 	} else {
 		warns = append(warns, "claude-code disabled; skipped")
 	}
 	if h := s.cfg.Harnesses[config.HarnessCodex]; h.Enabled() {
 		rel := excludeOrigin(scope.RelevantFor(mems, s.cwd, s.agentFor("codex"), s.host), config.HarnessCodex)
-		targets = append(targets, sync.CodexTarget{ExtensionDir: codexExtDir(h.Home), Desired: rel, Now: time.Now})
+		targets = append(targets, sync.CodexTarget{ExtensionDir: codexExtDir(h.Home), Desired: rel, Now: time.Now, KeepStale: keepStale})
 		warns = append(warns, harnessWarnings(harness.CheckCodex(h.Home, true))...)
 	} else {
 		warns = append(warns, "codex disabled; skipped")

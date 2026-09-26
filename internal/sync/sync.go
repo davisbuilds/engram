@@ -69,6 +69,10 @@ type Target interface {
 type ClaudeTarget struct {
 	MemoryDir string
 	Desired   []*schema.CanonicalMemory
+	// KeepStale holds back STALE removals because Desired may be incomplete (the
+	// canonical root is missing or a canonical file failed to parse): an owned
+	// render absent from Desired might still have a live canonical source.
+	KeepStale bool
 }
 
 // Harness identifies this target's harness.
@@ -107,6 +111,10 @@ func (t ClaudeTarget) Plan() ([]Action, error) {
 		}
 		cur, exists := owned[m.Name]
 		switch {
+		case !exists && fileExists(path):
+			// The name matched neither map, yet the path resolves to a file: a
+			// case-folding filesystem is aliasing a hand-authored case variant.
+			actions = append(actions, Action{Conflict, m.Name, path, "target exists (as a case variant) and is not engram-owned"})
 		case !exists:
 			actions = append(actions, Action{Create, m.Name, path, ""})
 		default:
@@ -122,7 +130,7 @@ func (t ClaudeTarget) Plan() ([]Action, error) {
 		}
 	}
 	for name, cur := range owned {
-		if !desired[name] {
+		if !desired[name] && !t.KeepStale {
 			actions = append(actions, Action{Stale, name, cur.path, "canonical no longer renders here"})
 		}
 	}
@@ -213,7 +221,7 @@ func scanMemoryDir(dir string) (owned map[string]ownedFile, unmarked map[string]
 			return nil, nil, rerr
 		}
 		name := strings.TrimSuffix(e.Name(), ".md")
-		if isEngramOwned(content) {
+		if IsEngramOwned(content) {
 			owned[name] = ownedFile{content: content, path: path}
 		} else {
 			unmarked[name] = path
@@ -222,9 +230,9 @@ func scanMemoryDir(dir string) (owned map[string]ownedFile, unmarked map[string]
 	return owned, unmarked, nil
 }
 
-// isEngramOwned reports whether a memory file carries engram's origin marker in
+// IsEngramOwned reports whether a memory file carries engram's origin marker in
 // its frontmatter. A file without it is hand-authored and off-limits.
-func isEngramOwned(content []byte) bool {
+func IsEngramOwned(content []byte) bool {
 	front := frontmatterBytes(content)
 	if front == nil {
 		return false
@@ -243,7 +251,9 @@ func isEngramOwned(content []byte) bool {
 // frontmatterBytes returns the YAML between the opening and closing --- fences,
 // or nil when the content has no frontmatter.
 func frontmatterBytes(content []byte) []byte {
-	s := string(content)
+	// Line endings and a BOM are cosmetic; an editor or git autocrlf changing
+	// them must not flip an engram render to hand-authored.
+	s := strings.ReplaceAll(strings.TrimPrefix(string(content), "\ufeff"), "\r\n", "\n")
 	if !strings.HasPrefix(s, "---\n") {
 		return nil
 	}

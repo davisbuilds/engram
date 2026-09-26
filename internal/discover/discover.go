@@ -47,6 +47,11 @@ func Locate(root string) ([]Located, []ParseError, error) {
 			return nil
 		}
 		m, perr := schema.Parse(data)
+		if perr == nil {
+			// Parsing is lenient; the schema is what every consumer (scope
+			// matching, rendered commands, file names) relies on.
+			perr = m.Validate()
+		}
 		if perr != nil {
 			perrs = append(perrs, ParseError{Path: path, Err: perr})
 			return nil
@@ -60,7 +65,30 @@ func Locate(root string) ([]Located, []ParseError, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("walk %s: %w", root, err)
 	}
-	return located, perrs, nil
+	located, dups := withholdDuplicates(located)
+	return located, append(perrs, dups...), nil
+}
+
+// withholdDuplicates removes every memory whose name another file also claims,
+// reporting each copy. Keeping any one would let a name-keyed mutation (remove,
+// share) act on it and silently orphan the rest.
+func withholdDuplicates(located []Located) ([]Located, []ParseError) {
+	paths := map[string][]string{}
+	for _, l := range located {
+		paths[l.Memory.Name] = append(paths[l.Memory.Name], l.Path)
+	}
+	var (
+		kept  []Located
+		perrs []ParseError
+	)
+	for _, l := range located {
+		if others := paths[l.Memory.Name]; len(others) > 1 {
+			perrs = append(perrs, ParseError{Path: l.Path, Err: fmt.Errorf("duplicate name %q, claimed by %d files: %s", l.Memory.Name, len(others), strings.Join(others, ", "))})
+			continue
+		}
+		kept = append(kept, l)
+	}
+	return kept, perrs
 }
 
 // Discover recursively parses every *.md under root into a CanonicalMemory,

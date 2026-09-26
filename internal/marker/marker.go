@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	claudeIndexRe = regexp.MustCompile(`<!-- engram name=([a-z0-9-]+) -->`)
+	claudeIndexRe = regexp.MustCompile(`<!-- engram name=([a-z0-9-]+) -->\s*$`)
 	codexNoteRe   = regexp.MustCompile(`<!-- engram-sync canonical=([a-z0-9-]+) scope=(\S+) extension=engram -->`)
 )
 

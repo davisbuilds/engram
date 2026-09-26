@@ -66,3 +66,43 @@ func TestDiscoverMissingRootIsEmpty(t *testing.T) {
 		t.Errorf("missing root should be empty; got %d mems, %d errs", len(mems), len(perrs))
 	}
 }
+
+// A file that parses but violates the schema (here an empty project repo, which
+// scope matching would read as "every cwd") is reported, never used.
+func TestDiscoverRejectsSchemaInvalidMemory(t *testing.T) {
+	root := t.TempDir()
+	writeMem(t, filepath.Join(root, "ok.md"), "ok-mem")
+	bad := "---\nname: bad-mem\ndescription: d\ntype: lesson\nscope: \"project:\"\n---\nbody\n"
+	if err := os.WriteFile(filepath.Join(root, "bad.md"), []byte(bad), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mems, perrs, err := Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mems) != 1 || mems[0].Name != "ok-mem" {
+		t.Errorf("memories = %v, want only ok-mem", mems)
+	}
+	if len(perrs) != 1 || filepath.Base(perrs[0].Path) != "bad.md" {
+		t.Errorf("parse errors = %v, want one for bad.md", perrs)
+	}
+}
+
+// Two files claiming one name would let remove or share act on one copy and
+// orphan the other; every copy is withheld and reported instead.
+func TestDiscoverWithholdsEveryCopyOfADuplicateName(t *testing.T) {
+	root := t.TempDir()
+	writeMem(t, filepath.Join(root, "a.md"), "dup-mem")
+	writeMem(t, filepath.Join(root, "sub", "b.md"), "dup-mem")
+	writeMem(t, filepath.Join(root, "c.md"), "c-mem")
+	mems, perrs, err := Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mems) != 1 || mems[0].Name != "c-mem" {
+		t.Errorf("memories = %v, want only c-mem", mems)
+	}
+	if len(perrs) != 2 {
+		t.Errorf("parse errors = %v, want one per dup-mem copy", perrs)
+	}
+}
