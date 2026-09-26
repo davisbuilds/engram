@@ -4,7 +4,12 @@ Last updated: September 26, 2026
 
 ## Repository Merge Settings
 
-Configured on GitHub repository `davisbuilds/engram` (public):
+Observed September 26, 2026 on GitHub repository `davisbuilds/engram` (public).
+Recheck current settings with:
+
+```bash
+gh api repos/davisbuilds/engram --jq '{allow_squash_merge, allow_merge_commit, allow_rebase_merge, delete_branch_on_merge, squash_merge_commit_title, squash_merge_commit_message}'
+```
 
 - `allow_squash_merge`: `true`
 - `allow_merge_commit`: `false`
@@ -68,9 +73,7 @@ required review if the contributor set grows.
 1. Create short-lived feature branches from `main`.
 2. Open PRs early; keep them focused.
 3. Merge only with **Squash and merge** after CI passes.
-4. Periodically prune local branches:
-
-```bash
-git fetch --prune
-git branch --merged main | grep -v ' main$' | xargs -n 1 git branch -d
-```
+4. Before deleting local branches, inspect `git worktree list` and preserve any
+   attached worktree or ongoing work. Confirm a branch's changes were merged or
+   are equivalent to the squash commit on `main`; squash merges do not preserve
+   branch ancestry. Delete only explicitly named, disposable branches.
