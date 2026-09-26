@@ -56,11 +56,15 @@ func TestRunSyncLifecycle(t *testing.T) {
 	dir := t.TempDir()
 	canon := filepath.Join(dir, "canonical")
 	claude := filepath.Join(dir, "claude")
+	codex := filepath.Join(dir, "codex")
 	writeFile(t, filepath.Join(canon, "m.md"),
 		"---\nname: a-mem\ndescription: d\ntype: lesson\nscope: global\n---\nbody\n")
 	cfg := filepath.Join(dir, "c.yaml")
+	// Every enabled harness needs an explicit home: an unset one defaults to the
+	// real ~/.codex, where this apply once deleted the user's engram notes.
 	writeFile(t, cfg,
-		"canonical_root: "+canon+"\nharnesses:\n  claude-code:\n    home: "+claude+"\n")
+		"canonical_root: "+canon+"\nharnesses:\n  claude-code:\n    home: "+claude+
+			"\n  codex:\n    home: "+codex+"\n")
 
 	defer silenceStdout(t)()
 	base := []string{"--config", cfg, "--cwd", "/work/x", "--json"}
