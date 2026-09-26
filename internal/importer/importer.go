@@ -257,12 +257,13 @@ func splitTaskGroups(s string) []taskGroup {
 		}
 		buf = nil
 	}
-	fence := "" // the open fence's marker (``` or ~~~), or "" outside a fence
+	fence := "" // the open fence's full marker run (e.g. ```` ````), or "" outside one
 	for _, ln := range strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n") {
 		// A heading quoted inside a code fence is content, not a new group.
-		if t := strings.TrimSpace(ln); fence == "" && (strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~")) {
-			fence = t[:3]
-		} else if fence != "" && strings.HasPrefix(t, fence) {
+		t := strings.TrimSpace(ln)
+		if fence == "" {
+			fence = fenceRun(t)
+		} else if run := fenceRun(t); run == t && run[0] == fence[0] && len(run) >= len(fence) {
 			fence = ""
 		}
 		if fence == "" && strings.HasPrefix(ln, hdr) {
@@ -286,4 +287,21 @@ func splitTaskGroups(s string) []taskGroup {
 // canonical is the intended backstop once real consolidated fixtures exist.
 func isEngramOrigin(body string) bool {
 	return strings.Contains(body, "extension=engram") || strings.Contains(body, "extensions/engram/")
+}
+
+// fenceRun returns the leading run of three or more backticks or tildes that
+// opens or closes a Markdown code fence, or "" when t does not start one. A
+// fence closes only on a bare run of the same character at least as long.
+func fenceRun(t string) string {
+	if len(t) < 3 || (t[0] != '`' && t[0] != '~') {
+		return ""
+	}
+	n := 0
+	for n < len(t) && t[n] == t[0] {
+		n++
+	}
+	if n < 3 {
+		return ""
+	}
+	return t[:n]
 }
