@@ -50,7 +50,7 @@ func TestClaudeContentPreservesUnknownKeys(t *testing.T) {
 	if strings.Contains(s, "old-free-text") || strings.Contains(s, "stale desc") {
 		t.Errorf("stale managed values not replaced:\n%s", s)
 	}
-	if !isEngramOwned(got) {
+	if !IsEngramOwned(got) {
 		t.Errorf("result is not engram-owned:\n%s", s)
 	}
 }
@@ -86,7 +86,7 @@ func TestClaudeContentNoFrontmatterFallsBackToRender(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claudeContent: %v", err)
 	}
-	if !isEngramOwned(got) || !strings.Contains(string(got), "name: x") {
+	if !IsEngramOwned(got) || !strings.Contains(string(got), "name: x") {
 		t.Errorf("fallback render wrong:\n%s", got)
 	}
 }
@@ -207,7 +207,7 @@ func TestClaudeContentReplacesNonMappingMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claudeContent: %v", err)
 	}
-	if !isEngramOwned(got) {
+	if !IsEngramOwned(got) {
 		t.Errorf("result not parseable/engram-owned (duplicate metadata key?):\n%s", got)
 	}
 	// The unrelated top-level key still survives the metadata replacement.

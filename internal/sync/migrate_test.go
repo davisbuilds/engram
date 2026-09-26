@@ -343,7 +343,7 @@ func assertEngramOwned(t *testing.T, dir, name string) {
 	if err != nil {
 		t.Fatalf("read %s.md: %v", name, err)
 	}
-	if !isEngramOwned(content) {
+	if !IsEngramOwned(content) {
 		t.Errorf("%s.md is not engram-owned after adopt", name)
 	}
 }

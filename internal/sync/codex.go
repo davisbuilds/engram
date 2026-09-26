@@ -24,6 +24,8 @@ type CodexTarget struct {
 	Desired      []*schema.CanonicalMemory
 	// Now supplies the timestamp for new note filenames; nil means time.Now.
 	Now func() time.Time
+	// KeepStale holds back STALE removals; see ClaudeTarget.KeepStale.
+	KeepStale bool
 }
 
 // Harness identifies this target's harness.
@@ -76,7 +78,7 @@ func (t CodexTarget) Plan() ([]Action, error) {
 		}
 	}
 	for name, cur := range owned {
-		if !desired[name] {
+		if !desired[name] && !t.KeepStale {
 			actions = append(actions, Action{Stale, name, cur.path, "canonical no longer renders here"})
 		}
 	}

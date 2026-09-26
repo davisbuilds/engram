@@ -84,3 +84,11 @@ func TestCwdGlobPrefixMatch(t *testing.T) {
 		t.Error("cwd outside /work/** should not match")
 	}
 }
+
+// Every absolute path splits to a leading empty segment, so an empty repo name
+// must never count as a match.
+func TestEmptySegmentNeverMatches(t *testing.T) {
+	if pathHasSegment("/any/where", "") {
+		t.Error("empty segment matched an absolute path")
+	}
+}

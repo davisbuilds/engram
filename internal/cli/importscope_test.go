@@ -107,7 +107,7 @@ func TestMergeImportsProvisionalPreservesScope(t *testing.T) {
 		result:  importer.Result{Memories: []*schema.CanonicalMemory{cand}, ScopeAuthoritative: false},
 	}}
 
-	merged, entries, hadConflict, notes := mergeImports(existing, imports)
+	merged, entries, hadConflict, notes := mergeImports(existing, imports, nil)
 
 	if hadConflict {
 		t.Errorf("preserving scope should not register a conflict")

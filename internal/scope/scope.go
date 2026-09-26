@@ -84,6 +84,9 @@ func cwdMatch(globs []string, cwd string) bool {
 }
 
 func pathHasSegment(cwd, seg string) bool {
+	if seg == "" {
+		return false
+	}
 	for _, p := range strings.Split(cwd, string(filepath.Separator)) {
 		if p == seg {
 			return true

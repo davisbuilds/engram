@@ -187,7 +187,9 @@ func (t ClaudeMigrateTarget) Apply() (MigrateResult, error) {
 			// duplicates. removeUnmarkedIndexLine handles the exact-name case too:
 			// the pre-adoption index line for this name is hand-authored, and the
 			// marked-only removeIndexLine would leave it in place.
-			if a.Source != a.Name {
+			// On a case-folding filesystem a case-only rename leaves one file under
+			// both names; removing the old name would delete the adoption.
+			if a.Source != a.Name && !sameFile(newPath, a.Path) {
 				if rmErr := os.Remove(a.Path); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
 					return res, rmErr
 				}
@@ -276,4 +278,17 @@ func sortMigrateActions(a []MigrateAction) {
 		}
 		return a[i].Source < a[j].Source
 	})
+}
+
+// sameFile reports whether two paths resolve to the same file.
+func sameFile(a, b string) bool {
+	ai, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	bi, err := os.Stat(b)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(ai, bi)
 }

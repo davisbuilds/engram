@@ -47,6 +47,8 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		return exitError
 	}
 	warns = append(warns, warnParseErrors(perrs)...)
+	keepStale, hwarns := staleHold(s.cfg.CanonicalRoot, perrs)
+	warns = append(warns, hwarns...)
 
 	// Simulate the imports against current canonical (same rule as store.Save:
 	// new name -> created, identical -> unchanged, differing name-collision ->
@@ -54,7 +56,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 	// propagation run against in *both* dry-run and apply, so the preview reflects
 	// what apply will do rather than the pre-import canonical.
 	exit := exitOK
-	merged, importEntries, hadConflict, scopeNotes := mergeImports(mems, imports)
+	merged, importEntries, hadConflict, scopeNotes := mergeImports(mems, imports, withheldNames(perrs))
 	if hadConflict {
 		exit = worseExit(exit, exitConflicts)
 	}
@@ -105,7 +107,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		})
 	}
 
-	targets, twarns := s.enricherTargets(merged)
+	targets, twarns := s.enricherTargets(merged, keepStale)
 	warns = append(warns, twarns...)
 	syncEntries := make([]map[string]any, 0, len(targets))
 	for _, tg := range targets {
@@ -155,7 +157,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 // was invalid (which maps to a non-zero exit), and any scope-preservation notes
 // (a provisional import held back from re-scoping an existing memory), which the
 // caller surfaces as warnings.
-func mergeImports(existing []*schema.CanonicalMemory, imports []importGather) (merged []*schema.CanonicalMemory, entries []map[string]any, hadConflict bool, notes []string) {
+func mergeImports(existing []*schema.CanonicalMemory, imports []importGather, withheld map[string]string) (merged []*schema.CanonicalMemory, entries []map[string]any, hadConflict bool, notes []string) {
 	byName := make(map[string]*schema.CanonicalMemory, len(existing))
 	order := make([]string, 0, len(existing))
 	add := func(m *schema.CanonicalMemory) {
@@ -170,6 +172,13 @@ func mergeImports(existing []*schema.CanonicalMemory, imports []importGather) (m
 	for _, imp := range imports {
 		outcomes := make([]map[string]string, 0, len(imp.result.Memories))
 		for _, m := range imp.result.Memories {
+			// A withheld canonical file still owns its name; store.Save refuses it,
+			// so the preview must too, and it must not join the merged set.
+			if reason, ok := withheld[m.Name]; ok {
+				outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": string(store.Conflict), "withheld": reason})
+				hadConflict = true
+				continue
+			}
 			// Resolve scope against existing canonical before simulating the save, so
 			// a reconstructed-path import never silently re-scopes a memory and the
 			// preview matches what apply (which reuses these candidates) will do.
@@ -291,19 +300,19 @@ func (s *session) gatherImports() ([]importGather, []string, *RespError) {
 // native originals it already holds. (Plain `sync` renders everything; the origin
 // filter is a reconcile-specific enricher policy, right for the same-machine
 // cross-harness case reconcile serves.)
-func (s *session) enricherTargets(mems []*schema.CanonicalMemory) ([]sync.Target, []string) {
+func (s *session) enricherTargets(mems []*schema.CanonicalMemory, keepStale bool) ([]sync.Target, []string) {
 	var targets []sync.Target
 	var warns []string
 	if h := s.cfg.Harnesses[config.HarnessClaude]; h.Enabled() {
 		rel := excludeOrigin(scope.RelevantFor(mems, s.cwd, s.agentFor("claude"), s.host), config.HarnessClaude)
-		targets = append(targets, sync.ClaudeTarget{MemoryDir: claudeMemoryDir(h.Home, s.cwd), Desired: rel})
+		targets = append(targets, sync.ClaudeTarget{MemoryDir: claudeMemoryDir(h.Home, s.cwd), Desired: rel, KeepStale: keepStale})
 		warns = append(warns, harnessWarnings(harness.CheckClaude(h.Home, true))...)
 	} else {
 		warns = append(warns, "claude-code disabled; skipped")
 	}
 	if h := s.cfg.Harnesses[config.HarnessCodex]; h.Enabled() {
 		rel := excludeOrigin(scope.RelevantFor(mems, s.cwd, s.agentFor("codex"), s.host), config.HarnessCodex)
-		targets = append(targets, sync.CodexTarget{ExtensionDir: codexExtDir(h.Home), Desired: rel, Now: time.Now})
+		targets = append(targets, sync.CodexTarget{ExtensionDir: codexExtDir(h.Home), Desired: rel, Now: time.Now, KeepStale: keepStale})
 		warns = append(warns, harnessWarnings(harness.CheckCodex(h.Home, true))...)
 	} else {
 		warns = append(warns, "codex disabled; skipped")
@@ -335,4 +344,18 @@ func originHarness(m *schema.CanonicalMemory) string {
 		return config.HarnessCodex
 	}
 	return ""
+}
+
+// withheldNames maps each name a withheld canonical file claims to why it was
+// withheld. An unparseable file's name is taken from its <name>.md filename.
+func withheldNames(perrs []discover.ParseError) map[string]string {
+	out := map[string]string{}
+	for _, pe := range perrs {
+		name := pe.Name
+		if name == "" {
+			name = strings.TrimSuffix(filepath.Base(pe.Path), ".md")
+		}
+		out[name] = pe.Path + ": " + pe.Err.Error()
+	}
+	return out
 }
