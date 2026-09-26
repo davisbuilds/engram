@@ -103,6 +103,7 @@ func Run(args []string) int {
 	e := &env{jsonMode: !isTTY(os.Stdout), runner: agentexec.ExecRunner}
 
 	var sub string
+	help := false
 	rest := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -117,15 +118,16 @@ func Run(args []string) int {
 			e.apply = true
 		case a == "--version":
 			return cmdVersion(e, "version", nil)
-		case (a == "-h" || a == "--help") && sub == "":
-			return e.usage(exitOK)
-		case strings.HasPrefix(a, "--config"):
+		case a == "-h" || a == "--help":
+			// Help wins wherever it appears; it never runs the command.
+			help = true
+		case isFlag(a, "--config"):
 			e.config, i = flagValue(args, i)
-		case strings.HasPrefix(a, "--cwd"):
+		case isFlag(a, "--cwd"):
 			e.cwd, i = flagValue(args, i)
-		case strings.HasPrefix(a, "--agent"):
+		case isFlag(a, "--agent"):
 			e.agent, i = flagValue(args, i)
-		case strings.HasPrefix(a, "--host"):
+		case isFlag(a, "--host"):
 			e.host, i = flagValue(args, i)
 		case sub == "" && !strings.HasPrefix(a, "-"):
 			sub = a
@@ -134,7 +136,7 @@ func Run(args []string) int {
 		}
 	}
 
-	if sub == "" || sub == "help" {
+	if help || sub == "" || sub == "help" {
 		return e.usage(exitOK)
 	}
 	for _, c := range commands() {
@@ -293,4 +295,9 @@ func flagValue(args []string, i int) (string, int) {
 		return args[i+1], i + 1
 	}
 	return "", i
+}
+
+// isFlag reports whether a is the value flag name, as `name` or `name=value`.
+func isFlag(a, name string) bool {
+	return a == name || strings.HasPrefix(a, name+"=")
 }
