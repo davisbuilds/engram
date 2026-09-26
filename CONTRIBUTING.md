@@ -70,12 +70,10 @@ documented exit codes, or bump `schemaVersion` and update [`docs/cli.md`](docs/c
 
 ## Local Branch Cleanup
 
-Run periodically:
-
-```bash
-git fetch --prune
-git branch --merged main | grep -v ' main$' | xargs -n 1 git branch -d
-```
+Follow the preservation-aware cleanup guidance in
+[Git history and branch hygiene](docs/project/GIT_HISTORY_POLICY.md#recommended-ongoing-hygiene).
+Inspect attached worktrees and confirm merged or squash-equivalent changes before
+deleting explicitly named, disposable branches.
 
 ## Documentation Hygiene
 
