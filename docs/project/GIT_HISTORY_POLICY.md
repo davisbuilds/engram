@@ -1,10 +1,15 @@
 # Git History and Branch Hygiene
 
-Last updated: September 1, 2026
+Last updated: September 26, 2026
 
 ## Repository Merge Settings
 
-Configured on GitHub repository `davisbuilds/engram` (public):
+Observed September 26, 2026 on GitHub repository `davisbuilds/engram` (public).
+Recheck current settings with:
+
+```bash
+gh api repos/davisbuilds/engram --jq '{allow_squash_merge, allow_merge_commit, allow_rebase_merge, delete_branch_on_merge, squash_merge_commit_title, squash_merge_commit_message}'
+```
 
 - `allow_squash_merge`: `true`
 - `allow_merge_commit`: `false`
@@ -22,6 +27,19 @@ Result:
 ## Merge Strategy
 
 Squash-merge only. All other merge strategies are disabled at the repository level.
+
+## Release History
+
+Keep squash-only merges. PR titles follow Conventional Commits because they
+become `main` commit titles. The required `build-test-lint` job in
+`.github/workflows/ci.yml` checks that syntax, including after PR title edits;
+the maintainer still classifies each change correctly and reviews breaking-change
+notes. Release Please owns version selection, changelog updates, release tags,
+and GitHub Releases; see [release operations](../releases.md).
+
+The release workflow runs only after successful push CI on current `main`.
+Release PRs must pass the normal required `build-test-lint` check before merge.
+The GitHub App token lets their pull-request events trigger normal CI.
 
 ## CI Gates
 
@@ -56,9 +74,7 @@ required review if the contributor set grows.
 1. Create short-lived feature branches from `main`.
 2. Open PRs early; keep them focused.
 3. Merge only with **Squash and merge** after CI passes.
-4. Periodically prune local branches:
-
-```bash
-git fetch --prune
-git branch --merged main | grep -v ' main$' | xargs -n 1 git branch -d
-```
+4. Before deleting local branches, inspect `git worktree list` and preserve any
+   attached worktree or ongoing work. Confirm a branch's changes were merged or
+   are equivalent to the squash commit on `main`; squash merges do not preserve
+   branch ancestry. Delete only explicitly named, disposable branches.

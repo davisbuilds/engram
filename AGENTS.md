@@ -9,6 +9,7 @@ is the intelligence. See `README.md` for the user-facing overview.
 
 - `docs/cli.md` — the CLI interface contract: command tree, response envelope,
   exit codes, scope model, configuration, example invocations.
+- `docs/releases.md` — release PRs, version policy, build provenance, and activation.
 - `docs/headless.md` — how a headless agent drives engram: `next_steps` leads and
   the `curate` proposer/applier loop.
 - `docs/project/BACKLOG.md` — future-only friction points and deferred follow-ups noted
@@ -50,6 +51,10 @@ is the intelligence. See `README.md` for the user-facing overview.
 
 ## Conventions
 
+- **Release Please owns releases.** Use Conventional Commit PR titles (squash
+  merge titles become the commits parsed for release). Follow `docs/releases.md`;
+  do not create competing release tags. `go.mod` declares the Go language version,
+  not the engram application version. Preserve Git-derived build provenance.
 - **Zero external dependencies** beyond `gopkg.in/yaml.v3`. Prefer the standard
   library. Match the house style: small packages with one responsibility each,
   deterministic output, atomic temp-then-rename writes.

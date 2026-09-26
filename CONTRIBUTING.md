@@ -24,7 +24,16 @@ Use descriptive prefixes:
 ## Commit Guidance
 
 - Keep commits logical and atomic while working on the branch.
-- Use clear, imperative commit messages.
+- Use Conventional Commit PR titles: `fix(import): preserve scope`,
+  `feat: add a renderer`, or `feat!: change the CLI contract`. The PR title
+  becomes the squash commit title, so the title check protects release parsing.
+- For a breaking change, use `!` in the title or a `BREAKING CHANGE:` footer in
+  the PR body, which becomes the squash commit body. Describe the migration.
+- Ordinary `docs`, `test`, `chore`, `build`, `ci`, `style`, and `refactor` changes
+  do not trigger releases. `perf`, `fix`, and `revert` produce patches; `feat` produces a
+  minor. Breaking changes produce a minor before 1.0 and a major afterward.
+- Review the generated release PR and merge it through the same green CI gate.
+  See [release operations](docs/releases.md).
 - It is fine to have multiple commits in one PR; squash merge will combine them on `main`.
 
 ## Public-Repository Hygiene
@@ -61,12 +70,10 @@ documented exit codes, or bump `schemaVersion` and update [`docs/cli.md`](docs/c
 
 ## Local Branch Cleanup
 
-Run periodically:
-
-```bash
-git fetch --prune
-git branch --merged main | grep -v ' main$' | xargs -n 1 git branch -d
-```
+Follow the preservation-aware cleanup guidance in
+[Git history and branch hygiene](docs/project/GIT_HISTORY_POLICY.md#recommended-ongoing-hygiene).
+Inspect attached worktrees and confirm merged or squash-equivalent changes before
+deleting explicitly named, disposable branches.
 
 ## Documentation Hygiene
 
