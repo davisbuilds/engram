@@ -238,6 +238,9 @@ func cmdImport(e *env, name string, args []string) int {
 		// projection, not a write) so the preview shows the scope apply will land on
 		// and any preservation notes. See decideImportScope.
 		items := make([]map[string]string, 0, len(res.Memories))
+		// Apply saves candidates in order, so a later candidate sharing a name
+		// meets what an earlier one wrote; the preview threads the same state.
+		batch := map[string]*schema.CanonicalMemory{}
 		for _, m := range res.Memories {
 			if row, ok := withheldRow(s.cfg.CanonicalRoot, m); ok {
 				items = append(items, row)
@@ -260,7 +263,16 @@ func cmdImport(e *env, name string, args []string) int {
 				e.emit(name, false, base, warns, &RespError{Code: "load", Message: lerr.Error()}, nil)
 				return exitError
 			}
-			outcome, _ := store.Plan(stored, m)
+			if prev, ok := batch[m.Name]; ok {
+				stored = prev
+			}
+			outcome, planned := store.Plan(stored, m)
+			if outcome == store.Created || outcome == store.Updated || (outcome == store.Conflict && (force || refresh[m.Name])) {
+				if outcome == store.Conflict {
+					planned = m // a forced or refreshed conflict writes the candidate
+				}
+				batch[m.Name] = planned
+			}
 			entry := outcomeEntry(m.Name, outcome, stored, m)
 			switch {
 			case refresh[m.Name] && outcome == store.Conflict:
