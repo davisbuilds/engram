@@ -5,6 +5,8 @@ package store
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -33,11 +35,20 @@ func Save(root string, m *schema.CanonicalMemory, force bool) (Outcome, string, 
 		return "", "", err
 	}
 	existing, path, found, err := Load(root, m.Name)
+	if errors.Is(err, ErrWithheld) {
+		// A file claims this name but discovery withheld it: refuse, even
+		// with force, rather than overwrite or add another copy.
+		return Conflict, path, nil
+	}
 	if err != nil {
 		return "", "", err
 	}
 	if !found {
 		p := filepath.Join(root, m.Name+".md")
+		if _, serr := os.Lstat(p); serr == nil {
+			// Something already occupies the path discovery did not index.
+			return Conflict, p, nil
+		}
 		if err := writeAtomic(p, rendered); err != nil {
 			return "", p, err
 		}
@@ -176,12 +187,22 @@ func Delete(root, name string) (bool, error) {
 	return true, nil
 }
 
+// ErrWithheld reports that a canonical file claims the name but discovery
+// withheld it (it failed to parse or validate, or another file shares its name).
+// The memory is not absent, so no writer may treat it as free to create.
+var ErrWithheld = errors.New("canonical memory withheld by discovery")
+
 // Load returns the canonical memory named name, its file path, and whether it was
-// found.
+// found. A withheld file claiming the name is an ErrWithheld error, not "absent".
 func Load(root, name string) (*schema.CanonicalMemory, string, bool, error) {
-	located, _, err := discover.Locate(root)
+	located, perrs, err := discover.Locate(root)
 	if err != nil {
 		return nil, "", false, err
+	}
+	for _, pe := range perrs {
+		if pe.Name == name || (pe.Name == "" && filepath.Base(pe.Path) == name+".md") {
+			return nil, pe.Path, false, fmt.Errorf("%w: %s: %v", ErrWithheld, pe.Path, pe.Err)
+		}
 	}
 	for _, l := range located {
 		if l.Memory.Name == name {

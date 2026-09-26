@@ -16,6 +16,9 @@ import (
 // ParseError records a single file that could not be read or parsed.
 type ParseError struct {
 	Path string
+	// Name is the memory name when the file parsed but was withheld (it failed
+	// validation or shares its name); empty when the file did not parse.
+	Name string
 	Err  error
 }
 
@@ -47,13 +50,14 @@ func Locate(root string) ([]Located, []ParseError, error) {
 			return nil
 		}
 		m, perr := schema.Parse(data)
-		if perr == nil {
-			// Parsing is lenient; the schema is what every consumer (scope
-			// matching, rendered commands, file names) relies on.
-			perr = m.Validate()
-		}
 		if perr != nil {
 			perrs = append(perrs, ParseError{Path: path, Err: perr})
+			return nil
+		}
+		// Parsing is lenient; the schema is what every consumer (scope
+		// matching, rendered commands, file names) relies on.
+		if verr := m.Validate(); verr != nil {
+			perrs = append(perrs, ParseError{Path: path, Name: m.Name, Err: verr})
 			return nil
 		}
 		located = append(located, Located{Memory: m, Path: path})
@@ -83,7 +87,7 @@ func withholdDuplicates(located []Located) ([]Located, []ParseError) {
 	)
 	for _, l := range located {
 		if others := paths[l.Memory.Name]; len(others) > 1 {
-			perrs = append(perrs, ParseError{Path: l.Path, Err: fmt.Errorf("duplicate name %q, claimed by %d files: %s", l.Memory.Name, len(others), strings.Join(others, ", "))})
+			perrs = append(perrs, ParseError{Path: l.Path, Name: l.Memory.Name, Err: fmt.Errorf("duplicate name %q, claimed by %d files: %s", l.Memory.Name, len(others), strings.Join(others, ", "))})
 			continue
 		}
 		kept = append(kept, l)

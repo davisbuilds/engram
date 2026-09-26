@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -238,6 +239,10 @@ func cmdImport(e *env, name string, args []string) int {
 		// and any preservation notes. See decideImportScope.
 		items := make([]map[string]string, 0, len(res.Memories))
 		for _, m := range res.Memories {
+			if row, ok := withheldRow(s.cfg.CanonicalRoot, m); ok {
+				items = append(items, row)
+				continue
+			}
 			force, note, derr := resolveImportScope(s.cfg.CanonicalRoot, m, res.ScopeAuthoritative)
 			if derr != nil {
 				e.emit(name, false, base, warns, &RespError{Code: "load", Message: derr.Error()}, nil)
@@ -288,6 +293,11 @@ func cmdImport(e *env, name string, args []string) int {
 	for _, m := range res.Memories {
 		if verr := m.Validate(); verr != nil {
 			outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": "invalid", "error": verr.Error()})
+			continue
+		}
+		if row, ok := withheldRow(s.cfg.CanonicalRoot, m); ok {
+			outcomes = append(outcomes, row)
+			conflicts++
 			continue
 		}
 		// Resolve scope per candidate *inside* the lock so a forced scope-only
@@ -370,4 +380,15 @@ func readInput(spec string) ([]byte, error) {
 		return io.ReadAll(os.Stdin)
 	}
 	return os.ReadFile(spec)
+}
+
+// withheldRow reports a candidate whose name a withheld canonical file claims
+// (unparseable, invalid or duplicated) as a conflict row. That file still owns
+// the name, so the import neither writes it nor aborts the rest of the batch.
+func withheldRow(root string, m *schema.CanonicalMemory) (map[string]string, bool) {
+	_, _, _, err := store.Load(root, m.Name)
+	if !errors.Is(err, store.ErrWithheld) {
+		return nil, false
+	}
+	return map[string]string{"name": m.Name, "outcome": string(store.Conflict), "withheld": err.Error()}, true
 }

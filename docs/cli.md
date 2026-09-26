@@ -184,7 +184,11 @@ explicit rather than ambient.
   `updated` / `unchanged` / `conflict`); `--apply` writes them. Each `conflict`
   result also carries `differs`, a comma-separated list of the fields that differ
   (`description`, `type`, `scope`, `applies_to`, `related`, `provenance`, `body`),
-  so the cause is visible without diffing files. `reconcile` reports the same rows.
+  so the cause is visible without diffing files. A `conflict` carrying `withheld`
+  instead means a canonical file claims the name but discovery withheld it (it
+  fails to parse or validate, or another file shares the name): that memory is
+  never written, even with `--force` or `--refresh`, until the file is fixed, and
+  the rest of the batch proceeds. `reconcile` reports the same rows.
   `updated` means a provenance-only backfill. **`--refresh <name>`** (repeatable, or
   comma-separated) is the explicit, per-name way to take an edited native's content
   into canonical: a named memory that conflicts is overwritten (reported as
