@@ -243,7 +243,8 @@ type taskGroup struct {
 	body  string
 }
 
-// splitTaskGroups breaks a Codex MEMORY.md into its Task Group sections.
+// splitTaskGroups breaks a Codex MEMORY.md into its Task Group sections. CRLF is
+// normalized first, and headings inside code fences are ignored.
 func splitTaskGroups(s string) []taskGroup {
 	const hdr = "# Task Group:"
 	var groups []taskGroup
@@ -256,8 +257,15 @@ func splitTaskGroups(s string) []taskGroup {
 		}
 		buf = nil
 	}
-	for _, ln := range strings.Split(s, "\n") {
-		if strings.HasPrefix(ln, hdr) {
+	fence := "" // the open fence's marker (``` or ~~~), or "" outside a fence
+	for _, ln := range strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n") {
+		// A heading quoted inside a code fence is content, not a new group.
+		if t := strings.TrimSpace(ln); fence == "" && (strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~")) {
+			fence = t[:3]
+		} else if fence != "" && strings.HasPrefix(t, fence) {
+			fence = ""
+		}
+		if fence == "" && strings.HasPrefix(ln, hdr) {
 			flush()
 			cur = &taskGroup{title: strings.TrimSpace(strings.TrimPrefix(ln, hdr))}
 			continue
