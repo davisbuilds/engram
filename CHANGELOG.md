@@ -6,7 +6,7 @@
 ### Features
 
 * **reconcile:** on-demand cross-harness enricher command ([#9](https://github.com/davisbuilds/engram/issues/9)) ([5781acf](https://github.com/davisbuilds/engram/commit/5781acf98aa02ebf6fb7c19afc41646bda489bc8))
-* **sync:** self-documenting MEMORY.md header + token-boundary slug cap ([#10](https://github.com/davisbuilds/engram/issues/10)) ([d1a97a5](https://github.com/davisbuilds/engram/commit/d1a97a57c98de264cd2408527a17113258a3b68a))
+* **sync:** self-documenting MEMORY.md header ([#10](https://github.com/davisbuilds/engram/issues/10)) ([d1a97a5](https://github.com/davisbuilds/engram/commit/d1a97a57c98de264cd2408527a17113258a3b68a))
 
 
 ### Bug Fixes
