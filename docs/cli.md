@@ -130,10 +130,10 @@ Verb-first throughout (matches the authoring vocabulary: *remember*, *share*,
 | `-v, --verbose` / `--debug` | more diagnostics to stderr |
 | `--no-color` | disable color (also honors `NO_COLOR`, `TERM=dumb`) |
 | `--config <path>` | config file (else `$ENGRAM_CONFIG`, else XDG default) |
-| `--cwd <path>` | operate as if invoked from this directory — sets the scope/slug target |
+| `--cwd <path>` | operate as if invoked from this directory — sets the scope/slug target; `~` is expanded, a relative path is resolved against the process cwd, and the path is cleaned, so `dir/` and `dir` map to one slug |
 | `--agent <claude\|codex>` | caller harness for scope filtering (else inferred) |
 | `--host <label>` | override the host label (else `hostname -s` mapped via config) |
-| `-h, --help` | help; ignores other args |
+| `-h, --help` | help, anywhere in argv; the command is never run |
 | `--version` | print version |
 
 `--cwd`, `--agent`, and `--host` are the load-bearing agent affordances: a hook

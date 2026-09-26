@@ -56,6 +56,10 @@ func (e *env) newSession() (*session, *RespError) {
 		}
 		cwd = wd
 	}
+	cwd, err = normalizeCwd(cwd)
+	if err != nil {
+		return nil, &RespError{Code: "cwd", Message: err.Error()}
+	}
 	return &session{cfg: cfg, cwd: cwd, host: e.resolveHost(cfg), agentOverride: e.agent}, nil
 }
 
@@ -458,4 +462,19 @@ func staleHold(root string, perrs []discover.ParseError) (bool, []string) {
 		return false, nil
 	}
 	return true, []string{"stale renders kept, not removed: " + reason}
+}
+
+// normalizeCwd turns any spelling of a directory into the one absolute, clean
+// path the Claude project slug is derived from: ~ is expanded, a relative path
+// is resolved against the process cwd, and trailing slashes and dot segments are
+// removed. Symlinks are left as given.
+func normalizeCwd(cwd string) (string, error) {
+	if cwd == "~" || strings.HasPrefix(cwd, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		cwd = filepath.Join(home, strings.TrimPrefix(cwd, "~"))
+	}
+	return filepath.Abs(cwd)
 }
