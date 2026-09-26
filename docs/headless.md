@@ -44,8 +44,9 @@ engram review --json | jq -c '.next_steps[]'
 ```
 
 Each near-duplicate finding's `next_steps[].command` is a runnable, `--`-guarded
-`claude -p ... -- "..."` pass that asks the agent to compare the two memories and
-merge them if warranted. The `agent-memory-review` skill covers the judgment;
+`claude -p ... -- '...'` pass that asks the agent to compare the two memories and
+merge them if warranted. Every argument is POSIX single-quoted, so a shell reads it
+back as exactly the intended argv and never expands anything in the prompt. The `agent-memory-review` skill covers the judgment;
 broader scope/promotion calls are left to `curate`.
 
 `migrate` emits a lead too: when it finds a hand-authored file that `diverged`

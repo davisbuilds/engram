@@ -85,17 +85,33 @@ func BuildPrompt(c Corpus) (string, error) {
 	return b.String(), nil
 }
 
-// ParseProposal recovers a Proposal from an agent's message. It prefers a fenced
-// ```json block; failing that it tries the first balanced JSON object; failing
-// that it errors — a proposal engram cannot parse is never guessed at.
+// ParseProposal recovers a Proposal from an agent's message. The contract asks
+// for exactly one fenced ```json block; prose around it is tolerated. Without a
+// fence, the whole message must be one JSON object. Anything else is refused:
+// the corpus is untrusted, and an agent that quotes a memory body can echo a
+// decoy block or object ahead of its real answer, so "the first JSON found" is
+// never guessed at.
 func ParseProposal(text string) (Proposal, error) {
 	var p Proposal
-	raw, ok := fencedJSON(text)
-	if !ok {
-		raw, ok = firstJSONObject(text)
-	}
-	if !ok {
-		return p, fmt.Errorf("no JSON object found in agent output")
+	var raw string
+	switch n := strings.Count(text, "```json"); {
+	case n > 1:
+		return p, fmt.Errorf("agent output has %d fenced json blocks, want exactly one", n)
+	case n == 1:
+		var ok bool
+		if raw, ok = fencedJSON(text); !ok {
+			return p, fmt.Errorf("unterminated fenced json block in agent output")
+		}
+	default:
+		trimmed := strings.TrimSpace(text)
+		obj, ok := firstJSONObject(trimmed)
+		if !ok {
+			return p, fmt.Errorf("no JSON object found in agent output")
+		}
+		if obj != trimmed {
+			return p, fmt.Errorf("agent output without a fenced block must be exactly one JSON object")
+		}
+		raw = obj
 	}
 	if err := json.Unmarshal([]byte(raw), &p); err != nil {
 		return p, fmt.Errorf("parse proposal JSON: %w", err)

@@ -243,7 +243,8 @@ type taskGroup struct {
 	body  string
 }
 
-// splitTaskGroups breaks a Codex MEMORY.md into its Task Group sections.
+// splitTaskGroups breaks a Codex MEMORY.md into its Task Group sections. CRLF is
+// normalized first, and headings inside code fences are ignored.
 func splitTaskGroups(s string) []taskGroup {
 	const hdr = "# Task Group:"
 	var groups []taskGroup
@@ -256,8 +257,16 @@ func splitTaskGroups(s string) []taskGroup {
 		}
 		buf = nil
 	}
-	for _, ln := range strings.Split(s, "\n") {
-		if strings.HasPrefix(ln, hdr) {
+	fence := "" // the open fence's full marker run (e.g. ```` ````), or "" outside one
+	for _, ln := range strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n") {
+		// A heading quoted inside a code fence is content, not a new group.
+		t := strings.TrimSpace(ln)
+		if fence == "" {
+			fence = fenceRun(t)
+		} else if run := fenceRun(t); run == t && run[0] == fence[0] && len(run) >= len(fence) {
+			fence = ""
+		}
+		if fence == "" && strings.HasPrefix(ln, hdr) {
 			flush()
 			cur = &taskGroup{title: strings.TrimSpace(strings.TrimPrefix(ln, hdr))}
 			continue
@@ -278,4 +287,21 @@ func splitTaskGroups(s string) []taskGroup {
 // canonical is the intended backstop once real consolidated fixtures exist.
 func isEngramOrigin(body string) bool {
 	return strings.Contains(body, "extension=engram") || strings.Contains(body, "extensions/engram/")
+}
+
+// fenceRun returns the leading run of three or more backticks or tildes that
+// opens or closes a Markdown code fence, or "" when t does not start one. A
+// fence closes only on a bare run of the same character at least as long.
+func fenceRun(t string) string {
+	if len(t) < 3 || (t[0] != '`' && t[0] != '~') {
+		return ""
+	}
+	n := 0
+	for n < len(t) && t[n] == t[0] {
+		n++
+	}
+	if n < 3 {
+		return ""
+	}
+	return t[:n]
 }

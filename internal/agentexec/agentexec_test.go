@@ -2,6 +2,9 @@ package agentexec
 
 import (
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -37,8 +40,29 @@ func TestClaudeArgvSeparatorAlwaysBeforePrompt(t *testing.T) {
 
 func TestClaudeCommandQuotesPromptAfterSeparator(t *testing.T) {
 	cmd := ClaudeCommand("compare a and b", "Read")
-	if !strings.Contains(cmd, `-- "compare a and b"`) {
+	if !strings.Contains(cmd, `-- 'compare a and b'`) {
 		t.Errorf("command must place a quoted prompt after --: %q", cmd)
+	}
+}
+
+// The rendered command is documented as runnable, so a shell must read back
+// exactly ClaudeArgv, never expanding anything in the prompt.
+func TestClaudeCommandRoundTripsThroughAShell(t *testing.T) {
+	dir := t.TempDir()
+	canary := filepath.Join(dir, "pwned")
+	prompt := "a $(touch " + canary + ") `touch " + canary + "` 'q' \"x\" \\ $HOME ~ *"
+	cmd := ClaudeCommand(prompt, "Read", "Edit")
+	echo := "printf '%s\\n'" + strings.TrimPrefix(cmd, "claude")
+	out, err := exec.Command("sh", "-c", echo).Output()
+	if err != nil {
+		t.Fatalf("sh rejected %q: %v", cmd, err)
+	}
+	if _, err := os.Stat(canary); err == nil {
+		t.Fatalf("shell executed a substitution from the prompt: %q", cmd)
+	}
+	want := strings.Join(ClaudeArgv(prompt, "Read", "Edit")[1:], "\n") + "\n"
+	if string(out) != want {
+		t.Errorf("shell read back\n%q\nwant\n%q", out, want)
 	}
 }
 

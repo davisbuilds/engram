@@ -195,17 +195,23 @@ func ExtractCodexText(stdout []byte) (string, error) {
 	return last, nil
 }
 
-// ClaudeCommand renders ClaudeArgv as a display string with the prompt quoted,
-// suitable for a next_step lead a human or agent can copy and run.
+// ClaudeCommand renders ClaudeArgv as a POSIX shell command that reads back as
+// exactly that argv: every argument that is not plainly safe is single-quoted,
+// so nothing in the prompt (which can carry corpus text) is ever expanded.
 func ClaudeCommand(prompt string, allowedTools ...string) string {
 	argv := ClaudeArgv(prompt, allowedTools...)
 	parts := make([]string, len(argv))
 	for i, a := range argv {
-		if i == len(argv)-1 {
-			parts[i] = `"` + strings.ReplaceAll(a, `"`, `\"`) + `"`
-		} else {
-			parts[i] = a
-		}
+		parts[i] = shellQuote(a)
 	}
 	return strings.Join(parts, " ")
+}
+
+// shellQuote returns a unchanged when it needs no quoting, else a single-quoted
+// form in which each embedded quote is closed, escaped and reopened.
+func shellQuote(a string) string {
+	if a != "" && strings.Trim(a, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./:=@,+%") == "" {
+		return a
+	}
+	return "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
 }
