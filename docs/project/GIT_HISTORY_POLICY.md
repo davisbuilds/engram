@@ -1,6 +1,6 @@
 # Git History and Branch Hygiene
 
-Last updated: September 1, 2026
+Last updated: September 26, 2026
 
 ## Repository Merge Settings
 
@@ -22,6 +22,18 @@ Result:
 ## Merge Strategy
 
 Squash-merge only. All other merge strategies are disabled at the repository level.
+
+## Release History
+
+Keep squash-only merges. PR titles follow Conventional Commits because they
+become `main` commit titles. `.github/workflows/pr-title.yml` checks that syntax;
+the maintainer still classifies each change correctly and reviews breaking-change
+notes. Release Please owns version selection, changelog updates, release tags,
+and GitHub Releases; see [release operations](../releases.md).
+
+The release workflow runs only after successful push CI on current `main`.
+Release PRs must pass the normal required `build-test-lint` check before merge.
+The GitHub App token lets their pull-request events trigger normal CI.
 
 ## CI Gates
 

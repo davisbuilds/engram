@@ -1,0 +1,62 @@
+name: Release Please
+
+on:
+  # Successful same-repository main pushes only; no event-supplied checkout,
+  # scripts, caches, or artifacts are loaded in this privileged workflow.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Never cancel a run while it may be creating a release or updating a release PR.
+concurrency:
+  group: release-please-main
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Confirm CI tested the current main commit
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          current_sha=$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq .object.sha)
+          if [ "$current_sha" = "$TESTED_SHA" ]; then
+            echo 'current=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Main advanced; wait for its own successful CI run.'
+          fi
+
+      - name: Create repository-scoped release token
+        if: steps.gate.outputs.current == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+
+      - name: Update release PR or publish merged release
+        if: steps.gate.outputs.current == 'true'
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          target-branch: main
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

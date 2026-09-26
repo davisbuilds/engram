@@ -42,14 +42,14 @@ make install    # -> $PREFIX/bin/engram (default ~/.local/bin; override PREFIX)
 ./bin/engram schema --json
 ```
 
-Cut a release tag (bumps the latest `vX.Y.Z`, creates an annotated tag locally;
-push it explicitly):
+Releases use [Release Please](docs/releases.md): reviewed Conventional Commit PR
+titles drive a release PR containing the next version and changelog. Merging that
+PR after CI passes creates the `vX.Y.Z` tag and GitHub Release. Before 1.0,
+features and breaking changes bump the minor version; fixes bump the patch.
 
-```bash
-make next-version           # print the next patch version, create nothing
-make tag-patch              # v0.1.0 -> v0.1.1   (also tag-minor / tag-major)
-git push origin v0.1.1      # publish the tag when ready
-```
+`make next-version` is a read-only mathematical patch preview (override
+`LEVEL=minor` or `LEVEL=major`); Release Please selects the actual release from
+merged commits. Builds retain Git tag/commit/dirty provenance.
 
 `curate` additionally shells out to a headless agent CLI (`claude` and/or
 `codex`); every other command is self-contained.

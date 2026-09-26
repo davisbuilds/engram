@@ -58,4 +58,5 @@ jobs:
       - name: Shell scripts (shellcheck + tests)
         run: |
           shellcheck scripts/*.sh
-          scripts/semver-tag_test.sh
+          scripts/semver-next_test.sh
+          scripts/check-pr-title_test.sh
