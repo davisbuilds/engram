@@ -31,7 +31,8 @@ Squash-merge only. All other merge strategies are disabled at the repository lev
 ## Release History
 
 Keep squash-only merges. PR titles follow Conventional Commits because they
-become `main` commit titles. `.github/workflows/pr-title.yml` checks that syntax;
+become `main` commit titles. The required `build-test-lint` job in
+`.github/workflows/ci.yml` checks that syntax, including after PR title edits;
 the maintainer still classifies each change correctly and reviews breaking-change
 notes. Release Please owns version selection, changelog updates, release tags,
 and GitHub Releases; see [release operations](../releases.md).
