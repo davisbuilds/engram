@@ -72,6 +72,15 @@ func (s *session) agentFor(native string) string {
 	return native
 }
 
+// skippedNote is the warning for a disabled harness a command skipped, naming
+// the reason when the config's harnesses: section simply left it out.
+func (s *session) skippedNote(harnessName string) string {
+	if s.cfg.Harnesses[harnessName].Unlisted {
+		return harnessName + " disabled (not listed under harnesses: in the config); skipped"
+	}
+	return harnessName + " disabled; skipped"
+}
+
 // targets builds a reconcilable target for every enabled harness, filtering the
 // discovered memories per harness (the agent axis differs by harness).
 func (s *session) targets() ([]sync.Target, []string, *RespError) {
@@ -91,7 +100,7 @@ func (s *session) targets() ([]sync.Target, []string, *RespError) {
 		})
 		warns = append(warns, harnessWarnings(harness.CheckClaude(h.Home, true))...)
 	} else {
-		warns = append(warns, "claude-code disabled; skipped")
+		warns = append(warns, s.skippedNote(config.HarnessClaude))
 	}
 	if h := s.cfg.Harnesses[config.HarnessCodex]; h.Enabled() {
 		rel := scope.RelevantFor(mems, s.cwd, s.agentFor("codex"), s.host)
@@ -101,7 +110,7 @@ func (s *session) targets() ([]sync.Target, []string, *RespError) {
 		})
 		warns = append(warns, harnessWarnings(harness.CheckCodex(h.Home, true))...)
 	} else {
-		warns = append(warns, "codex disabled; skipped")
+		warns = append(warns, s.skippedNote(config.HarnessCodex))
 	}
 	return targets, warns, nil
 }

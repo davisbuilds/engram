@@ -95,3 +95,25 @@ func TestCodexNotesSurviveARunAsAnotherAgent(t *testing.T) {
 		t.Error("a --agent codex run removed a note only a claude session can see")
 	}
 }
+
+// A config listing only claude-code (a scratch area) must not write the
+// unlisted Codex harness at its default, real home.
+func TestPartialHarnessConfigLeavesTheUnlistedHarnessAlone(t *testing.T) {
+	dir := t.TempDir()
+	canon := filepath.Join(dir, "canonical")
+	writeFile(t, filepath.Join(canon, "a-mem.md"),
+		"---\nname: a-mem\ndescription: d\ntype: lesson\nscope: global\n---\nbody\n")
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+canon+"\nharnesses:\n  claude-code:\n    home: "+filepath.Join(dir, "claude")+"\n")
+	defer silenceStdout(t)()
+	if code := Run([]string{"sync", "--apply", "--config", cfg, "--cwd", dir, "--json"}); code != exitOK {
+		t.Fatalf("sync --apply exit = %d, want %d", code, exitOK)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".codex", "memories", "extensions", "engram")); err == nil {
+		t.Error("sync wrote the unlisted codex harness at the default home")
+	}
+}

@@ -152,12 +152,6 @@ only; shipped items live in the git history.
   `data.harnesses[].error` while the top-level `error` stays `null` with exit `1`,
   so a consumer cannot read `error.code` as documented. Both change the envelope:
   bump `schemaVersion` and update `docs/cli.md`.
-- **Partial `harnesses:` config silently enables the rest at real homes.** A
-  config naming only one harness leaves the others defaulted to the user's real
-  home and enabled, so a config meant as a scratch area still writes real memory,
-  and `engram config` does not say a harness was defaulted rather than
-  configured. Options: treat unmentioned harnesses as disabled once `harnesses:`
-  is present, or at least report `configured: explicit|default` per harness.
 - **`--cwd` and symlinks.** `--cwd` is now tilde-expanded, made absolute and
   cleaned, but symlinks are left as given, and the default cwd comes from
   `os.Getwd`, which can return the logical `$PWD` (`/tmp/x`) rather than the

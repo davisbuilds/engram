@@ -298,6 +298,12 @@ explicit rather than ambient.
   values to the host identifiers used in `applies_to.hosts`. Host names are
   therefore never compiled into engram; a fresh install knows nothing about any
   specific machine until its config says so.
+- With no `harnesses:` section, every harness is enabled at its default home
+  (`~/.claude`, `~/.codex`). Once a config has a `harnesses:` section, a harness
+  it does not list is **disabled** (a listed harness with no `home` still gets
+  the default home). A config naming one harness — a scratch area, say — thus
+  never writes the others at the user's real homes; commands skip the unlisted
+  harness with a warning saying it was not listed, and `config` reports it.
 - engram never edits another program's config silently; `hook print` emits a
   snippet for the user/agent to place, it does not mutate `settings.json`.
 

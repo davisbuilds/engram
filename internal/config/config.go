@@ -25,6 +25,9 @@ const (
 type Harness struct {
 	Home     string `yaml:"home"`
 	Disabled bool   `yaml:"disabled"`
+	// Unlisted marks a harness the config's harnesses: section left out; it is
+	// disabled, and Unlisted lets a warning say why.
+	Unlisted bool `yaml:"-"`
 }
 
 // Enabled reports whether engram may act on this harness.
@@ -107,6 +110,9 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Decode harnesses into an empty map, not the defaults: yaml merges into an
+	// existing map, which would keep every unlisted harness enabled.
+	cfg.Harnesses = nil
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
@@ -115,7 +121,10 @@ func Load(path string) (*Config, error) {
 }
 
 // fillDefaults patches any field a partial config left empty back to a sane
-// default, so an overriding config never has to restate every field.
+// default, so an overriding config never has to restate every field. The one
+// exception is harnesses: once a config lists any, a harness it leaves out is
+// disabled (at its default home, for reporting) rather than enabled at the
+// user's real home, so a config meant as a scratch area cannot write real memory.
 func (c *Config) fillDefaults() {
 	d := defaults()
 	if c.CanonicalRoot == "" {
@@ -125,12 +134,13 @@ func (c *Config) fillDefaults() {
 		c.Hosts = map[string]string{}
 	}
 	if c.Harnesses == nil {
-		c.Harnesses = map[string]Harness{}
+		c.Harnesses = d.Harnesses
+		return
 	}
 	for name, def := range d.Harnesses {
 		h, ok := c.Harnesses[name]
 		if !ok {
-			c.Harnesses[name] = def
+			c.Harnesses[name] = Harness{Home: def.Home, Disabled: true, Unlisted: true}
 			continue
 		}
 		if h.Home == "" {

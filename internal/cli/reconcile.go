@@ -280,7 +280,7 @@ func (s *session) gatherImports() ([]importGather, []string, *RespError) {
 		}
 		out = append(out, importGather{harness: config.HarnessClaude, result: res})
 	} else {
-		warns = append(warns, "claude-code disabled; skipped")
+		warns = append(warns, s.skippedNote(config.HarnessClaude))
 	}
 	if h := s.cfg.Harnesses[config.HarnessCodex]; h.Enabled() {
 		res, err := importer.ImportCodex(filepath.Join(h.Home, "memories", "MEMORY.md"))
@@ -289,7 +289,7 @@ func (s *session) gatherImports() ([]importGather, []string, *RespError) {
 		}
 		out = append(out, importGather{harness: config.HarnessCodex, result: res})
 	} else {
-		warns = append(warns, "codex disabled; skipped")
+		warns = append(warns, s.skippedNote(config.HarnessCodex))
 	}
 	return out, warns, nil
 }
@@ -308,7 +308,7 @@ func (s *session) enricherTargets(mems []*schema.CanonicalMemory, keepStale bool
 		targets = append(targets, sync.ClaudeTarget{MemoryDir: claudeMemoryDir(h.Home, s.cwd), Desired: rel, KeepStale: keepStale})
 		warns = append(warns, harnessWarnings(harness.CheckClaude(h.Home, true))...)
 	} else {
-		warns = append(warns, "claude-code disabled; skipped")
+		warns = append(warns, s.skippedNote(config.HarnessClaude))
 	}
 	if h := s.cfg.Harnesses[config.HarnessCodex]; h.Enabled() {
 		rel := excludeOrigin(scope.RelevantFor(mems, s.cwd, s.agentFor("codex"), s.host), config.HarnessCodex)
@@ -318,7 +318,7 @@ func (s *session) enricherTargets(mems []*schema.CanonicalMemory, keepStale bool
 		})
 		warns = append(warns, harnessWarnings(harness.CheckCodex(h.Home, true))...)
 	} else {
-		warns = append(warns, "codex disabled; skipped")
+		warns = append(warns, s.skippedNote(config.HarnessCodex))
 	}
 	return targets, warns
 }
