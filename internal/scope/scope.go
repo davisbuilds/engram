@@ -112,3 +112,17 @@ func globMatch(glob, cwd string) bool {
 		return glob == cwd
 	}
 }
+
+// InView reports whether an existing render belongs to the session at cwd, run
+// by agent on host, so a sync from here may treat it as stale. A harness with one
+// shared store (Codex) holds renders made by many sessions; a render whose
+// recorded scope tier is not visible here, or whose canonical memory's cwd,
+// agent or host axis excludes this session, belongs to another session and must
+// be left alone. m is the render's canonical memory, nil once it no longer
+// exists; the recorded scope alone then decides.
+func InView(renderScope string, m *schema.CanonicalMemory, cwd, agent, host string) bool {
+	return tierMatch(renderScope, cwd) && (m == nil ||
+		cwdMatch(m.AppliesTo.Cwd, cwd) &&
+			listMatch(m.AppliesTo.Agents, agent) &&
+			hostMatch(m.AppliesTo.Hosts, host))
+}

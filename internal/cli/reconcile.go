@@ -312,7 +312,10 @@ func (s *session) enricherTargets(mems []*schema.CanonicalMemory, keepStale bool
 	}
 	if h := s.cfg.Harnesses[config.HarnessCodex]; h.Enabled() {
 		rel := excludeOrigin(scope.RelevantFor(mems, s.cwd, s.agentFor("codex"), s.host), config.HarnessCodex)
-		targets = append(targets, sync.CodexTarget{ExtensionDir: codexExtDir(h.Home), Desired: rel, Now: time.Now, KeepStale: keepStale})
+		targets = append(targets, sync.CodexTarget{
+			ExtensionDir: codexExtDir(h.Home), Desired: rel, Now: time.Now, KeepStale: keepStale,
+			InView: codexInView(mems, s.cwd, s.agentFor("codex"), s.host),
+		})
 		warns = append(warns, harnessWarnings(harness.CheckCodex(h.Home, true))...)
 	} else {
 		warns = append(warns, "codex disabled; skipped")

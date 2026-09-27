@@ -26,6 +26,11 @@ type CodexTarget struct {
 	Now func() time.Time
 	// KeepStale holds back STALE removals; see ClaudeTarget.KeepStale.
 	KeepStale bool
+	// InView reports whether an owned note, by canonical name and the scope its
+	// marker records, belongs to this session. The notes directory is shared by
+	// every cwd, so a note rendered for another session is never stale here.
+	// nil means every owned note is in view.
+	InView func(name, scope string) bool
 }
 
 // Harness identifies this target's harness.
@@ -43,6 +48,7 @@ func (t CodexTarget) instructionsPath() string {
 type codexNote struct {
 	content []byte
 	path    string
+	scope   string
 }
 
 // Plan computes the reconciliation actions without writing.
@@ -78,7 +84,7 @@ func (t CodexTarget) Plan() ([]Action, error) {
 		}
 	}
 	for name, cur := range owned {
-		if !desired[name] && !t.KeepStale {
+		if !desired[name] && !t.KeepStale && (t.InView == nil || t.InView(name, cur.scope)) {
 			actions = append(actions, Action{Stale, name, cur.path, "canonical no longer renders here"})
 		}
 	}
@@ -163,8 +169,8 @@ func scanCodexNotes(dir string) (map[string]codexNote, error) {
 		if rerr != nil {
 			return nil, rerr
 		}
-		if name, _, ok := marker.CodexNoteName(string(content)); ok {
-			owned[name] = codexNote{content: content, path: path}
+		if name, scope, ok := marker.CodexNoteName(string(content)); ok {
+			owned[name] = codexNote{content: content, path: path, scope: scope}
 		}
 	}
 	return owned, nil

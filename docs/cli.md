@@ -127,8 +127,6 @@ Verb-first throughout (matches the authoring vocabulary: *remember*, *share*,
 | `--json` | force structured output (auto when stdout is not a TTY) |
 | `--plain` | force stable line-based human output |
 | `-q, --quiet` | suppress non-essential stdout (for hooks) |
-| `-v, --verbose` / `--debug` | more diagnostics to stderr |
-| `--no-color` | disable color (also honors `NO_COLOR`, `TERM=dumb`) |
 | `--config <path>` | config file (else `$ENGRAM_CONFIG`, else XDG default) |
 | `--cwd <path>` | operate as if invoked from this directory — sets the scope/slug target; `~` is expanded, a relative path is resolved against the process cwd, and the path is cleaned, so `dir/` and `dir` map to one slug |
 | `--agent <claude\|codex>` | caller harness for scope filtering (else inferred) |
@@ -173,7 +171,12 @@ explicit rather than ambient.
   be incomplete: the canonical root is missing, or any canonical file fails to
   parse or validate, or two files claim one name (every copy of that name is
   withheld). A render whose canonical merely failed to load is kept until it
-  loads again. A target path that already exists as a hand-authored file (on a
+  loads again. Codex keeps one notes directory for every cwd, so a Codex note is
+  `STALE` only when it is in view from the current cwd: the scope tier its marker
+  records is visible here and, while its canonical memory exists, that memory's
+  `applies_to` axes (cwd globs, agents, hosts) admit this session. A note another project's run rendered is
+  left for that project, so the note of a retired project memory is removed by
+  the next run from within that project. A target path that already exists as a hand-authored file (on a
   case-insensitive filesystem, including a case variant of the name) is a
   `CONFLICT`, never an overwrite. Only a `MEMORY.md` line that *ends* with the
   `<!-- engram name=… -->` marker is engram's; a line quoting it mid-text is not.

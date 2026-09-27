@@ -96,3 +96,29 @@ func TestCodexStaleRemovesOwnedNoteOnly(t *testing.T) {
 		t.Error("foreign note must be preserved")
 	}
 }
+
+// The Codex notes directory is shared by every cwd: a note another session
+// rendered is not stale just because this session does not want it.
+func TestCodexStaleSparesNotesOutOfView(t *testing.T) {
+	dir := t.TempDir()
+	alpha := mem("alpha-lesson")
+	alpha.Scope = "project:alpha"
+	if _, err := codexTarget(dir, alpha, mem("orphan-lesson")).Apply(); err != nil {
+		t.Fatal(err)
+	}
+	tg := codexTarget(dir)
+	tg.InView = func(_, scope string) bool { return scope == "global" }
+	res, err := tg.Apply()
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if kinds(res.Applied)[Stale] != 1 {
+		t.Errorf("expected exactly 1 STALE (the in-view orphan); got %v", res.Applied)
+	}
+	if codexNoteExistsFor(t, dir, "orphan-lesson") {
+		t.Error("in-view orphan note should have been removed")
+	}
+	if !codexNoteExistsFor(t, dir, "alpha-lesson") {
+		t.Error("note rendered for another project was removed")
+	}
+}
