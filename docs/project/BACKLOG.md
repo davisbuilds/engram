@@ -34,6 +34,12 @@ only; shipped items live in the git history.
   target path), leaving canonical in neither the before nor the after state.
   Stage writes and commit them in a final rename phase, or report a partial apply
   as its own flagged outcome.
+- **Curate: a timed-out agent's helpers can linger as zombies.** The timeout
+  SIGKILLs the agent's whole process group at once, so its helpers are reparented
+  to init when the leader dies. An init that does not reap (a container's bare
+  PID 1, without `--init`) keeps them as zombies, one batch per timed-out run. On
+  Linux, marking engram a child subreaper (`PR_SET_CHILD_SUBREAPER`) and reaping
+  after the kill would keep them; macOS has no equivalent and launchd reaps.
 - **Unknown frontmatter keys are dropped on re-save.** `schema.Parse` (and
   `remember --from-json`) silently ignore unmapped keys, so one Parse→Render round
   trip (share, a forced remember) strips a hand-added field, and a typo'd
