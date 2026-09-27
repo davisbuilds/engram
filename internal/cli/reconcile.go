@@ -143,7 +143,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		"import": importEntries,
 		"review": map[string]any{"count": len(findings), "findings": reviewItems},
 		"sync":   syncEntries,
-	}, warns, nil, next)
+	}, warns, harnessFailure(syncEntries), next)
 	return exit
 }
 

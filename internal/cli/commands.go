@@ -72,6 +72,23 @@ func (s *session) agentFor(native string) string {
 	return native
 }
 
+// harnessFailure is the top-level error for a multi-harness command when any
+// harness failed: its code is harness_failed and its message names each failed
+// harness, so a consumer branching on error.code sees the failure without
+// walking data (each entry keeps its own error too). nil when none failed.
+func harnessFailure(entries []map[string]any) *RespError {
+	var msgs []string
+	for _, en := range entries {
+		if err, ok := en["error"].(string); ok {
+			msgs = append(msgs, fmt.Sprintf("%v: %s", en["harness"], err))
+		}
+	}
+	if len(msgs) == 0 {
+		return nil
+	}
+	return &RespError{Code: "harness_failed", Message: strings.Join(msgs, "; ")}
+}
+
 // skippedNote is the warning for a disabled harness a command skipped, naming
 // the reason when the config's harnesses: section simply left it out.
 func (s *session) skippedNote(harnessName string) string {
@@ -178,7 +195,7 @@ func cmdSync(e *env, name string, _ []string) int {
 	}
 	e.emit(name, exit == exitOK, map[string]any{
 		"cwd": s.cwd, "host": s.host, "apply": e.apply, "harnesses": entries,
-	}, warns, nil, next)
+	}, warns, harnessFailure(entries), next)
 	return exit
 }
 
@@ -212,7 +229,7 @@ func cmdAudit(e *env, name string, _ []string) int {
 	}
 	e.emit(name, exit == exitOK, map[string]any{
 		"cwd": s.cwd, "host": s.host, "harnesses": entries,
-	}, warns, nil, next)
+	}, warns, harnessFailure(entries), next)
 	return exit
 }
 
@@ -279,7 +296,7 @@ func cmdDiff(e *env, name string, _ []string) int {
 		for _, a := range actions {
 			byName[a.Name] = a.Kind
 		}
-		var items []map[string]string
+		items := []map[string]string{}
 		for _, m := range tg.DesiredMemories() {
 			status := "in-sync"
 			if k, ok := byName[m.Name]; ok {
@@ -296,7 +313,7 @@ func cmdDiff(e *env, name string, _ []string) int {
 		exit = worseExit(exit, exitForActions(actions))
 		entries = append(entries, entry)
 	}
-	e.emit(name, exit == exitOK, map[string]any{"cwd": s.cwd, "host": s.host, "harnesses": entries}, warns, nil, nil)
+	e.emit(name, exit == exitOK, map[string]any{"cwd": s.cwd, "host": s.host, "harnesses": entries}, warns, harnessFailure(entries), nil)
 	return exit
 }
 

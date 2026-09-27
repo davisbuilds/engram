@@ -8,6 +8,7 @@ package sync
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -49,6 +50,19 @@ type Action struct {
 type Result struct {
 	Applied   []Action `json:"applied"`
 	Conflicts []Action `json:"conflicts"`
+}
+
+// MarshalJSON encodes empty action lists as [] rather than null, so a consumer
+// can iterate either list without a null check.
+func (r Result) MarshalJSON() ([]byte, error) {
+	type plain Result
+	if r.Applied == nil {
+		r.Applied = []Action{}
+	}
+	if r.Conflicts == nil {
+		r.Conflicts = []Action{}
+	}
+	return json.Marshal(plain(r))
 }
 
 // Target is one harness's reconcilable memory store. Both harness targets share

@@ -146,12 +146,6 @@ only; shipped items live in the git history.
 
 ## CLI contract
 
-- **Envelope nulls and missing errors.** `sync.Result`'s `applied`/`conflicts`
-  serialize as `null` instead of `[]` (every other array goes through `orEmpty`),
-  and a per-target runtime failure puts the message only in
-  `data.harnesses[].error` while the top-level `error` stays `null` with exit `1`,
-  so a consumer cannot read `error.code` as documented. Both change the envelope:
-  bump `schemaVersion` and update `docs/cli.md`.
 - **`--cwd` and symlinks.** `--cwd` is now tilde-expanded, made absolute and
   cleaned, but symlinks are left as given, and the default cwd comes from
   `os.Getwd`, which can return the logical `$PWD` (`/tmp/x`) rather than the

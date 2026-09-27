@@ -16,7 +16,7 @@ import (
 
 // schemaVersion is the version of the response envelope below. Bump it only on a
 // breaking change to the envelope shape, never for command-specific payloads.
-const schemaVersion = 1
+const schemaVersion = 2
 
 // Exit codes are a stable contract: an agent operator branches on these before
 // parsing any output. Keep them in sync with docs/cli.md.
