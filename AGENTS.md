@@ -14,6 +14,7 @@ is the intelligence. See `README.md` for the user-facing overview.
   the `curate` proposer/applier loop.
 - `docs/project/BACKLOG.md` — future-only friction points and deferred follow-ups noted
   during implementation.
+- `CONTRIBUTING.md` — public contribution scope, review expectations, and release intent.
 
 ## Architecture (load-bearing invariants)
 
@@ -73,5 +74,6 @@ is the intelligence. See `README.md` for the user-facing overview.
   paths, real host names, or private repository references in tracked files or
   commit messages. Host identity and harness home directories are configuration,
   not code.
-- Keep `docs/` current when behavior changes, and log deferred work in
-  `docs/project/BACKLOG.md` rather than leaving it implicit.
+- Update the owning reference when a public contract or procedure changes. Keep
+  `docs/project/BACKLOG.md` future-only; agents may work from entries directly,
+  and issues help when persistent discussion or coordination is needed.

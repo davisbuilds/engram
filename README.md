@@ -75,6 +75,10 @@ docs/cli.md         the CLI interface contract
 docs/headless.md    how a headless agent drives engram
 ```
 
+## Contributing
+
+Focused contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

@@ -1,6 +1,17 @@
 # Contributing
 
-This repository uses a squash-merge workflow to keep `main` history clean and readable.
+Bug reports, focused fixes, documentation improvements, and supported proposals
+are welcome. Discuss substantial harness integration, new dependencies, or public
+CLI/schema changes before major implementation. This is a solo-maintained project;
+contributions do not imply a support or response-time promise.
+
+Agent-assisted work is welcome. Submitters should understand intent, important
+behavior, tradeoffs, and verification, and explain limitations. No prompt
+transcript or manual rewrite is required. A clear
+[Backlog](docs/project/BACKLOG.md) entry can go directly to a PR; use an issue
+when persistent discussion or coordination helps.
+
+This repository uses a squash-merge workflow.
 
 ## Workflow
 
@@ -32,7 +43,8 @@ Use descriptive prefixes:
 - Ordinary `docs`, `test`, `chore`, `build`, `ci`, `style`, and `refactor` changes
   do not trigger releases. `perf`, `fix`, and `revert` produce patches; `feat` produces a
   minor. Breaking changes produce a minor before 1.0 and a major afterward.
-- Review the generated release PR and merge it through the same green CI gate.
+- Review the generated release PR changelog and body for consumer behavior,
+  compatibility, and migration steps; merge through the same green CI gate.
   See [release operations](docs/releases.md).
 - It is fine to have multiple commits in one PR; squash merge will combine them on `main`.
   CI validates the final PR title. Main-push CI also validates the complete
