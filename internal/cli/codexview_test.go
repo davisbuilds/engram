@@ -72,3 +72,26 @@ func TestCodexNotesSurviveARunFromAnotherProject(t *testing.T) {
 		})
 	}
 }
+
+// The agent axis narrows a session the same way cwd does: a note a --agent
+// claude run rendered into the shared Codex directory is not stale to a
+// --agent codex run from the same cwd.
+func TestCodexNotesSurviveARunAsAnotherAgent(t *testing.T) {
+	dir := t.TempDir()
+	canon := filepath.Join(dir, "canonical")
+	codex := filepath.Join(dir, "codex")
+	writeFile(t, filepath.Join(canon, "claude-only.md"),
+		"---\nname: claude-only\ndescription: d\ntype: lesson\nscope: global\napplies_to:\n  agents: [claude]\n---\nbody\n")
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+canon+"\nharnesses:\n  claude-code:\n    home: "+
+		filepath.Join(dir, "claude")+"\n  codex:\n    home: "+codex+"\n")
+	defer silenceStdout(t)()
+	for _, agent := range []string{"claude", "codex"} {
+		if code := Run([]string{"sync", "--apply", "--config", cfg, "--cwd", dir, "--agent", agent, "--json"}); code != exitOK {
+			t.Fatalf("sync --agent %s exit = %d, want %d", agent, code, exitOK)
+		}
+	}
+	if !codexNotesFor(t, codex)["claude-only"] {
+		t.Error("a --agent codex run removed a note only a claude session can see")
+	}
+}

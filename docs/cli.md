@@ -174,7 +174,7 @@ explicit rather than ambient.
   loads again. Codex keeps one notes directory for every cwd, so a Codex note is
   `STALE` only when it is in view from the current cwd: the scope tier its marker
   records is visible here and, while its canonical memory exists, that memory's
-  `applies_to.cwd` globs admit this cwd. A note another project's run rendered is
+  `applies_to` axes (cwd globs, agents, hosts) admit this session. A note another project's run rendered is
   left for that project, so the note of a retired project memory is removed by
   the next run from within that project. A target path that already exists as a hand-authored file (on a
   case-insensitive filesystem, including a case variant of the name) is a

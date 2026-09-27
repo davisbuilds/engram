@@ -97,7 +97,7 @@ func (s *session) targets() ([]sync.Target, []string, *RespError) {
 		rel := scope.RelevantFor(mems, s.cwd, s.agentFor("codex"), s.host)
 		targets = append(targets, sync.CodexTarget{
 			ExtensionDir: codexExtDir(h.Home), Desired: rel, Now: time.Now, KeepStale: keepStale,
-			InView: codexInView(mems, s.cwd),
+			InView: codexInView(mems, s.cwd, s.agentFor("codex"), s.host),
 		})
 		warns = append(warns, harnessWarnings(harness.CheckCodex(h.Home, true))...)
 	} else {
@@ -107,16 +107,17 @@ func (s *session) targets() ([]sync.Target, []string, *RespError) {
 }
 
 // codexInView reports, for an owned Codex note, whether it belongs to the session
-// at cwd. Codex keeps one notes directory for every cwd, so only a note this
-// session can see (its recorded scope, and its canonical memory's cwd globs) may
-// be removed as stale; notes other sessions rendered are left for them.
-func codexInView(mems []*schema.CanonicalMemory, cwd string) func(name, scope string) bool {
+// at cwd run by agent on host. Codex keeps one notes directory for every session,
+// so only a note this session can see (its recorded scope, and its canonical
+// memory's cwd, agent and host axes) may be removed as stale; notes other
+// sessions rendered are left for them.
+func codexInView(mems []*schema.CanonicalMemory, cwd, agent, host string) func(name, scope string) bool {
 	byName := make(map[string]*schema.CanonicalMemory, len(mems))
 	for _, m := range mems {
 		byName[m.Name] = m
 	}
 	return func(name, renderScope string) bool {
-		return scope.InView(renderScope, byName[name], cwd)
+		return scope.InView(renderScope, byName[name], cwd, agent, host)
 	}
 }
 

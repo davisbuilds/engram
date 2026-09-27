@@ -314,7 +314,7 @@ func (s *session) enricherTargets(mems []*schema.CanonicalMemory, keepStale bool
 		rel := excludeOrigin(scope.RelevantFor(mems, s.cwd, s.agentFor("codex"), s.host), config.HarnessCodex)
 		targets = append(targets, sync.CodexTarget{
 			ExtensionDir: codexExtDir(h.Home), Desired: rel, Now: time.Now, KeepStale: keepStale,
-			InView: codexInView(mems, s.cwd),
+			InView: codexInView(mems, s.cwd, s.agentFor("codex"), s.host),
 		})
 		warns = append(warns, harnessWarnings(harness.CheckCodex(h.Home, true))...)
 	} else {
