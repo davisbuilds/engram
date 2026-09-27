@@ -61,6 +61,7 @@ func TestDataNeverCarriesNull(t *testing.T) {
 		{"import", "claude-code"},
 		{"import", "codex"},
 		{"migrate", "claude-code"},
+		{"migrate", "claude-code", "--apply"},
 	}
 	for _, c := range cmds {
 		_, env := runEnvelope(t, append(c, base...)...)

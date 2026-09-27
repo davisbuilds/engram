@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -50,6 +51,17 @@ type MigrateResult struct {
 	Diverged  []MigrateAction `json:"diverged"`
 	Ambiguous []MigrateAction `json:"ambiguous"`
 	Skipped   []MigrateAction `json:"skipped"`
+}
+
+// MarshalJSON encodes empty categories as [] rather than null, as Result does.
+func (r MigrateResult) MarshalJSON() ([]byte, error) {
+	type plain MigrateResult
+	for _, s := range []*[]MigrateAction{&r.Adopted, &r.Diverged, &r.Ambiguous, &r.Skipped} {
+		if *s == nil {
+			*s = []MigrateAction{}
+		}
+	}
+	return json.Marshal(plain(r))
 }
 
 // ClaudeMigrateTarget adopts hand-authored Claude memory files that canonical
