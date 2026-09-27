@@ -92,3 +92,25 @@ func TestEmptySegmentNeverMatches(t *testing.T) {
 		t.Error("empty segment matched an absolute path")
 	}
 }
+
+func TestInViewGatesOnRecordedTier(t *testing.T) {
+	if InView("project:alpha", nil, "/w/beta") {
+		t.Error("a project:alpha render is not in view from beta")
+	}
+	if !InView("project:alpha", nil, "/w/alpha/sub") {
+		t.Error("a project:alpha render is in view from within alpha")
+	}
+	if !InView("global", nil, "/w/beta") {
+		t.Error("a global render whose canonical is gone is in view anywhere")
+	}
+}
+
+func TestInViewHonorsCanonicalCwdGlobs(t *testing.T) {
+	m := mem("pinned", "global", schema.AppliesTo{Cwd: []string{"/w/alpha/**"}})
+	if InView("global", m, "/w/beta") {
+		t.Error("a render whose canonical is pinned to alpha is not in view from beta")
+	}
+	if !InView("global", m, "/w/alpha/sub") {
+		t.Error("a render whose canonical is pinned to alpha is in view from alpha")
+	}
+}
