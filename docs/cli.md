@@ -291,8 +291,12 @@ explicit rather than ambient.
   `--apply` applies nothing (exit `3`).
   Model/effort are `--model` / `--effort` (flags win over the per-harness config
   default: claude → `claude-sonnet-5`/`high`, codex → `gpt-5.6-terra`/`high`);
-  `--harness` picks which agent runs (default `claude-code`). The trust boundary
-  is that a model *proposes* and engram is the sole *mutator*.
+  `--harness` picks which agent runs (default `claude-code`). An agent run is
+  bounded by `--timeout <duration>` (else `curate.timeout` in config, else
+  `20m`; `0` means no deadline): on expiry engram kills the agent and every
+  process it started and reports `agent_run` (exit `1`); an invalid duration is
+  `invalid_timeout` (exit `2`). The trust boundary is that a model *proposes*
+  and engram is the sole *mutator*.
 - **`hook print`** — emits the JSON snippet wiring `engram sync --apply --quiet`
   to Claude Code SessionStart/Stop. Codex capture is agent-wrapped (documented).
 

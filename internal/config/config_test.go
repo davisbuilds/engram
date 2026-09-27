@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestLoadDefaultsWhenNoFile(t *testing.T) {
@@ -128,6 +129,34 @@ func TestListedHarnessWithoutHomeUsesDefault(t *testing.T) {
 	for _, h := range []string{HarnessClaude, HarnessCodex} {
 		if got := cfg.Harnesses[h]; !got.Enabled() || got.Home == "" || got.Unlisted {
 			t.Errorf("%s = %+v; want enabled, listed, at its default home", h, got)
+		}
+	}
+}
+
+func TestCurateTimeout(t *testing.T) {
+	cases := []struct {
+		yaml    string
+		want    time.Duration
+		wantErr bool
+	}{
+		{"", DefaultCurateTimeout, false},
+		{"curate:\n  timeout: 5m\n", 5 * time.Minute, false},
+		{"curate:\n  timeout: \"0\"\n", 0, false},
+		{"curate:\n  timeout: soon\n", 0, true},
+		{"curate:\n  timeout: -1m\n", 0, true},
+	}
+	for _, c := range cases {
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		if err := os.WriteFile(path, []byte(c.yaml), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load(%q): %v", c.yaml, err)
+		}
+		got, err := cfg.CurateTimeout()
+		if (err != nil) != c.wantErr || (!c.wantErr && got != c.want) {
+			t.Errorf("CurateTimeout for %q = %v, %v; want %v, error %v", c.yaml, got, err, c.want, c.wantErr)
 		}
 	}
 }

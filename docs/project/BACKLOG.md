@@ -29,10 +29,6 @@ only; shipped items live in the git history.
   OS `ARG_MAX` (about 1 MB on macOS) fails at exec with an opaque `agent_run`
   error. Pass the prompt on stdin; verify how `claude -p` and `codex exec` read
   stdin first.
-- **Curate: no subprocess timeout.** `agentexec.ExecRunner` uses a plain
-  `exec.Command` with no deadline or process-group kill, so a stalled agent
-  blocks `curate` indefinitely. Use `CommandContext` with a configurable timeout
-  and kill the process group on expiry.
 - **Curate: a batch can half-apply.** `curate.Apply` validates the whole batch
   first but has no rollback if a write fails midway (e.g. a directory occupying a
   target path), leaving canonical in neither the before nor the after state.

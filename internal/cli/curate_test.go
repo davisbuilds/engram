@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/davisbuilds/engram/internal/agentexec"
 )
 
 // fakeClaudeRunner returns a claude `--output-format json` envelope whose result
@@ -19,7 +22,7 @@ func fakeClaudeRunner(assistantText string) func([]string) ([]byte, error) {
 }
 
 func curateEnv(cfg string, apply bool, runner func([]string) ([]byte, error)) *env {
-	return &env{jsonMode: true, apply: apply, config: cfg, runner: runner}
+	return &env{jsonMode: true, apply: apply, config: cfg, runnerFor: func(time.Duration) agentexec.Runner { return runner }}
 }
 
 func seedCanon(t *testing.T, canon string, names ...string) {
@@ -118,5 +121,37 @@ func TestCurateAgentRunFailureSurfaces(t *testing.T) {
 	code := cmdCurate(curateEnv(cfg, true, failing), "curate", []string{"--harness", "claude-code"})
 	if code != exitError {
 		t.Fatalf("agent run failure exit = %d, want %d", code, exitError)
+	}
+}
+
+// The curate deadline reaches the runner: --timeout wins over curate.timeout in
+// config, which wins over the default; an invalid value is a usage error and no
+// agent runs.
+func TestCurateTimeoutReachesTheRunner(t *testing.T) {
+	dir := t.TempDir()
+	canon := filepath.Join(dir, "canonical")
+	if err := os.MkdirAll(canon, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+canon+"\ncurate:\n  timeout: 7m\n")
+	defer silenceStdout(t)()
+	run := func(args ...string) (int, time.Duration, bool) {
+		var got time.Duration
+		called := false
+		e := &env{jsonMode: true, config: cfg, runnerFor: func(d time.Duration) agentexec.Runner {
+			got, called = d, true
+			return fakeClaudeRunner("```json\n{\"operations\": []}\n```")
+		}}
+		return cmdCurate(e, "curate", args), got, called
+	}
+	if _, d, _ := run(); d != 7*time.Minute {
+		t.Errorf("config timeout: runner got %v, want 7m", d)
+	}
+	if _, d, _ := run("--timeout", "3m"); d != 3*time.Minute {
+		t.Errorf("--timeout 3m: runner got %v, want 3m", d)
+	}
+	if code, _, called := run("--timeout", "soon"); code != exitUsage || called {
+		t.Errorf("--timeout soon: exit %d, agent ran %v; want %d and no run", code, called, exitUsage)
 	}
 }

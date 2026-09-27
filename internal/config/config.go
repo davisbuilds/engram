@@ -7,8 +7,10 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -45,6 +47,35 @@ type ModelChoice struct {
 // in; a config file or a per-run flag overrides them.
 type CurateConfig struct {
 	Models map[string]ModelChoice `yaml:"models"`
+	// Timeout bounds one agent run, as a Go duration ("20m"); "0" means no
+	// deadline. Empty means DefaultCurateTimeout.
+	Timeout string `yaml:"timeout"`
+}
+
+// DefaultCurateTimeout bounds a curate agent run when neither the config nor a
+// flag sets one, so a stalled agent cannot block curate forever.
+const DefaultCurateTimeout = 20 * time.Minute
+
+// CurateTimeout returns the configured curate deadline, DefaultCurateTimeout
+// when unset; an unparseable or negative value is an error.
+func (c *Config) CurateTimeout() (time.Duration, error) {
+	return ParseTimeout(c.Curate.Timeout, DefaultCurateTimeout)
+}
+
+// ParseTimeout parses a curate timeout as a Go duration, returning def for an
+// empty value; "0" means no deadline and a negative duration is an error.
+func ParseTimeout(v string, def time.Duration) (time.Duration, error) {
+	if v == "" {
+		return def, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err == nil && d < 0 {
+		err = errors.New("must not be negative")
+	}
+	if err != nil {
+		return 0, fmt.Errorf("invalid curate timeout %q: %w", v, err)
+	}
+	return d, nil
 }
 
 // Config is the fully-resolved configuration.

@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/davisbuilds/engram/internal/agentexec"
 	"github.com/davisbuilds/engram/internal/version"
@@ -61,10 +62,11 @@ type env struct {
 	cwd      string
 	agent    string
 	host     string
-	// runner executes a headless agent argv. It defaults to the real subprocess
-	// runner in Run and is swapped for a fake in tests so the curate loop is
-	// exercised without spawning a paid model.
-	runner agentexec.Runner
+	// runnerFor returns the runner for a headless agent argv, given the run's
+	// deadline. It defaults to the real subprocess runner in Run and is swapped
+	// for a fake in tests so the curate loop is exercised without spawning a
+	// paid model.
+	runnerFor func(timeout time.Duration) agentexec.Runner
 }
 
 // command is one entry in engram's subcommand table.
@@ -82,7 +84,7 @@ var (
 	harnessArg = &argSpec{positionals: 1}
 	shareArgs  = &argSpec{positionals: 1, values: []string{"--to"}}
 	importArgs = &argSpec{positionals: 1, values: []string{"--refresh"}, bools: []string{"--all"}}
-	curateArgs = &argSpec{values: []string{"--harness", "--model", "--effort"}}
+	curateArgs = &argSpec{values: []string{"--harness", "--model", "--effort", "--timeout"}}
 )
 
 // commands returns the full subcommand table. The table is the single source of
@@ -111,7 +113,7 @@ func commands() []command {
 
 // Run dispatches a single stateless invocation and returns its exit code.
 func Run(args []string) int {
-	e := &env{jsonMode: !isTTY(os.Stdout), runner: agentexec.ExecRunner}
+	e := &env{jsonMode: !isTTY(os.Stdout), runnerFor: agentexec.TimeoutRunner}
 
 	var sub string
 	help := false

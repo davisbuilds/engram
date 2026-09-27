@@ -5,8 +5,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestClaudeArgvSeparatorAlwaysBeforePrompt(t *testing.T) {
@@ -287,5 +290,38 @@ func TestExtractClaudeTextRejectsGarbage(t *testing.T) {
 func TestExecRunnerRefusesUnderGoTest(t *testing.T) {
 	if _, err := ExecRunner([]string{"true"}); err == nil {
 		t.Fatal("ExecRunner spawned a process under go test; want a refusal")
+	}
+}
+
+// A stalled agent is killed at the deadline together with any process it
+// started, and the error says it timed out.
+func TestRunWithTimeoutKillsTheProcessGroup(t *testing.T) {
+	start := time.Now()
+	out, err := runWithTimeout([]string{"sh", "-c", "sleep 30 & echo $!; wait"}, 300*time.Millisecond)
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("runWithTimeout returned after %v; the deadline was not enforced", elapsed)
+	}
+	if err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("err = %v, want a timeout error", err)
+	}
+	pid, perr := strconv.Atoi(strings.TrimSpace(string(out)))
+	if perr != nil {
+		t.Fatalf("child pid not captured from %q: %v", out, perr)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for syscall.Kill(pid, 0) == nil {
+		if time.Now().After(deadline) {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+			t.Fatalf("child %d outlived the timeout; the process group was not killed", pid)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// No deadline (d <= 0) runs to completion.
+func TestRunWithTimeoutZeroMeansNoDeadline(t *testing.T) {
+	out, err := runWithTimeout([]string{"sh", "-c", "sleep 0.2; echo done"}, 0)
+	if err != nil || strings.TrimSpace(string(out)) != "done" {
+		t.Fatalf("out, err = %q, %v; want done, nil", out, err)
 	}
 }
