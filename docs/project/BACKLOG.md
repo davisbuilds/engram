@@ -63,6 +63,17 @@ only; shipped items live in the git history.
   the current version into every Claude slug. Import needs a "no longer in
   source" signal (a per-origin source manifest), and a retirement decision
   (automatic when a successor is identifiable, otherwise surfaced for review).
+- **No deterministic way to retire a canonical memory.** `curate` `remove` is the
+  only removal path, and it runs an agent. Retiring memories an operator has
+  already decided on (e.g. orphaned Codex-origin canonicals with a known
+  successor) means deleting files under the canonical root by hand, outside the
+  apply lock. A `forget <name>...` command (dry-run, `--apply`, under the lock)
+  would make that a plain write, and pairs with the tombstone item below.
+- **A retired project memory's Codex note waits for its project.** A Codex note
+  is removed as `STALE` only from a cwd where it is in view, so a note whose
+  project-scoped canonical was retired stays until the next run from within that
+  project. Whether Codex should instead get every scope in one pass (its notes
+  directory is global, and each note records its scope) is open.
 
 ## Import quality
 
@@ -92,6 +103,13 @@ only; shipped items live in the git history.
   is still seeded `global` (no prior scope to preserve). A content-hash /
   path-cache / "unresolved vs genuinely-global" signal would let that first import
   distinguish "not a repo here" from "not a repo anywhere" and flag it.
+- **Claude-origin memory never reaches other Claude slugs.** Claude loads memory
+  per project slug, and `reconcile` propagates only across harnesses, so a
+  `global` memory authored natively in one slug is never rendered into another
+  (plain `sync` does, but it also echoes every memory back into its own harness).
+  A global lesson written in one project stays invisible to the rest unless it
+  is authored again there. A reconcile policy that excludes only the *source
+  slug*, not the whole harness, would spread it.
 - **`remember` provenance timestamps.** `remember` sets `provenance.origin` but
   not `created`/`modified`, to keep render output deterministic and idempotent.
   A "preserve created, bump modified on change" policy would restore timestamps
@@ -138,8 +156,6 @@ only; shipped items live in the git history.
   so a typo (`--harnes codex` silently curates Claude), a stray positional, or a
   dangling `--refresh` with no value is accepted without a usage error. Reject
   unknown arguments per command with exit `2`.
-- **Documented flags that do not exist.** `docs/cli.md` lists `-v/--verbose`,
-  `--debug` and `--no-color`; `Run` recognizes none of them. Implement or drop.
 - **Partial `harnesses:` config silently enables the rest at real homes.** A
   config naming only one harness leaves the others defaulted to the user's real
   home and enabled, so a config meant as a scratch area still writes real memory,
@@ -151,8 +167,3 @@ only; shipped items live in the git history.
   `os.Getwd`, which can return the logical `$PWD` (`/tmp/x`) rather than the
   physical path (`/private/tmp/x`). Unanswered: which form Claude Code slugs. Check
   a real slug created from a symlinked directory before choosing to resolve.
-- **A test could spawn a real agent.** Nothing stops a future test from calling
-  `Run([]string{"curate", ...})`, which wires `agentexec.ExecRunner` and would
-  launch a real, possibly billed, `claude`/`codex`. Make `ExecRunner` refuse under
-  `testing.Testing()`.
-
