@@ -77,8 +77,14 @@ class ReleaseHistoryTest(unittest.TestCase):
                 # Proposed manifest versions without a tag use bootstrap.
                 manifest.write_text(json.dumps({".": "0.3.0"}))
                 self.assertNotEqual(run(failed_head, good_head).returncode, 0)
-                manifest.write_text(json.dumps({".": "invalid"}))
-                self.assertNotEqual(run(base, valid).returncode, 0)
+                for malformed in ["invalid", "01.2.3", "1.02.3", "1.2.03", "1.2.3-01", "1.2.3-alpha..beta", "1.2.3+build..id", "1.2.3-", "1.2.3+", "1.2.3\n", None]:
+                    with self.subTest(version=malformed):
+                        manifest.write_text(json.dumps({".": malformed}))
+                        self.assertNotEqual(run(base, valid).returncode, 0)
+                for semver in ["0.0.0", "1.2.3", "1.2.3-0", "1.2.3-alpha.1", "1.2.3-0alpha", "1.2.3+01.build", "1.2.3-alpha-1+build.01"]:
+                    with self.subTest(version=semver):
+                        manifest.write_text(json.dumps({".": semver}))
+                        self.assertEqual(run(base, valid).returncode, 0)
                 manifest.unlink()
                 self.assertNotEqual(run(base, valid).returncode, 0)
                 manifest.write_text(json.dumps({".": "0.0.0"}))
