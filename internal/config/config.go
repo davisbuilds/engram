@@ -147,6 +147,17 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
+	// A bare or null harnesses: key decodes to a nil map, the same as no key at
+	// all; the section is present, though, so it must still disable every harness.
+	if cfg.Harnesses == nil {
+		var keys map[string]any
+		if err := yaml.Unmarshal(data, &keys); err != nil {
+			return nil, err
+		}
+		if _, ok := keys["harnesses"]; ok {
+			cfg.Harnesses = map[string]Harness{}
+		}
+	}
 	cfg.fillDefaults()
 	return &cfg, nil
 }

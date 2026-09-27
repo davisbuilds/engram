@@ -115,6 +115,40 @@ func TestUnlistedHarnessIsDisabled(t *testing.T) {
 	}
 }
 
+// A harnesses: key that lists nothing is still a harnesses: section, so it
+// disables every harness; only a config without the key keeps the defaults.
+func TestEmptyHarnessesSectionDisablesEveryHarness(t *testing.T) {
+	for _, body := range []string{"harnesses:\n", "harnesses: {}\n", "harnesses: ~\n"} {
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		if err := os.WriteFile(path, []byte("canonical_root: /tmp/scratch\n"+body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("%q: Load: %v", body, err)
+		}
+		for _, h := range []string{HarnessClaude, HarnessCodex} {
+			if got := cfg.Harnesses[h]; got.Enabled() || !got.Unlisted {
+				t.Errorf("%q: %s = %+v; want disabled and unlisted", body, h, got)
+			}
+		}
+	}
+
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("canonical_root: /tmp/scratch\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, h := range []string{HarnessClaude, HarnessCodex} {
+		if !cfg.Harnesses[h].Enabled() {
+			t.Errorf("no harnesses: key: %s should keep its enabled default", h)
+		}
+	}
+}
+
 // A listed harness with no home still gets the default home, and listing a
 // harness with no settings enables it.
 func TestListedHarnessWithoutHomeUsesDefault(t *testing.T) {
