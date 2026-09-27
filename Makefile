@@ -26,6 +26,7 @@ test-scripts:
 	shellcheck scripts/*.sh
 	scripts/semver-next_test.sh
 	scripts/check-pr-title_test.sh
+	python3 -m unittest discover -s scripts -p 'test_release_history.py'
 
 vet:
 	go vet ./...

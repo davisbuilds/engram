@@ -35,6 +35,9 @@ Use descriptive prefixes:
 - Review the generated release PR and merge it through the same green CI gate.
   See [release operations](docs/releases.md).
 - It is fine to have multiple commits in one PR; squash merge will combine them on `main`.
+  CI validates the final PR title. Main-push CI also validates the complete
+  unreleased retained history, including direct pushes; a later valid push
+  cannot bypass an earlier invalid commit.
 
 ## Public-Repository Hygiene
 
@@ -66,7 +69,7 @@ documented exit codes, or bump `schemaVersion` and update [`docs/cli.md`](docs/c
   - `go test -race ./...`
   - `golangci-lint run ./...`
   - `golangci-lint fmt --diff` (gofumpt formatting; run `gofumpt -w .` to fix)
-  - `shellcheck scripts/*.sh` (when touching shell)
+  - `make test-scripts` (shell/title and real Git release-history controls)
 
 ## Local Branch Cleanup
 

@@ -47,7 +47,9 @@ is the intelligence. See `README.md` for the user-facing overview.
 - `gofumpt -w .` to format; `golangci-lint run ./...` to lint (config in
   `.golangci.yml`, golangci-lint v2 with gofumpt as the configured formatter).
 - CI (`.github/workflows/ci.yml`) runs build + race tests + lint + a gofumpt
-  format gate on every pull request and push to `main`.
+  format gate on every pull request and push to `main`. `make test-scripts` checks
+  shell/title controls and real Git release-history validation; main pushes
+  additionally validate the complete unreleased retained history.
 
 ## Conventions
 

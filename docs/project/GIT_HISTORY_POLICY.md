@@ -1,6 +1,6 @@
 # Git History and Branch Hygiene
 
-Last updated: September 26, 2026
+Last updated: September 27, 2026
 
 ## Repository Merge Settings
 
@@ -41,6 +41,13 @@ The release workflow runs only after successful push CI on current `main`.
 Release PRs must pass the normal required `build-test-lint` check before merge.
 The GitHub App token lets their pull-request events trigger normal CI.
 
+PR validation checks the final squash title rather than individual branch commits.
+For main pushes, the same required job checks a nonempty forward push range and
+the complete retained non-merge history since the manifest's actual release tag
+(or the configured published bootstrap boundary). A later valid push cannot hide
+an earlier failed category check. Missing/zero/unavailable revisions or malformed
+release configuration fail closed. See release operations for recovery.
+
 ## CI Gates
 
 Workflow: `.github/workflows/ci.yml`
@@ -51,7 +58,7 @@ Quality gates before merge:
 - `go test -race ./...`
 - `golangci-lint run ./...`
 - `golangci-lint fmt --diff` (gofumpt formatting)
-- `shellcheck scripts/*.sh` (when touching shell)
+- `make test-scripts` (shell controls and real Git release-history regression checks)
 
 ## Branch Protection
 

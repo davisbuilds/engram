@@ -25,12 +25,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Validate squash commit title
         if: github.event_name == 'pull_request'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: scripts/check-pr-title.sh
+
+      - name: Test release history validation
+        run: python3 -m unittest discover -s scripts -p 'test_release_history.py'
+
+      - name: Validate main push and complete unreleased history
+        if: github.event_name == 'push'
+        env:
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: python3 scripts/check_release_history.py "$BASE_SHA" "$HEAD_SHA"
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:

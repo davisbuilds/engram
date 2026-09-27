@@ -8,10 +8,13 @@ tags, without distributing binaries or packages.
 
 ## Version and history policy
 
-The existing `v0.1.0` tag is the baseline. The manifest starts at `0.1.0`, and
-`bootstrap-sha` identifies that tag's commit if Release Please cannot discover a
-prior release. Historical changelogs are not reconstructed. Later releases use
-their own discovered tag/release boundary rather than repeatedly using bootstrap.
+The manifest currently identifies the published `v0.2.0` release. CI uses that
+actual tag's commit as the unreleased-history boundary. If the manifest advances
+before its next tag exists, the conservative fallback is `bootstrap-sha`, now
+set to the real `v0.2.0` commit (`a29b7a2cff20ea900ddd3a35a78612b77eb8ccb4`).
+The original bootstrap predates already released non-Conventional commits;
+refreshing it avoids retroactively rejecting that legitimate published history.
+No tags or historical changelogs are rewritten.
 
 PRs are squash merged with their title and body as the commit message. Use
 Conventional Commit titles and inspect the final squash message before merging:
@@ -45,6 +48,15 @@ with current `main` before making release changes. Older CI runs skip if main
 has advanced. It executes no code or checkout supplied by the triggering event.
 Release writes are serialized without cancelling a run in progress.
 
+The required `build-test-lint` job keeps PR validation focused on the final
+squash title; individual WIP branch commits are not release commits. Main pushes
+must have nonzero, available, distinct SHAs with `before` an ancestor of `head`.
+CI also validates all non-merge subjects from the actual manifest-matching tag
+(or configured bootstrap fallback) through head, so a later valid push cannot
+forget an earlier unclassified main commit whose CI failed. Missing configuration
+or unavailable/nonancestor release boundaries fail closed. A tagged head may
+have an empty unreleased range; the actual push range must still be nonempty.
+
 A GitHub App installation token is restricted to this repository, with Contents,
 Issues, and Pull requests write permissions; the default workflow token remains
 read-only. The App action revokes its short-lived token when the job finishes.
@@ -74,3 +86,15 @@ If main advanced, wait for that commit's own CI. Check existing release PRs,
 tags, and Releases before recovery; do not force tags or publish a manual version
 to work around automation. A successful local test does not prove App provisioning
 or GitHub event delivery; those are verified during activation.
+
+Run `make test-scripts` for title controls and real Git release-history regression
+controls, including a failed main commit followed by a later valid push. Workflow
+changes also require `uvx zizmor@1.30.0 --offline .github/workflows/`.
+
+If an unclassified commit is already on main, stop release work and review the
+complete unreleased range and compatibility intent. Preserve published history;
+rewriting unpublished main requires an explicit owner decision. Otherwise keep
+automation blocked pending an owner-approved recovery release with complete
+version/migration notes. Pause this writer before any separately authorized manual
+recovery publication. Never fabricate a historical tag or silently skip the failed
+commit; resume with the manifest matching the actual reviewed release tag.
