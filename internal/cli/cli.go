@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/davisbuilds/engram/internal/agentexec"
 	"github.com/davisbuilds/engram/internal/version"
@@ -16,7 +17,7 @@ import (
 
 // schemaVersion is the version of the response envelope below. Bump it only on a
 // breaking change to the envelope shape, never for command-specific payloads.
-const schemaVersion = 1
+const schemaVersion = 2
 
 // Exit codes are a stable contract: an agent operator branches on these before
 // parsing any output. Keep them in sync with docs/cli.md.
@@ -61,49 +62,62 @@ type env struct {
 	cwd      string
 	agent    string
 	host     string
-	// runner executes a headless agent argv. It defaults to the real subprocess
-	// runner in Run and is swapped for a fake in tests so the curate loop is
-	// exercised without spawning a paid model.
-	runner agentexec.Runner
+	// runnerFor returns the runner for a headless agent argv, given the run's
+	// deadline. It defaults to the real subprocess runner in Run and is swapped
+	// for a fake in tests so the curate loop is exercised without spawning a
+	// paid model.
+	runnerFor func(timeout time.Duration) agentexec.Runner
 }
 
 // command is one entry in engram's subcommand table.
 type command struct {
 	name    string
 	summary string
-	run     func(e *env, name string, args []string) int
+	// args declares the command's own arguments; Run rejects anything else
+	// before the command runs. nil means the command validates its own.
+	args *argSpec
+	run  func(e *env, name string, args []string) int
 }
+
+var (
+	noArgs     = &argSpec{}
+	harnessArg = &argSpec{positionals: 1}
+	shareArgs  = &argSpec{positionals: 1, values: []string{"--to"}}
+	importArgs = &argSpec{positionals: 1, values: []string{"--refresh"}, bools: []string{"--all"}}
+	curateArgs = &argSpec{values: []string{"--harness", "--model", "--effort", "--timeout"}}
+)
 
 // commands returns the full subcommand table. The table is the single source of
 // truth for dispatch, `help`, and `help --json`.
 func commands() []command {
 	return []command{
-		{"remember", "Author a canonical memory (flags, or --from-json - on stdin).", cmdRemember},
-		{"share", "Move a memory to a different scope tier (writes canonical).", cmdShare},
-		{"sync", "Render canonical memories into the harnesses (dry-run; --apply to write).", cmdSync},
-		{"import", "Reverse-sync a harness's native memory into canonical (one-shot; --apply).", cmdImport},
-		{"migrate", "Adopt hand-authored native memory canonical supersedes, in place (dry-run; --apply). Claude Code only.", cmdMigrate},
-		{"reconcile", "Cross-harness one-shot: import every harness → review leads → sync back (dry-run; --apply). Enricher flow in one command.", cmdReconcile},
-		{"discover", "Parse and list every canonical memory, with parse errors.", cmdDiscover},
-		{"list", "List memories relevant to a given cwd / agent / host.", cmdList},
-		{"audit", "Report pending render actions for a harness without writing.", cmdAudit},
-		{"diff", "Show the cross-state difference for each render target.", cmdDiff},
-		{"show", "Dump a harness's engram-rendered memories.", cmdShow},
-		{"review", "Health report: flags near-duplicate memory names, emitted as agent next_steps.", cmdReview},
-		{"curate", "Run a headless agent over the corpus; it proposes add/merge/remove/rescope, engram applies (dry-run; --apply).", cmdCurate},
-		{"hook", "Print harness lifecycle wiring for session-boundary sync.", cmdHook},
-		{"config", "Show config + per-harness readiness (is each harness set up to read what engram writes?).", cmdConfig},
-		{"schema", "Emit engram's JSON schemas (self-describing).", cmdSchema},
-		{"version", "Print the engram version.", cmdVersion},
+		{"remember", "Author a canonical memory (flags, or --from-json - on stdin).", nil, cmdRemember},
+		{"share", "Move a memory to a different scope tier (writes canonical).", shareArgs, cmdShare},
+		{"sync", "Render canonical memories into the harnesses (dry-run; --apply to write).", noArgs, cmdSync},
+		{"import", "Reverse-sync a harness's native memory into canonical (one-shot; --apply).", importArgs, cmdImport},
+		{"migrate", "Adopt hand-authored native memory canonical supersedes, in place (dry-run; --apply). Claude Code only.", harnessArg, cmdMigrate},
+		{"reconcile", "Cross-harness one-shot: import every harness → review leads → sync back (dry-run; --apply). Enricher flow in one command.", noArgs, cmdReconcile},
+		{"discover", "Parse and list every canonical memory, with parse errors.", noArgs, cmdDiscover},
+		{"list", "List memories relevant to a given cwd / agent / host.", noArgs, cmdList},
+		{"audit", "Report pending render actions for a harness without writing.", noArgs, cmdAudit},
+		{"diff", "Show the cross-state difference for each render target.", noArgs, cmdDiff},
+		{"show", "Dump a harness's engram-rendered memories.", harnessArg, cmdShow},
+		{"review", "Health report: flags near-duplicate memory names, emitted as agent next_steps.", noArgs, cmdReview},
+		{"curate", "Run a headless agent over the corpus; it proposes add/merge/remove/rescope, engram applies (dry-run; --apply).", curateArgs, cmdCurate},
+		{"hook", "Print harness lifecycle wiring for session-boundary sync.", harnessArg, cmdHook},
+		{"config", "Show config + per-harness readiness (is each harness set up to read what engram writes?).", noArgs, cmdConfig},
+		{"schema", "Emit engram's JSON schemas (self-describing).", noArgs, cmdSchema},
+		{"version", "Print the engram version.", noArgs, cmdVersion},
 	}
 }
 
 // Run dispatches a single stateless invocation and returns its exit code.
 func Run(args []string) int {
-	e := &env{jsonMode: !isTTY(os.Stdout), runner: agentexec.ExecRunner}
+	e := &env{jsonMode: !isTTY(os.Stdout), runnerFor: agentexec.TimeoutRunner}
 
 	var sub string
 	help := false
+	var flagErr *RespError
 	rest := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -121,14 +135,23 @@ func Run(args []string) int {
 		case a == "-h" || a == "--help":
 			// Help wins wherever it appears; it never runs the command.
 			help = true
-		case isFlag(a, "--config"):
-			e.config, i = flagValue(args, i)
-		case isFlag(a, "--cwd"):
-			e.cwd, i = flagValue(args, i)
-		case isFlag(a, "--agent"):
-			e.agent, i = flagValue(args, i)
-		case isFlag(a, "--host"):
-			e.host, i = flagValue(args, i)
+		case isFlag(a, "--config"), isFlag(a, "--cwd"), isFlag(a, "--agent"), isFlag(a, "--host"):
+			v, next, rerr := requireValue(args, i)
+			if rerr != nil {
+				flagErr = rerr
+				break
+			}
+			i = next
+			switch name, _, _ := strings.Cut(a, "="); name {
+			case "--config":
+				e.config = v
+			case "--cwd":
+				e.cwd = v
+			case "--agent":
+				e.agent = v
+			default:
+				e.host = v
+			}
 		case sub == "" && !strings.HasPrefix(a, "-"):
 			sub = a
 		default:
@@ -140,9 +163,17 @@ func Run(args []string) int {
 		return e.usage(exitOK)
 	}
 	for _, c := range commands() {
-		if c.name == sub {
-			return c.run(e, c.name, rest)
+		if c.name != sub {
+			continue
 		}
+		if flagErr == nil && c.args != nil {
+			_, flagErr = parseArgs(rest, *c.args)
+		}
+		if flagErr != nil {
+			e.emit(c.name, false, nil, nil, flagErr, nil)
+			return exitUsage
+		}
+		return c.run(e, c.name, rest)
 	}
 	e.emit(sub, false, nil, nil, &RespError{
 		Code:    "unknown_command",
@@ -282,19 +313,6 @@ func isTTY(f *os.File) bool {
 		return false
 	}
 	return fi.Mode()&os.ModeCharDevice != 0
-}
-
-// flagValue extracts the value for the value-taking flag at args[i], supporting
-// both "--flag=value" and "--flag value", and returns the value plus the index
-// to continue iterating from.
-func flagValue(args []string, i int) (string, int) {
-	if eq := strings.IndexByte(args[i], '='); eq >= 0 {
-		return args[i][eq+1:], i
-	}
-	if i+1 < len(args) {
-		return args[i+1], i + 1
-	}
-	return "", i
 }
 
 // isFlag reports whether a is the value flag name, as `name` or `name=value`.

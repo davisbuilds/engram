@@ -101,7 +101,8 @@ validate.
 
 The default models are `claude-sonnet-5`/`high` and `gpt-5.6-terra`/`high`;
 set per-harness defaults under `curate.models.<harness>` in config, or override
-per run with `--model` / `--effort`.
+per run with `--model` / `--effort`. Each agent run times out after `curate.timeout` (default `20m`,
+`0` for none), overridable per run with `--timeout`.
 
 ## Session-boundary sync (Claude Code hooks)
 

@@ -5,8 +5,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestClaudeArgvSeparatorAlwaysBeforePrompt(t *testing.T) {
@@ -287,5 +290,77 @@ func TestExtractClaudeTextRejectsGarbage(t *testing.T) {
 func TestExecRunnerRefusesUnderGoTest(t *testing.T) {
 	if _, err := ExecRunner([]string{"true"}); err == nil {
 		t.Fatal("ExecRunner spawned a process under go test; want a refusal")
+	}
+}
+
+// A stalled agent is killed at the deadline together with any process it
+// started, and the error says it timed out.
+func TestRunWithTimeoutKillsTheProcessGroup(t *testing.T) {
+	start := time.Now()
+	out, err := runWithTimeout([]string{"sh", "-c", "sleep 30 & echo $!; wait"}, 300*time.Millisecond)
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("runWithTimeout returned after %v; the deadline was not enforced", elapsed)
+	}
+	if err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("err = %v, want a timeout error", err)
+	}
+	pid, perr := strconv.Atoi(strings.TrimSpace(string(out)))
+	if perr != nil {
+		t.Fatalf("child pid not captured from %q: %v", out, perr)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for processAlive(pid) {
+		if time.Now().After(deadline) {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+			t.Fatalf("child %d outlived the timeout; the process group was not killed", pid)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// processAlive reports whether pid is running. A zombie is dead: once the group
+// leader is killed its children are reparented to init, and an init that does
+// not reap (a bare container's PID 1) leaves them as zombies kill(pid, 0) still
+// finds.
+func processAlive(pid int) bool {
+	if syscall.Kill(pid, 0) != nil {
+		return false
+	}
+	out, err := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return false // ps exits non-zero once the pid is gone
+	}
+	return !strings.HasPrefix(strings.TrimSpace(string(out)), "Z")
+}
+
+// The known-positive control for processAlive: a killed child this test has not
+// yet reaped is a zombie, and must not read as alive.
+func TestProcessAliveTreatsZombiesAsDead(t *testing.T) {
+	cmd := exec.Command("sleep", "30")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pid := cmd.Process.Pid
+	defer func() { _ = cmd.Wait() }()
+	if !processAlive(pid) {
+		t.Fatalf("running child %d reads as dead", pid)
+	}
+	if err := cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for processAlive(pid) {
+		if time.Now().After(deadline) {
+			t.Fatalf("killed, unreaped child %d (a zombie) still reads as alive", pid)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// No deadline (d <= 0) runs to completion.
+func TestRunWithTimeoutZeroMeansNoDeadline(t *testing.T) {
+	out, err := runWithTimeout([]string{"sh", "-c", "sleep 0.2; echo done"}, 0)
+	if err != nil || strings.TrimSpace(string(out)) != "done" {
+		t.Fatalf("out, err = %q, %v; want done, nil", out, err)
 	}
 }

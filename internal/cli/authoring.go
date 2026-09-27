@@ -46,6 +46,10 @@ func cmdRemember(e *env, name string, args []string) int {
 		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: err.Error()}, nil)
 		return exitUsage
 	}
+	if fs.NArg() > 0 {
+		e.emit(name, false, nil, nil, usageError("unexpected argument %q", fs.Arg(0)), nil)
+		return exitUsage
+	}
 
 	m, rerr := buildMemory(*fromJSON, *nm, *desc, *typ, *scp, *body, cwds, agents, hosts, related)
 	if rerr != nil {
@@ -91,15 +95,14 @@ func cmdRemember(e *env, name string, args []string) int {
 }
 
 func cmdShare(e *env, name string, args []string) int {
-	var memName, to string
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case strings.HasPrefix(a, "--to"):
-			to, i = flagValue(args, i)
-		case !strings.HasPrefix(a, "-") && memName == "":
-			memName = a
-		}
+	pa, rerr := parseArgs(args, *shareArgs)
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitUsage
+	}
+	memName, to := "", pa.last("--to")
+	if len(pa.pos) == 1 {
+		memName = pa.pos[0]
 	}
 	if memName == "" || to == "" {
 		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram share <name> --to <scope>"}, nil)
@@ -147,22 +150,19 @@ func cmdShare(e *env, name string, args []string) int {
 }
 
 func cmdImport(e *env, name string, args []string) int {
+	pa, perr := parseArgs(args, *importArgs)
+	if perr != nil {
+		e.emit(name, false, nil, nil, perr, nil)
+		return exitUsage
+	}
 	var harness string
-	all := false
+	if len(pa.pos) == 1 {
+		harness = pa.pos[0]
+	}
+	all := pa.bools["--all"]
 	refresh := map[string]bool{}
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "--all":
-			all = true
-		case a == "--refresh" && i+1 < len(args):
-			i++
-			addRefresh(refresh, args[i])
-		case strings.HasPrefix(a, "--refresh="):
-			addRefresh(refresh, strings.TrimPrefix(a, "--refresh="))
-		case !strings.HasPrefix(a, "-") && harness == "":
-			harness = a
-		}
+	for _, v := range pa.vals["--refresh"] {
+		addRefresh(refresh, v)
 	}
 	if harness == "" {
 		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram import <claude-code|codex> [--all] [--refresh <name>]… [--apply]"}, nil)

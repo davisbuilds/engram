@@ -72,6 +72,32 @@ func (s *session) agentFor(native string) string {
 	return native
 }
 
+// harnessFailure is the top-level error for a multi-harness command when any
+// harness failed: its code is harness_failed and its message names each failed
+// harness, so a consumer branching on error.code sees the failure without
+// walking data (each entry keeps its own error too). nil when none failed.
+func harnessFailure(entries []map[string]any) *RespError {
+	var msgs []string
+	for _, en := range entries {
+		if err, ok := en["error"].(string); ok {
+			msgs = append(msgs, fmt.Sprintf("%v: %s", en["harness"], err))
+		}
+	}
+	if len(msgs) == 0 {
+		return nil
+	}
+	return &RespError{Code: "harness_failed", Message: strings.Join(msgs, "; ")}
+}
+
+// skippedNote is the warning for a disabled harness a command skipped, naming
+// the reason when the config's harnesses: section simply left it out.
+func (s *session) skippedNote(harnessName string) string {
+	if s.cfg.Harnesses[harnessName].Unlisted {
+		return harnessName + " disabled (not listed under harnesses: in the config); skipped"
+	}
+	return harnessName + " disabled; skipped"
+}
+
 // targets builds a reconcilable target for every enabled harness, filtering the
 // discovered memories per harness (the agent axis differs by harness).
 func (s *session) targets() ([]sync.Target, []string, *RespError) {
@@ -91,7 +117,7 @@ func (s *session) targets() ([]sync.Target, []string, *RespError) {
 		})
 		warns = append(warns, harnessWarnings(harness.CheckClaude(h.Home, true))...)
 	} else {
-		warns = append(warns, "claude-code disabled; skipped")
+		warns = append(warns, s.skippedNote(config.HarnessClaude))
 	}
 	if h := s.cfg.Harnesses[config.HarnessCodex]; h.Enabled() {
 		rel := scope.RelevantFor(mems, s.cwd, s.agentFor("codex"), s.host)
@@ -101,7 +127,7 @@ func (s *session) targets() ([]sync.Target, []string, *RespError) {
 		})
 		warns = append(warns, harnessWarnings(harness.CheckCodex(h.Home, true))...)
 	} else {
-		warns = append(warns, "codex disabled; skipped")
+		warns = append(warns, s.skippedNote(config.HarnessCodex))
 	}
 	return targets, warns, nil
 }
@@ -169,7 +195,7 @@ func cmdSync(e *env, name string, _ []string) int {
 	}
 	e.emit(name, exit == exitOK, map[string]any{
 		"cwd": s.cwd, "host": s.host, "apply": e.apply, "harnesses": entries,
-	}, warns, nil, next)
+	}, warns, harnessFailure(entries), next)
 	return exit
 }
 
@@ -203,7 +229,7 @@ func cmdAudit(e *env, name string, _ []string) int {
 	}
 	e.emit(name, exit == exitOK, map[string]any{
 		"cwd": s.cwd, "host": s.host, "harnesses": entries,
-	}, warns, nil, next)
+	}, warns, harnessFailure(entries), next)
 	return exit
 }
 
@@ -270,7 +296,7 @@ func cmdDiff(e *env, name string, _ []string) int {
 		for _, a := range actions {
 			byName[a.Name] = a.Kind
 		}
-		var items []map[string]string
+		items := []map[string]string{}
 		for _, m := range tg.DesiredMemories() {
 			status := "in-sync"
 			if k, ok := byName[m.Name]; ok {
@@ -287,18 +313,21 @@ func cmdDiff(e *env, name string, _ []string) int {
 		exit = worseExit(exit, exitForActions(actions))
 		entries = append(entries, entry)
 	}
-	e.emit(name, exit == exitOK, map[string]any{"cwd": s.cwd, "host": s.host, "harnesses": entries}, warns, nil, nil)
+	e.emit(name, exit == exitOK, map[string]any{"cwd": s.cwd, "host": s.host, "harnesses": entries}, warns, harnessFailure(entries), nil)
 	return exit
 }
 
 // cmdShow dumps a harness's engram-rendered memories. Reading a disabled harness
 // is permissive: it proceeds with a warning (contrast import, which is strict).
 func cmdShow(e *env, name string, args []string) int {
+	pa, rerr := parseArgs(args, *harnessArg)
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitUsage
+	}
 	var harness string
-	for _, a := range args {
-		if !strings.HasPrefix(a, "-") && harness == "" {
-			harness = a
-		}
+	if len(pa.pos) == 1 {
+		harness = pa.pos[0]
 	}
 	if harness == "" {
 		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram show <claude-code|codex>"}, nil)

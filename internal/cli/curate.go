@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"strings"
-
 	"github.com/davisbuilds/engram/internal/agentexec"
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/curate"
@@ -16,19 +14,16 @@ import (
 // never touches a file; engram is the sole mutator, and a batch with any invalid
 // operation is refused whole (fail closed).
 func cmdCurate(e *env, name string, args []string) int {
-	harness := config.HarnessClaude
-	var modelOverride, effortOverride string
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case strings.HasPrefix(a, "--harness"):
-			harness, i = flagValue(args, i)
-		case strings.HasPrefix(a, "--model"):
-			modelOverride, i = flagValue(args, i)
-		case strings.HasPrefix(a, "--effort"):
-			effortOverride, i = flagValue(args, i)
-		}
+	pa, rerr := parseArgs(args, *curateArgs)
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitUsage
 	}
+	harness := config.HarnessClaude
+	if h := pa.last("--harness"); h != "" {
+		harness = h
+	}
+	modelOverride, effortOverride := pa.last("--model"), pa.last("--effort")
 	if harness != config.HarnessClaude && harness != config.HarnessCodex {
 		e.emit(name, false, nil, nil, &RespError{Code: "unknown_harness", Message: "harness must be claude-code or codex"}, nil)
 		return exitUsage
@@ -56,6 +51,16 @@ func cmdCurate(e *env, name string, args []string) int {
 	}
 	opts := agentexec.Options{Model: choice.Model, Effort: choice.Effort}
 
+	// Resolve the deadline: --timeout, else config, else the built-in default.
+	timeout, terr := cfg.CurateTimeout()
+	if t := pa.last("--timeout"); t != "" {
+		timeout, terr = config.ParseTimeout(t, 0)
+	}
+	if terr != nil {
+		e.emit(name, false, nil, warns, &RespError{Code: "invalid_timeout", Message: terr.Error()}, nil)
+		return exitUsage
+	}
+
 	prompt, err := curate.BuildPrompt(curate.Corpus{Memories: mems, Findings: review.Analyze(mems)})
 	if err != nil {
 		e.emit(name, false, nil, warns, &RespError{Code: "build_prompt", Message: err.Error()}, nil)
@@ -71,9 +76,10 @@ func cmdCurate(e *env, name string, args []string) int {
 	}
 	invocation := map[string]any{
 		"harness": harness, "model": choice.Model, "effort": choice.Effort, "corpus_size": len(mems),
+		"timeout": timeout.String(),
 	}
 
-	stdout, err := e.runner(argv)
+	stdout, err := e.runnerFor(timeout)(argv)
 	if err != nil {
 		e.emit(name, false, map[string]any{"invocation": invocation}, warns,
 			&RespError{Code: "agent_run", Message: err.Error()}, nil)

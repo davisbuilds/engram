@@ -7,8 +7,10 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -25,6 +27,9 @@ const (
 type Harness struct {
 	Home     string `yaml:"home"`
 	Disabled bool   `yaml:"disabled"`
+	// Unlisted marks a harness the config's harnesses: section left out; it is
+	// disabled, and Unlisted lets a warning say why.
+	Unlisted bool `yaml:"-"`
 }
 
 // Enabled reports whether engram may act on this harness.
@@ -42,6 +47,35 @@ type ModelChoice struct {
 // in; a config file or a per-run flag overrides them.
 type CurateConfig struct {
 	Models map[string]ModelChoice `yaml:"models"`
+	// Timeout bounds one agent run, as a Go duration ("20m"); "0" means no
+	// deadline. Empty means DefaultCurateTimeout.
+	Timeout string `yaml:"timeout"`
+}
+
+// DefaultCurateTimeout bounds a curate agent run when neither the config nor a
+// flag sets one, so a stalled agent cannot block curate forever.
+const DefaultCurateTimeout = 20 * time.Minute
+
+// CurateTimeout returns the configured curate deadline, DefaultCurateTimeout
+// when unset; an unparseable or negative value is an error.
+func (c *Config) CurateTimeout() (time.Duration, error) {
+	return ParseTimeout(c.Curate.Timeout, DefaultCurateTimeout)
+}
+
+// ParseTimeout parses a curate timeout as a Go duration, returning def for an
+// empty value; "0" means no deadline and a negative duration is an error.
+func ParseTimeout(v string, def time.Duration) (time.Duration, error) {
+	if v == "" {
+		return def, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err == nil && d < 0 {
+		err = errors.New("must not be negative")
+	}
+	if err != nil {
+		return 0, fmt.Errorf("invalid curate timeout %q: %w", v, err)
+	}
+	return d, nil
 }
 
 // Config is the fully-resolved configuration.
@@ -107,15 +141,32 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Decode harnesses into an empty map, not the defaults: yaml merges into an
+	// existing map, which would keep every unlisted harness enabled.
+	cfg.Harnesses = nil
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
+	}
+	// A bare or null harnesses: key decodes to a nil map, the same as no key at
+	// all; the section is present, though, so it must still disable every harness.
+	if cfg.Harnesses == nil {
+		var keys map[string]any
+		if err := yaml.Unmarshal(data, &keys); err != nil {
+			return nil, err
+		}
+		if _, ok := keys["harnesses"]; ok {
+			cfg.Harnesses = map[string]Harness{}
+		}
 	}
 	cfg.fillDefaults()
 	return &cfg, nil
 }
 
 // fillDefaults patches any field a partial config left empty back to a sane
-// default, so an overriding config never has to restate every field.
+// default, so an overriding config never has to restate every field. The one
+// exception is harnesses: once a config lists any, a harness it leaves out is
+// disabled (at its default home, for reporting) rather than enabled at the
+// user's real home, so a config meant as a scratch area cannot write real memory.
 func (c *Config) fillDefaults() {
 	d := defaults()
 	if c.CanonicalRoot == "" {
@@ -125,12 +176,13 @@ func (c *Config) fillDefaults() {
 		c.Hosts = map[string]string{}
 	}
 	if c.Harnesses == nil {
-		c.Harnesses = map[string]Harness{}
+		c.Harnesses = d.Harnesses
+		return
 	}
 	for name, def := range d.Harnesses {
 		h, ok := c.Harnesses[name]
 		if !ok {
-			c.Harnesses[name] = def
+			c.Harnesses[name] = Harness{Home: def.Home, Disabled: true, Unlisted: true}
 			continue
 		}
 		if h.Home == "" {

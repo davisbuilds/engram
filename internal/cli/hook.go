@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 )
 
 const hookCommand = "engram sync --apply --quiet"
@@ -13,11 +12,14 @@ const hookCommand = "engram sync --apply --quiet"
 // to session boundaries. Codex has no lifecycle hooks, so its capture stays
 // agent-wrapped; that is stated in the accompanying note.
 func cmdHook(e *env, name string, args []string) int {
+	pa, rerr := parseArgs(args, *harnessArg)
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitUsage
+	}
 	var sub string
-	for _, a := range args {
-		if !strings.HasPrefix(a, "-") && sub == "" {
-			sub = a
-		}
+	if len(pa.pos) == 1 {
+		sub = pa.pos[0]
 	}
 	if sub != "" && sub != "print" {
 		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram hook print"}, nil)

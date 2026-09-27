@@ -27,6 +27,11 @@ func cmdConfig(e *env, name string, _ []string) int {
 
 	canonExists := isDir(cfg.CanonicalRoot)
 	var warns []string
+	for _, h := range []string{config.HarnessClaude, config.HarnessCodex} {
+		if cfg.Harnesses[h].Unlisted {
+			warns = append(warns, h+": disabled because the config's harnesses: section does not list it")
+		}
+	}
 	if !canonExists {
 		warns = append(warns, "canonical_root "+cfg.CanonicalRoot+" does not exist yet (engram creates it on first write)")
 	}

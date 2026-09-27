@@ -13,11 +13,14 @@ package agentexec
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // Options carries the model and reasoning-effort knobs for a headless run. Both
@@ -102,22 +105,53 @@ func CodexArgvOpts(prompt string, opts Options) []string {
 // tests exercise the curate loop without ever spawning a real, paid model.
 type Runner func(argv []string) ([]byte, error)
 
-// ExecRunner is the production Runner: it runs the argv as a subprocess and
-// returns stdout, folding stderr into the error on failure. Under go test it
-// refuses to run anything, so a test that reaches it cannot launch a real,
-// possibly billed, agent; tests inject a Runner instead.
+// ExecRunner is the production Runner with no deadline: it runs the argv as a
+// subprocess and returns stdout, folding stderr into the error on failure. Under
+// go test it refuses to run anything, so a test that reaches it cannot launch a
+// real, possibly billed, agent; tests inject a Runner instead.
 func ExecRunner(argv []string) ([]byte, error) {
-	if testing.Testing() {
-		return nil, fmt.Errorf("refusing to run %q under go test: inject a Runner", argv)
+	return TimeoutRunner(0)(argv)
+}
+
+// TimeoutRunner returns a production Runner that, when d is positive, kills the
+// agent and every process it started once d elapses and reports the timeout. A
+// stalled agent otherwise blocks its caller forever. It refuses under go test,
+// as ExecRunner does.
+func TimeoutRunner(d time.Duration) Runner {
+	return func(argv []string) ([]byte, error) {
+		if testing.Testing() {
+			return nil, fmt.Errorf("refusing to run %q under go test: inject a Runner", argv)
+		}
+		return runWithTimeout(argv, d)
 	}
+}
+
+// runWithTimeout runs argv, killing its process group when d (if positive)
+// elapses. It is the unguarded body of the production runners.
+func runWithTimeout(argv []string, d time.Duration) ([]byte, error) {
 	if len(argv) == 0 {
 		return nil, fmt.Errorf("empty argv")
 	}
-	cmd := exec.Command(argv[0], argv[1:]...) //nolint:gosec // argv is engram-built, not user-injected
+	ctx := context.Background()
+	if d > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, d)
+		defer cancel()
+	}
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // argv is engram-built, not user-injected
+	// Run the agent in its own process group and kill the whole group on the
+	// deadline: an agent CLI spawns helpers that would otherwise outlive it and
+	// hold its output pipes open.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = 5 * time.Second
 	var out, errBuf bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errBuf
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return out.Bytes(), fmt.Errorf("%s timed out after %v and was killed", argv[0], d)
+		}
 		msg := strings.TrimSpace(errBuf.String())
 		if msg == "" {
 			msg = err.Error()

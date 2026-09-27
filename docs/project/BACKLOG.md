@@ -29,15 +29,17 @@ only; shipped items live in the git history.
   OS `ARG_MAX` (about 1 MB on macOS) fails at exec with an opaque `agent_run`
   error. Pass the prompt on stdin; verify how `claude -p` and `codex exec` read
   stdin first.
-- **Curate: no subprocess timeout.** `agentexec.ExecRunner` uses a plain
-  `exec.Command` with no deadline or process-group kill, so a stalled agent
-  blocks `curate` indefinitely. Use `CommandContext` with a configurable timeout
-  and kill the process group on expiry.
 - **Curate: a batch can half-apply.** `curate.Apply` validates the whole batch
   first but has no rollback if a write fails midway (e.g. a directory occupying a
   target path), leaving canonical in neither the before nor the after state.
   Stage writes and commit them in a final rename phase, or report a partial apply
   as its own flagged outcome.
+- **Curate: a timed-out agent's helpers can linger as zombies.** The timeout
+  SIGKILLs the agent's whole process group at once, so its helpers are reparented
+  to init when the leader dies. An init that does not reap (a container's bare
+  PID 1, without `--init`) keeps them as zombies, one batch per timed-out run. On
+  Linux, marking engram a child subreaper (`PR_SET_CHILD_SUBREAPER`) and reaping
+  after the kill would keep them; macOS has no equivalent and launchd reaps.
 - **Unknown frontmatter keys are dropped on re-save.** `schema.Parse` (and
   `remember --from-json`) silently ignore unmapped keys, so one Parse→Render round
   trip (share, a forced remember) strips a hand-added field, and a typo'd
@@ -146,22 +148,6 @@ only; shipped items live in the git history.
 
 ## CLI contract
 
-- **Envelope nulls and missing errors.** `sync.Result`'s `applied`/`conflicts`
-  serialize as `null` instead of `[]` (every other array goes through `orEmpty`),
-  and a per-target runtime failure puts the message only in
-  `data.harnesses[].error` while the top-level `error` stays `null` with exit `1`,
-  so a consumer cannot read `error.code` as documented. Both change the envelope:
-  bump `schemaVersion` and update `docs/cli.md`.
-- **Unknown flags and arguments are ignored.** Most handlers take `_ []string`,
-  so a typo (`--harnes codex` silently curates Claude), a stray positional, or a
-  dangling `--refresh` with no value is accepted without a usage error. Reject
-  unknown arguments per command with exit `2`.
-- **Partial `harnesses:` config silently enables the rest at real homes.** A
-  config naming only one harness leaves the others defaulted to the user's real
-  home and enabled, so a config meant as a scratch area still writes real memory,
-  and `engram config` does not say a harness was defaulted rather than
-  configured. Options: treat unmentioned harnesses as disabled once `harnesses:`
-  is present, or at least report `configured: explicit|default` per harness.
 - **`--cwd` and symlinks.** `--cwd` is now tilde-expanded, made absolute and
   cleaned, but symlinks are left as given, and the default cwd comes from
   `os.Getwd`, which can return the logical `$PWD` (`/tmp/x`) rather than the

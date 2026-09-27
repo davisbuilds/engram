@@ -38,7 +38,7 @@ Every `--json` result:
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "command": "sync",
   "ok": true,
   "data": { "...": "command-specific payload" },
@@ -54,8 +54,16 @@ Every `--json` result:
   payload is self-contained.
 - `data` — command-specific; documented per command.
 - `error` — `null` on success, else `{ "code": "stable_slug", "message": "…" }`.
-  `code` is a stable branch key; `message` is for humans.
+  `code` is a stable branch key; `message` is for humans. A command that works
+  on several harnesses (`sync`, `audit`, `diff`, `reconcile`) sets `error` to
+  `harness_failed` (exit `1`) when any harness fails, naming each one in
+  `message`; the failed harness's entry in `data` still carries its own `error`.
+- Lists in `data` are always JSON arrays, `[]` when empty, never `null`.
 - `next_steps` — agent-consumable leads; may be empty/absent.
+- `schema_version` changes only when the envelope's shape does. Version 2 made
+  empty lists `[]` (they were `null`, e.g. a sync result's `applied` and
+  `conflicts`) and added the top-level `harness_failed` error (a harness failure
+  used to appear only inside `data`).
 
 Primary data (and all JSON) goes to **stdout**; diagnostics, warnings, and human
 notes go to **stderr**.
@@ -133,6 +141,12 @@ Verb-first throughout (matches the authoring vocabulary: *remember*, *share*,
 | `--host <label>` | override the host label (else `hostname -s` mapped via config) |
 | `-h, --help` | help, anywhere in argv; the command is never run |
 | `--version` | print version |
+
+Arguments are strict. An unknown flag (including a misspelled or extended one,
+such as `--cdw` or `--harnessX`), a value flag given no value or followed by
+another flag, and a positional a command does not take are all usage errors
+(exit `2`, `error.code = "usage"`) reported before the command runs, so a typo
+never runs the command as if the argument were absent.
 
 `--cwd`, `--agent`, and `--host` are the load-bearing agent affordances: a hook
 or headless agent runs `engram` on behalf of *another* session whose directory,
@@ -277,8 +291,12 @@ explicit rather than ambient.
   `--apply` applies nothing (exit `3`).
   Model/effort are `--model` / `--effort` (flags win over the per-harness config
   default: claude → `claude-sonnet-5`/`high`, codex → `gpt-5.6-terra`/`high`);
-  `--harness` picks which agent runs (default `claude-code`). The trust boundary
-  is that a model *proposes* and engram is the sole *mutator*.
+  `--harness` picks which agent runs (default `claude-code`). An agent run is
+  bounded by `--timeout <duration>` (else `curate.timeout` in config, else
+  `20m`; `0` means no deadline): on expiry engram kills the agent and every
+  process it started and reports `agent_run` (exit `1`); an invalid duration is
+  `invalid_timeout` (exit `2`). The trust boundary is that a model *proposes*
+  and engram is the sole *mutator*.
 - **`hook print`** — emits the JSON snippet wiring `engram sync --apply --quiet`
   to Claude Code SessionStart/Stop. Codex capture is agent-wrapped (documented).
 
@@ -292,6 +310,12 @@ explicit rather than ambient.
   values to the host identifiers used in `applies_to.hosts`. Host names are
   therefore never compiled into engram; a fresh install knows nothing about any
   specific machine until its config says so.
+- With no `harnesses:` section, every harness is enabled at its default home
+  (`~/.claude`, `~/.codex`). Once a config has a `harnesses:` section, a harness
+  it does not list is **disabled** (a listed harness with no `home` still gets
+  the default home); an empty `harnesses:` key disables every harness. A config naming one harness — a scratch area, say — thus
+  never writes the others at the user's real homes; commands skip the unlisted
+  harness with a warning saying it was not listed, and `config` reports it.
 - engram never edits another program's config silently; `hook print` emits a
   snippet for the user/agent to place, it does not mutate `settings.json`.
 
