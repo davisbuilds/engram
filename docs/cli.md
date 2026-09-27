@@ -134,6 +134,12 @@ Verb-first throughout (matches the authoring vocabulary: *remember*, *share*,
 | `-h, --help` | help, anywhere in argv; the command is never run |
 | `--version` | print version |
 
+Arguments are strict. An unknown flag (including a misspelled or extended one,
+such as `--cdw` or `--harnessX`), a value flag given no value or followed by
+another flag, and a positional a command does not take are all usage errors
+(exit `2`, `error.code = "usage"`) reported before the command runs, so a typo
+never runs the command as if the argument were absent.
+
 `--cwd`, `--agent`, and `--host` are the load-bearing agent affordances: a hook
 or headless agent runs `engram` on behalf of *another* session whose directory,
 harness, and machine differ from engram's own process — these make the target

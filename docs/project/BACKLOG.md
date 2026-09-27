@@ -152,10 +152,6 @@ only; shipped items live in the git history.
   `data.harnesses[].error` while the top-level `error` stays `null` with exit `1`,
   so a consumer cannot read `error.code` as documented. Both change the envelope:
   bump `schemaVersion` and update `docs/cli.md`.
-- **Unknown flags and arguments are ignored.** Most handlers take `_ []string`,
-  so a typo (`--harnes codex` silently curates Claude), a stray positional, or a
-  dangling `--refresh` with no value is accepted without a usage error. Reject
-  unknown arguments per command with exit `2`.
 - **Partial `harnesses:` config silently enables the rest at real homes.** A
   config naming only one harness leaves the others defaulted to the user's real
   home and enabled, so a config meant as a scratch area still writes real memory,

@@ -294,11 +294,14 @@ func cmdDiff(e *env, name string, _ []string) int {
 // cmdShow dumps a harness's engram-rendered memories. Reading a disabled harness
 // is permissive: it proceeds with a warning (contrast import, which is strict).
 func cmdShow(e *env, name string, args []string) int {
+	pa, rerr := parseArgs(args, *harnessArg)
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitUsage
+	}
 	var harness string
-	for _, a := range args {
-		if !strings.HasPrefix(a, "-") && harness == "" {
-			harness = a
-		}
+	if len(pa.pos) == 1 {
+		harness = pa.pos[0]
 	}
 	if harness == "" {
 		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram show <claude-code|codex>"}, nil)

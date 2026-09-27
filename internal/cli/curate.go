@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"strings"
-
 	"github.com/davisbuilds/engram/internal/agentexec"
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/curate"
@@ -16,19 +14,16 @@ import (
 // never touches a file; engram is the sole mutator, and a batch with any invalid
 // operation is refused whole (fail closed).
 func cmdCurate(e *env, name string, args []string) int {
-	harness := config.HarnessClaude
-	var modelOverride, effortOverride string
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case strings.HasPrefix(a, "--harness"):
-			harness, i = flagValue(args, i)
-		case strings.HasPrefix(a, "--model"):
-			modelOverride, i = flagValue(args, i)
-		case strings.HasPrefix(a, "--effort"):
-			effortOverride, i = flagValue(args, i)
-		}
+	pa, rerr := parseArgs(args, *curateArgs)
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitUsage
 	}
+	harness := config.HarnessClaude
+	if h := pa.last("--harness"); h != "" {
+		harness = h
+	}
+	modelOverride, effortOverride := pa.last("--model"), pa.last("--effort")
 	if harness != config.HarnessClaude && harness != config.HarnessCodex {
 		e.emit(name, false, nil, nil, &RespError{Code: "unknown_harness", Message: "harness must be claude-code or codex"}, nil)
 		return exitUsage

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/discover"
@@ -18,11 +17,14 @@ import (
 // is gated on body-identity, so a diverged or ambiguous file is reported and left
 // byte-for-byte untouched.
 func cmdMigrate(e *env, name string, args []string) int {
+	pa, rerr := parseArgs(args, *harnessArg)
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitUsage
+	}
 	var harness string
-	for _, a := range args {
-		if !strings.HasPrefix(a, "-") && harness == "" {
-			harness = a
-		}
+	if len(pa.pos) == 1 {
+		harness = pa.pos[0]
 	}
 	if harness == "" {
 		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram migrate <claude-code> [--apply]"}, nil)
