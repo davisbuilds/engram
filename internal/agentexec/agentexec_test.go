@@ -281,3 +281,11 @@ func TestExtractClaudeTextRejectsGarbage(t *testing.T) {
 		t.Error("expected an error on non-JSON stdout")
 	}
 }
+
+// A test that reaches the production runner (e.g. Run([]string{"curate"})) must
+// fail instead of launching a real, possibly billed, claude or codex.
+func TestExecRunnerRefusesUnderGoTest(t *testing.T) {
+	if _, err := ExecRunner([]string{"true"}); err == nil {
+		t.Fatal("ExecRunner spawned a process under go test; want a refusal")
+	}
+}

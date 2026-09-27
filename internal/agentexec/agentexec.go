@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"testing"
 )
 
 // Options carries the model and reasoning-effort knobs for a headless run. Both
@@ -102,8 +103,13 @@ func CodexArgvOpts(prompt string, opts Options) []string {
 type Runner func(argv []string) ([]byte, error)
 
 // ExecRunner is the production Runner: it runs the argv as a subprocess and
-// returns stdout, folding stderr into the error on failure.
+// returns stdout, folding stderr into the error on failure. Under go test it
+// refuses to run anything, so a test that reaches it cannot launch a real,
+// possibly billed, agent; tests inject a Runner instead.
 func ExecRunner(argv []string) ([]byte, error) {
+	if testing.Testing() {
+		return nil, fmt.Errorf("refusing to run %q under go test: inject a Runner", argv)
+	}
 	if len(argv) == 0 {
 		return nil, fmt.Errorf("empty argv")
 	}
