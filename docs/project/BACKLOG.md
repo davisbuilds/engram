@@ -40,6 +40,14 @@ only; shipped items live in the git history.
   PID 1, without `--init`) keeps them as zombies, one batch per timed-out run. On
   Linux, marking engram a child subreaper (`PR_SET_CHILD_SUBREAPER`) and reaping
   after the kill would keep them; macOS has no equivalent and launchd reaps.
+- **Render applies read canonical without a lock.** `sync --apply` (and
+  `reconcile --apply`'s propagation, after it releases the canonical lock)
+  renders from a canonical snapshot taken without the lock, so a removal that
+  lands after the snapshot (`forget`, `curate remove`) can have its render
+  re-created by that sync, until the next sync removes it as `STALE`. A shared
+  canonical lock (`LOCK_SH`) held from snapshot through render, against the
+  writers' exclusive one, would order them; reconcile would hold its exclusive
+  lock through propagation.
 - **Unknown frontmatter keys are dropped on re-save.** `schema.Parse` (and
   `remember --from-json`) silently ignore unmapped keys, so one Parse→Render round
   trip (share, a forced remember) strips a hand-added field, and a typo'd

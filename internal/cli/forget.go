@@ -3,7 +3,6 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -273,8 +272,9 @@ func (s *session) restore(e *env, name string, names []string) int {
 	return exitOK
 }
 
-// nativeIndex is where forgotten memories' native sources still live: Claude
-// files by basename across every project slug, and Codex Task Groups by name.
+// nativeIndex is where forgotten memories' native sources still live, by the
+// memory name each holds: Claude files across every project slug, and Codex
+// Task Groups.
 type nativeIndex struct {
 	claude map[string][]string
 	codex  map[string]string
@@ -287,23 +287,15 @@ func (s *session) nativeSources() (nativeIndex, error) {
 		if err != nil {
 			return idx, err
 		}
+		// Key each hand-authored file by the memory it holds (the name import
+		// gives it), so a same-named file holding another memory never matches.
 		for _, dir := range dirs {
-			entries, err := os.ReadDir(dir)
+			res, err := importer.ImportClaude(dir, "")
 			if err != nil {
 				return idx, err
 			}
-			for _, en := range entries {
-				if en.IsDir() || !strings.HasSuffix(en.Name(), ".md") || en.Name() == "MEMORY.md" {
-					continue
-				}
-				p := filepath.Join(dir, en.Name())
-				content, err := os.ReadFile(p)
-				if err != nil {
-					return idx, err
-				}
-				if !sync.IsEngramOwned(content) {
-					idx.claude[en.Name()] = append(idx.claude[en.Name()], p)
-				}
+			for _, m := range res.Memories {
+				idx.claude[m.Name] = append(idx.claude[m.Name], filepath.Join(dir, m.Provenance.Source))
 			}
 		}
 	}
@@ -325,9 +317,7 @@ func (idx nativeIndex) of(m *schema.CanonicalMemory) []string {
 	out := []string{}
 	switch sourceHarness(m) {
 	case config.HarnessClaude:
-		if m.Provenance.Source != "" {
-			out = append(out, idx.claude[m.Provenance.Source]...)
-		}
+		out = append(out, idx.claude[m.Name]...)
 	case config.HarnessCodex:
 		if g, ok := idx.codex[m.Name]; ok {
 			out = append(out, g)

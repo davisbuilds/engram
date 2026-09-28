@@ -45,7 +45,7 @@ func Locate(root string) ([]Located, []ParseError, error) {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() && d.Name() == ForgottenDir && path != root {
+		if d.IsDir() && filepath.Clean(path) == filepath.Join(root, ForgottenDir) {
 			return filepath.SkipDir
 		}
 		if d.IsDir() || !strings.HasSuffix(path, ".md") {

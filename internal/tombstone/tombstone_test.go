@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -177,7 +178,7 @@ func TestRestoreStaysInsideTheRoot(t *testing.T) {
 	if _, err := Restore(root, "../escape"); err == nil {
 		t.Error("a name with a path separator must be refused")
 	}
-	bad := "name: evil\npath: ../outside.md\nmemory: x\nforgotten_at: t\n"
+	bad := "name: evil\npath: ../outside.md\nforgotten_at: t\nmemory: " + strconvQuote(evilMemory) + "\n"
 	if err := os.MkdirAll(filepath.Dir(Path(root, "evil")), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +243,7 @@ func TestRestoreDoesNotFollowASymlinkOutOfTheRoot(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
 		t.Fatal(err)
 	}
-	bad := "name: evil\npath: link/evil.md\nmemory: x\nforgotten_at: t\n"
+	bad := "name: evil\npath: link/evil.md\nforgotten_at: t\nmemory: " + strconvQuote(evilMemory) + "\n"
 	if err := os.MkdirAll(filepath.Dir(Path(root, "evil")), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -256,3 +257,33 @@ func TestRestoreDoesNotFollowASymlinkOutOfTheRoot(t *testing.T) {
 		t.Error("restore wrote through the symlink, outside the root")
 	}
 }
+
+// A tombstone whose recorded memory does not parse, or names another memory,
+// is refused rather than written back as a duplicate or broken canonical file.
+func TestRestoreValidatesTheRecordedMemory(t *testing.T) {
+	for label, memory := range map[string]string{
+		"another name": "---\nname: bar\ndescription: d\ntype: lesson\nscope: global\n---\nx\n",
+		"unparseable":  "not a memory\n",
+	} {
+		root := t.TempDir()
+		rec := "name: foo\npath: foo.md\nforgotten_at: t\nmemory: " + strconvQuote(memory) + "\n"
+		if err := os.MkdirAll(filepath.Dir(Path(root, "foo")), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(Path(root, "foo"), []byte(rec), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Restore(root, "foo"); err == nil {
+			t.Errorf("%s: restore should be refused", label)
+		}
+		if _, err := os.Stat(filepath.Join(root, "foo.md")); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s: a refused restore wrote the file", label)
+		}
+	}
+}
+
+func strconvQuote(s string) string { return strconv.Quote(s) }
+
+// evilMemory is a valid memory, so a restore of it is refused only by the path
+// checks under test.
+const evilMemory = "---\nname: evil\ndescription: d\ntype: lesson\nscope: global\n---\nx\n"

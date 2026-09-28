@@ -125,6 +125,19 @@ func Restore(root, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// The recorded text is written back as canonical, so it must be a valid
+	// memory of this very name: a corrupt or mismatched record would otherwise
+	// land as a broken file or a duplicate of another memory.
+	m, perr := schema.Parse([]byte(ts.Memory))
+	if perr == nil {
+		perr = m.Validate()
+	}
+	if perr != nil {
+		return "", fmt.Errorf("tombstone for %s does not hold a valid memory: %w", name, perr)
+	}
+	if m.Name != name {
+		return "", fmt.Errorf("tombstone for %s holds memory %q", name, m.Name)
+	}
 	path := filepath.Join(root, filepath.FromSlash(ts.Path))
 	if !filepath.IsLocal(filepath.FromSlash(ts.Path)) || !contained(root, filepath.Dir(path)) {
 		return "", fmt.Errorf("tombstone for %s records a path outside the canonical root: %q", name, ts.Path)

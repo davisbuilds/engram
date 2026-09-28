@@ -216,3 +216,22 @@ func TestForgetDryRunLeadKeepsReasonAndSuccessor(t *testing.T) {
 		}
 	}
 }
+
+// Claude natives are matched by the memory they hold, not by basename alone: an
+// unrelated file of the same name in another slug is neither listed nor offered
+// for deletion.
+func TestForgetMatchesClaudeNativesByIdentity(t *testing.T) {
+	_, claudeMem, _, args := forgetFixture(t)
+	projects := filepath.Dir(filepath.Dir(claudeMem))
+	other := filepath.Join(projects, "-work-q", "memory", "lesson-a.md")
+	writeFile(t, other, "---\nname: something else entirely\ndescription: d\nmetadata:\n  type: lesson\n---\nunrelated\n")
+	_, env := runEnvelope(t, append([]string{"forget", "claude-lesson"}, args...)...)
+	data, _ := env["data"].(map[string]any)
+	natives, _ := data["memories"].([]any)[0].(map[string]any)["natives"].([]any)
+	if len(natives) != 1 || natives[0] != filepath.Join(claudeMem, "lesson-a.md") {
+		t.Errorf("natives = %v, want only the file holding claude-lesson", natives)
+	}
+	if strings.Contains(nextCommands(env), other) {
+		t.Errorf("an rm lead targets an unrelated memory:\n%s", nextCommands(env))
+	}
+}
