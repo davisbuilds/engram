@@ -563,3 +563,42 @@ func TestProjectScopeFromRepoResolvesRelativeCwd(t *testing.T) {
 		t.Errorf("projectScopeFromRepo(\".\") = %q, want project:myrepo", got)
 	}
 }
+
+// Every import candidate records the hash of its native content, the merge base
+// import compares against next time.
+func TestImportCandidatesCarryTheirNativeHash(t *testing.T) {
+	dir := t.TempDir()
+	mem := filepath.Join(dir, "claude")
+	if err := os.MkdirAll(mem, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for f, body := range map[string]string{
+		"a.md": "---\nname: a lesson\ndescription: d\nmetadata:\n  type: lesson\n---\nbody\n",
+		"b.md": "# No frontmatter\n\nbody\n",
+	} {
+		if err := os.WriteFile(filepath.Join(mem, f), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	codex := filepath.Join(dir, "MEMORY.md")
+	if err := os.WriteFile(codex, []byte("# Task Group: One\n\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cr, err := ImportClaude(mem, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	xr, err := ImportCodex(codex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := append(cr.Memories, xr.Memories...)
+	if len(all) != 3 {
+		t.Fatalf("want 3 candidates, got %d", len(all))
+	}
+	for _, m := range all {
+		if m.Provenance.ImportHash == "" || m.Provenance.ImportHash != schema.NativeHash(m) {
+			t.Errorf("%s: import_hash = %q, want its native hash", m.Name, m.Provenance.ImportHash)
+		}
+	}
+}

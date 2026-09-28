@@ -296,17 +296,18 @@ func cmdImport(e *env, name string, args []string) int {
 				stored = prev
 			}
 			outcome, planned := store.Plan(stored, m)
-			if outcome == store.Created || outcome == store.Updated || (outcome == store.Conflict && (force || refresh[m.Name])) {
-				if outcome == store.Conflict {
-					planned = m // a forced or refreshed conflict writes the candidate
+			overridable := outcome == store.Conflict || outcome == store.CanonicalAhead
+			if outcome == store.Created || outcome == store.Updated || (overridable && (force || refresh[m.Name])) {
+				if overridable {
+					planned = m // a forced or refreshed save writes the candidate
 				}
 				batch[m.Name] = planned
 			}
 			entry := outcomeEntry(m.Name, outcome, stored, m)
 			switch {
-			case refresh[m.Name] && outcome == store.Conflict:
+			case refresh[m.Name] && overridable:
 				entry = refreshedEntry(m.Name, stored, m)
-			case force && outcome == store.Conflict:
+			case force && overridable:
 				entry = outcomeEntry(m.Name, store.Updated, stored, m)
 			}
 			item := memoryItems([]*schema.CanonicalMemory{m})[0]
@@ -375,7 +376,7 @@ func cmdImport(e *env, name string, args []string) int {
 		wasConflict := false
 		if refresh[m.Name] {
 			pre, _ := store.Plan(stored, m)
-			wasConflict = pre == store.Conflict
+			wasConflict = pre == store.Conflict || pre == store.CanonicalAhead
 			force = force || wasConflict
 		}
 		outcome, _, serr := store.Save(s.cfg.CanonicalRoot, m, force)

@@ -73,14 +73,14 @@ func ImportClaude(memoryDir, cwd string) (Result, error) {
 				res.Dropped = append(res.Dropped, Dropped{Source: fname, Reason: "no frontmatter and no usable name from the filename"})
 				continue
 			}
-			res.Memories = append(res.Memories, &schema.CanonicalMemory{
+			res.Memories = append(res.Memories, withHash(&schema.CanonicalMemory{
 				Name:        name,
 				Description: deriveTitle(string(data), fileBase),
 				Type:        schema.TypeReference,
 				Scope:       scope,
 				Body:        string(data),
 				Provenance:  schema.Provenance{Origin: "import:claude-code:no-frontmatter", Source: fname},
-			})
+			}))
 			continue
 		}
 		var n claudeNative
@@ -107,14 +107,14 @@ func ImportClaude(memoryDir, cwd string) (Result, error) {
 		if desc == "" {
 			desc = deriveTitle(body, fileBase)
 		}
-		res.Memories = append(res.Memories, &schema.CanonicalMemory{
+		res.Memories = append(res.Memories, withHash(&schema.CanonicalMemory{
 			Name:        name,
 			Description: desc,
 			Type:        importedType(n.Metadata.Type),
 			Scope:       scope,
 			Body:        body,
 			Provenance:  schema.Provenance{Origin: "import:claude-code", Source: fname},
-		})
+		}))
 	}
 	return res, nil
 }

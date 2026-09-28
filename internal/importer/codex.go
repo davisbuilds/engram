@@ -42,14 +42,14 @@ func ImportCodex(memoryFile string) (Result, error) {
 			res.Dropped = append(res.Dropped, Dropped{Source: g.title, Reason: "Task Group title yields an empty name"})
 			continue
 		}
-		res.Memories = append(res.Memories, &schema.CanonicalMemory{
+		res.Memories = append(res.Memories, withHash(&schema.CanonicalMemory{
 			Name:        name,
 			Description: g.title,
 			Type:        schema.TypeReference,
 			Scope:       deriveCodexScope(g.body),
 			Body:        g.body,
 			Provenance:  schema.Provenance{Origin: "import:codex"},
-		})
+		}))
 	}
 	return res, nil
 }

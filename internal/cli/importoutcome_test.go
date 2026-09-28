@@ -108,8 +108,9 @@ func TestImportApplyBackfillsProvenanceThenSettles(t *testing.T) {
 	}
 }
 
-// A native edited after import is a genuine conflict: exit 3, canonical left
-// untouched, and the result names the field so the cause is visible.
+// A native and its canonical both edited since import are a genuine conflict:
+// exit 3, canonical left untouched, and the result names the field so the cause
+// is visible.
 func TestImportApplyBodyDriftConflictsAndReportsDiffers(t *testing.T) {
 	canon, claudeMem, _, args := setupTwoHarnesses(t)
 	file := filepath.Join(canon, "claude-lesson.md")
@@ -120,6 +121,7 @@ func TestImportApplyBodyDriftConflictsAndReportsDiffers(t *testing.T) {
 			t.Fatalf("first import exit = %d", code)
 		}
 	}()
+	editCanonicalBody(t, file)
 	before, _ := os.ReadFile(file)
 
 	writeFile(t, filepath.Join(claudeMem, "lesson-a.md"),
@@ -195,6 +197,17 @@ func twoNatives(t *testing.T) (canon, claudeMem string, args []string) {
 	return canon, claudeMem, args
 }
 
+// editCanonicalBody appends to a canonical memory's body, as a curated edit
+// would, so a later native edit makes the two sides diverge.
+func editCanonicalBody(t *testing.T, file string) {
+	t.Helper()
+	b, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, file, string(b)+"curated addition\n")
+}
+
 func editNative(t *testing.T, claudeMem, file, name, body string) {
 	t.Helper()
 	writeFile(t, filepath.Join(claudeMem, file),
@@ -202,7 +215,8 @@ func editNative(t *testing.T, claudeMem, file, name, body string) {
 }
 
 // --refresh <name> is the explicit, per-name way to take an edited native's
-// content into canonical. It overwrites only the named conflict; another
+// content into canonical when both sides moved. It overwrites only the named
+// conflict; another
 // conflicting memory is left alone (and still reported), and the dry-run shows
 // what would be overwritten first.
 func TestImportRefreshOverwritesOnlyTheNamedConflict(t *testing.T) {
@@ -213,6 +227,8 @@ func TestImportRefreshOverwritesOnlyTheNamedConflict(t *testing.T) {
 			t.Fatalf("seed import exit = %d", code)
 		}
 	}()
+	editCanonicalBody(t, filepath.Join(canon, "claude-lesson.md"))
+	editCanonicalBody(t, filepath.Join(canon, "other-lesson.md"))
 	otherBefore, _ := os.ReadFile(filepath.Join(canon, "other-lesson.md"))
 	editNative(t, claudeMem, "lesson-a.md", "claude-lesson", "claude body v2")
 	editNative(t, claudeMem, "lesson-b.md", "other-lesson", "other body v2")

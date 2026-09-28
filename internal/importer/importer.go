@@ -34,6 +34,13 @@ type Result struct {
 	ScopeAuthoritative bool
 }
 
+// withHash records m's native hash as its import_hash, the merge base a later
+// import compares against (see store.Plan).
+func withHash(m *schema.CanonicalMemory) *schema.CanonicalMemory {
+	m.Provenance.ImportHash = schema.NativeHash(m)
+	return m
+}
+
 // Dropped records a native source (a Claude file name, or a Codex Task Group
 // title) that could not be imported, with why — so nothing vanishes unreported.
 type Dropped struct {

@@ -5,6 +5,8 @@
 package schema
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
@@ -79,6 +81,22 @@ type Provenance struct {
 	Author   string `yaml:"author,omitempty" json:"author,omitempty"`
 	Created  string `yaml:"created,omitempty" json:"created,omitempty"`
 	Modified string `yaml:"modified,omitempty" json:"modified,omitempty"`
+	// ImportHash is NativeHash of the memory at the last import where canonical
+	// and its native source agreed: the merge base that tells import which side
+	// moved since. Empty for memories not produced by import.
+	ImportHash string `yaml:"import_hash,omitempty" json:"import_hash,omitempty"`
+}
+
+// NativeHash fingerprints the fields a native source authors (description,
+// type, body), leaving out what canonical owns (scope, applies_to, related,
+// provenance).
+func NativeHash(m *CanonicalMemory) string {
+	h := sha256.New()
+	for _, f := range []string{m.Description, string(m.Type), m.Body} {
+		h.Write([]byte(f))
+		h.Write([]byte{0})
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
 // CanonicalMemory is one authored memory. Name, Description, Type, and Scope are
