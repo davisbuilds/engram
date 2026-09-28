@@ -16,6 +16,7 @@ import (
 	"github.com/davisbuilds/engram/internal/scope"
 	"github.com/davisbuilds/engram/internal/store"
 	"github.com/davisbuilds/engram/internal/sync"
+	"github.com/davisbuilds/engram/internal/tombstone"
 )
 
 // cmdReconcile is the on-demand cross-harness convenience: it imports each
@@ -56,7 +57,12 @@ func cmdReconcile(e *env, name string, _ []string) int {
 	// propagation run against in *both* dry-run and apply, so the preview reflects
 	// what apply will do rather than the pre-import canonical.
 	exit := exitOK
-	merged, importEntries, hadConflict, scopeNotes := mergeImports(mems, imports, withheldNames(perrs))
+	tombs, terr := tombstone.Load(s.cfg.CanonicalRoot)
+	if terr != nil {
+		e.emit(name, false, nil, warns, &RespError{Code: "tombstones", Message: terr.Error()}, nil)
+		return exitError
+	}
+	merged, importEntries, hadConflict, scopeNotes := mergeImports(mems, imports, withheldNames(perrs), tombs)
 	if hadConflict {
 		exit = worseExit(exit, exitConflicts)
 	}
@@ -74,10 +80,18 @@ func cmdReconcile(e *env, name string, _ []string) int {
 			e.emit(name, false, nil, warns, lerr, nil)
 			return exitError
 		}
+		// Re-read the tombstones under the lock: a forget that landed since the
+		// simulation must still keep its memory out.
+		tombs, terr = tombstone.Load(s.cfg.CanonicalRoot)
+		if terr != nil {
+			release()
+			e.emit(name, false, nil, warns, &RespError{Code: "tombstones", Message: terr.Error()}, nil)
+			return exitError
+		}
 		for _, imp := range imports {
 			for _, m := range imp.result.Memories {
-				if m.Validate() != nil {
-					continue // already counted as invalid in the simulation
+				if tombs.Blocks(m) || m.Validate() != nil {
+					continue // forgotten, or already counted as invalid in the simulation
 				}
 				if _, _, serr := store.Save(s.cfg.CanonicalRoot, m, false); serr != nil {
 					release()
@@ -153,11 +167,12 @@ func cmdReconcile(e *env, name string, _ []string) int {
 // backfilled provenance, any other name-collision -> conflict keeping the
 // existing memory), without writing. The merged set it returns is what review and propagation run
 // against in both dry-run and apply, so the preview reflects what apply will do.
+// A candidate a tombstone blocks is reported as forgotten and left out.
 // It also returns a per-harness import summary, whether anything conflicted or
 // was invalid (which maps to a non-zero exit), and any scope-preservation notes
 // (a provisional import held back from re-scoping an existing memory), which the
 // caller surfaces as warnings.
-func mergeImports(existing []*schema.CanonicalMemory, imports []importGather, withheld map[string]string) (merged []*schema.CanonicalMemory, entries []map[string]any, hadConflict bool, notes []string) {
+func mergeImports(existing []*schema.CanonicalMemory, imports []importGather, withheld map[string]string, tombs tombstone.Set) (merged []*schema.CanonicalMemory, entries []map[string]any, hadConflict bool, notes []string) {
 	byName := make(map[string]*schema.CanonicalMemory, len(existing))
 	order := make([]string, 0, len(existing))
 	add := func(m *schema.CanonicalMemory) {
@@ -172,6 +187,11 @@ func mergeImports(existing []*schema.CanonicalMemory, imports []importGather, wi
 	for _, imp := range imports {
 		outcomes := make([]map[string]string, 0, len(imp.result.Memories))
 		for _, m := range imp.result.Memories {
+			// A forgotten memory stays forgotten while its native lives on.
+			if tombs.Blocks(m) {
+				outcomes = append(outcomes, forgottenRow(m.Name))
+				continue
+			}
 			// A withheld canonical file still owns its name; store.Save refuses it,
 			// so the preview must too, and it must not join the merged set.
 			if reason, ok := withheld[m.Name]; ok {
@@ -248,6 +268,12 @@ func refreshedEntry(name string, stored, cand *schema.CanonicalMemory) map[strin
 		"name": name, "outcome": string(store.Updated),
 		"differs": strings.Join(store.Diff(stored, cand), ","),
 	}
+}
+
+// forgottenRow is the result row for an import candidate a tombstone keeps out:
+// the memory was deliberately forgotten, so it is neither written nor a conflict.
+func forgottenRow(name string) map[string]string {
+	return map[string]string{"name": name, "outcome": "forgotten"}
 }
 
 // outcomeEntry is the per-memory result row shared by every import surface

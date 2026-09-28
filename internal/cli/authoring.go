@@ -14,6 +14,7 @@ import (
 	"github.com/davisbuilds/engram/internal/importer"
 	"github.com/davisbuilds/engram/internal/schema"
 	"github.com/davisbuilds/engram/internal/store"
+	"github.com/davisbuilds/engram/internal/tombstone"
 )
 
 // multiFlag collects a repeatable string flag (e.g. --applies-cwd a --applies-cwd b).
@@ -241,7 +242,16 @@ func cmdImport(e *env, name string, args []string) int {
 		// Apply saves candidates in order, so a later candidate sharing a name
 		// meets what an earlier one wrote; the preview threads the same state.
 		batch := map[string]*schema.CanonicalMemory{}
+		tombs, terr := tombstone.Load(s.cfg.CanonicalRoot)
+		if terr != nil {
+			e.emit(name, false, base, warns, &RespError{Code: "tombstones", Message: terr.Error()}, nil)
+			return exitError
+		}
 		for _, m := range res.Memories {
+			if tombs.Blocks(m) {
+				items = append(items, forgottenRow(m.Name))
+				continue
+			}
 			if row, ok := withheldRow(s.cfg.CanonicalRoot, m); ok {
 				items = append(items, row)
 				continue
@@ -300,9 +310,20 @@ func cmdImport(e *env, name string, args []string) int {
 	}
 	defer release()
 
+	tombs, terr := tombstone.Load(s.cfg.CanonicalRoot)
+	if terr != nil {
+		e.emit(name, false, base, warns, &RespError{Code: "tombstones", Message: terr.Error()}, nil)
+		return exitError
+	}
 	outcomes := make([]map[string]string, 0, len(res.Memories))
 	conflicts := 0
 	for _, m := range res.Memories {
+		// A forgotten memory stays forgotten; --force and --refresh do not
+		// override a tombstone (forget --restore does).
+		if tombs.Blocks(m) {
+			outcomes = append(outcomes, forgottenRow(m.Name))
+			continue
+		}
 		if verr := m.Validate(); verr != nil {
 			outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": "invalid", "error": verr.Error()})
 			continue
