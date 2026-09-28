@@ -8,6 +8,7 @@ import (
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/importer"
 	"github.com/davisbuilds/engram/internal/schema"
+	"github.com/davisbuilds/engram/internal/tombstone"
 )
 
 // threadIDRe matches the rollout session ids a Codex Task Group cites. Two Task
@@ -79,18 +80,17 @@ func orphanNextSteps(harness string, orphans []map[string]any) []NextStep {
 	for _, o := range orphans {
 		n := o["name"].(string)
 		succ := o["successors"].([]string)
-		forget := "engram forget " + n
+		note := tombstone.Note{Reason: "no longer in " + harness}
 		reason := n + " is no longer in " + harness + "'s native memory"
 		switch len(succ) {
 		case 0:
-			forget += " --reason 'no longer in " + harness + "' --apply"
 		case 1:
-			forget += " --successor " + succ[0] + " --reason 'superseded by " + succ[0] + "' --apply"
+			note = tombstone.Note{Reason: "superseded by " + succ[0], Successor: succ[0]}
 			reason += "; " + succ[0] + " cites the same sessions"
 		default:
-			forget += " --reason 'no longer in " + harness + "' --apply"
 			reason += "; candidate successors: " + strings.Join(succ, ", ")
 		}
+		forget := forgetCommand([]string{n}, note)
 		next = append(next,
 			NextStep{Reason: reason + " (retire it)", Command: forget},
 			NextStep{Reason: "or keep " + n + " as a standalone memory", Command: "engram detach " + n + " --apply"})

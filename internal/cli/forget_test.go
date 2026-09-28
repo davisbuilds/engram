@@ -201,3 +201,16 @@ func TestForgetArgumentErrors(t *testing.T) {
 		}
 	}
 }
+
+// The dry-run's lead is the command to run next, so it must carry every choice
+// the dry-run was given, not just the names.
+func TestForgetDryRunLeadKeepsReasonAndSuccessor(t *testing.T) {
+	_, _, _, args := forgetFixture(t)
+	_, env := runEnvelope(t, append([]string{"forget", "codex-lesson", "--reason", "it's stale", "--successor", "claude-lesson"}, args...)...)
+	cmds := nextCommands(env)
+	for _, want := range []string{"--reason 'it'\\''s stale'", "--successor claude-lesson", "--apply"} {
+		if !strings.Contains(cmds, want) {
+			t.Errorf("dry-run lead missing %q:\n%s", want, cmds)
+		}
+	}
+}

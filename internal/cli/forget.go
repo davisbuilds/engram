@@ -52,6 +52,18 @@ func cmdForget(e *env, name string, args []string) int {
 	return s.forget(e, name, names, tombstone.Note{Reason: pa.last("--reason"), Successor: pa.last("--successor")})
 }
 
+// forgetCommand is the forget --apply invocation for names with note.
+func forgetCommand(names []string, note tombstone.Note) string {
+	cmd := "engram forget " + strings.Join(names, " ")
+	if note.Successor != "" {
+		cmd += " --successor " + note.Successor
+	}
+	if note.Reason != "" {
+		cmd += " --reason " + agentexec.ShellQuote(note.Reason)
+	}
+	return cmd + " --apply"
+}
+
 // memoryNames validates and de-duplicates the names a command was given.
 func memoryNames(pos []string, usage string) ([]string, *RespError) {
 	if len(pos) == 0 {
@@ -144,7 +156,7 @@ func (s *session) forget(e *env, name string, names []string, note tombstone.Not
 		data["renders"] = orEmpty(actions)
 		next = append([]NextStep{{
 			Reason:  "dry run: nothing was written",
-			Command: "engram forget " + strings.Join(names, " ") + " --apply",
+			Command: forgetCommand(names, note),
 		}}, next...)
 		e.emit(name, true, data, warns, nil, next)
 		return exitOK
