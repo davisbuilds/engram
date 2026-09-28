@@ -99,6 +99,22 @@ does not exist, a memory that fails the schema, a rename smuggled through
 `next_steps`. engram never partially applies a proposal it could not fully
 validate.
 
+**Curated edits stay curated.** An `update` or `merge` keeps the stored
+memory's provenance, including import's merge base, so a later import reports
+the curated memory as `canonical_ahead` rather than as a conflict with its
+unchanged native.
+
+**Removals stay removed.** A `remove`, and each source a `merge` replaces, is
+tombstoned, so a later `import` or `reconcile` does not re-create it from a
+native source that still exists; it reports the candidate as `forgotten`.
+
+**Orphans are leads, not actions.** `reconcile` (and `import codex`,
+`import claude-code --all`) lists each imported memory whose native source is
+gone under `orphaned`, with two `next_steps`: `engram forget <name> --apply`
+(naming the successor when one Task Group cites the same session) or
+`engram detach <name> --apply` to keep it. Choosing between them is judgment;
+engram retires nothing on its own.
+
 The default models are `claude-sonnet-5`/`high` and `gpt-5.6-terra`/`high`;
 set per-harness defaults under `curate.models.<harness>` in config, or override
 per run with `--model` / `--effort`. Each agent run times out after `curate.timeout` (default `20m`,

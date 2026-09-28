@@ -106,3 +106,21 @@ func TestDiscoverWithholdsEveryCopyOfADuplicateName(t *testing.T) {
 		t.Errorf("parse errors = %v, want one per dup-mem copy", perrs)
 	}
 }
+
+// Only the root's tombstone directory is skipped; a memory under a nested
+// directory that happens to share the name is still discovered.
+func TestOnlyTheRootTombstoneDirIsSkipped(t *testing.T) {
+	root := t.TempDir()
+	mem := "---\nname: nested-note\ndescription: d\ntype: lesson\nscope: global\n---\nx\n"
+	dir := filepath.Join(root, "topic", ForgottenDir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "nested-note.md"), []byte(mem), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mems, _, err := Discover(root)
+	if err != nil || len(mems) != 1 {
+		t.Errorf("mems = %d (err %v), want the nested memory discovered", len(mems), err)
+	}
+}

@@ -563,3 +563,90 @@ func TestProjectScopeFromRepoResolvesRelativeCwd(t *testing.T) {
 		t.Errorf("projectScopeFromRepo(\".\") = %q, want project:myrepo", got)
 	}
 }
+
+// Every import candidate records the hash of its native content, the merge base
+// import compares against next time.
+func TestImportCandidatesCarryTheirNativeHash(t *testing.T) {
+	dir := t.TempDir()
+	mem := filepath.Join(dir, "claude")
+	if err := os.MkdirAll(mem, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for f, body := range map[string]string{
+		"a.md": "---\nname: a lesson\ndescription: d\nmetadata:\n  type: lesson\n---\nbody\n",
+		"b.md": "# No frontmatter\n\nbody\n",
+	} {
+		if err := os.WriteFile(filepath.Join(mem, f), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	codex := filepath.Join(dir, "MEMORY.md")
+	if err := os.WriteFile(codex, []byte("# Task Group: One\n\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cr, err := ImportClaude(mem, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	xr, err := ImportCodex(codex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := append(cr.Memories, xr.Memories...)
+	if len(all) != 3 {
+		t.Fatalf("want 3 candidates, got %d", len(all))
+	}
+	for _, m := range all {
+		if m.Provenance.ImportHash == "" || m.Provenance.ImportHash != schema.NativeHash(m) {
+			t.Errorf("%s: import_hash = %q, want its native hash", m.Name, m.Provenance.ImportHash)
+		}
+	}
+}
+
+// Two natives normalizing to one name in a batch are two lineages for one
+// canonical memory; neither may drive the merge base.
+func TestAmbiguousNamesInABatchCarryNoHash(t *testing.T) {
+	home := t.TempDir()
+	for _, slug := range []string{"-a", "-b"} {
+		dir := filepath.Join(home, "projects", slug, "memory")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		body := "---\nname: shared\ndescription: d\nmetadata:\n  type: lesson\n---\nfrom " + slug + "\n"
+		if err := os.WriteFile(filepath.Join(dir, "shared.md"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := ImportClaudeAll(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Memories) != 2 {
+		t.Fatalf("want both candidates, got %d", len(res.Memories))
+	}
+	for _, m := range res.Memories {
+		if m.Provenance.ImportHash != "" {
+			t.Errorf("an ambiguous name must carry no import_hash: %+v", m.Provenance)
+		}
+	}
+}
+
+// A Claude candidate names the exact file it came from, project slug included,
+// so separately imported same-named files stay distinct lineages.
+func TestClaudeCandidatesRecordTheirProjectFile(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "projects", "-work-a", "memory")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "shared.md"), []byte("---\nname: shared\ndescription: d\n---\nx\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := ImportClaude(dir, "")
+	if err != nil || len(res.Memories) != 1 {
+		t.Fatalf("import: %v %d", err, len(res.Memories))
+	}
+	if got := res.Memories[0].Provenance.ImportSource; got != "-work-a/shared.md" {
+		t.Errorf("import_source = %q, want -work-a/shared.md", got)
+	}
+}

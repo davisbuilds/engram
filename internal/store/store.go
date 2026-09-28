@@ -22,6 +22,10 @@ const (
 	Updated   Outcome = "updated"
 	Unchanged Outcome = "unchanged"
 	Conflict  Outcome = "conflict"
+	// CanonicalAhead is an import candidate whose native is unchanged since the
+	// last agreeing import while canonical has moved on: nothing to write, and
+	// not a conflict.
+	CanonicalAhead Outcome = "canonical_ahead"
 )
 
 // Save writes m into the canonical root, deciding via Plan. A same-name file with
@@ -63,9 +67,9 @@ func Save(root string, m *schema.CanonicalMemory, force bool) (Outcome, string, 
 		if err != nil {
 			return "", path, err
 		}
-	default: // Conflict
+	default: // Conflict or CanonicalAhead: only a forced save takes the candidate
 		if !force {
-			return Conflict, path, nil
+			return outcome, path, nil
 		}
 	}
 	if err := writeAtomic(path, rendered); err != nil {
@@ -82,7 +86,11 @@ func Save(root string, m *schema.CanonicalMemory, force bool) (Outcome, string, 
 // difference confined to provenance is never a content conflict: empty stored
 // provenance fields are backfilled from cand (Updated), a populated field keeps
 // its stored value, and cand can never strip provenance. Any other difference is
-// a Conflict, and the returned memory is nil.
+// a Conflict, and the returned memory is nil, unless cand is an import
+// candidate and existing records a merge base (provenance.import_hash): then a
+// candidate matching the base is CanonicalAhead (canonical moved; nothing to
+// write), and a stored memory matching it fast-forwards to the candidate's
+// description, type and body (Updated), keeping canonical's own fields.
 func Plan(existing, cand *schema.CanonicalMemory) (Outcome, *schema.CanonicalMemory) {
 	if existing == nil {
 		return Created, cand
@@ -90,17 +98,57 @@ func Plan(existing, cand *schema.CanonicalMemory) (Outcome, *schema.CanonicalMem
 	if sameRender(existing, cand) {
 		return Unchanged, existing
 	}
+	cp := cand.Provenance
+	cp.ImportHash = candidateBase(cand)
 	content := *cand
 	content.Provenance = existing.Provenance
-	if !sameRender(existing, &content) {
-		return Conflict, nil
+	if sameRender(existing, &content) {
+		merged := *existing
+		merged.Provenance = fillProvenance(existing.Provenance, cp)
+		if merged.Provenance == existing.Provenance {
+			return Unchanged, existing
+		}
+		return Updated, &merged
 	}
-	merged := *existing
-	merged.Provenance = fillProvenance(existing.Provenance, cand.Provenance)
-	if merged.Provenance == existing.Provenance {
-		return Unchanged, existing
+	// The content differs. An import candidate against a memory with a recorded
+	// merge base can tell which side moved since the two last agreed.
+	base := existing.Provenance.ImportHash
+	if base != "" && cp.ImportHash != "" && SameLineage(existing.Provenance, cp) {
+		switch {
+		case cp.ImportHash == base:
+			return CanonicalAhead, existing
+		case schema.NativeHash(existing) == base:
+			// Fast-forward: take what the native authors, keep what canonical owns.
+			merged := *existing
+			merged.Description, merged.Type, merged.Body = cand.Description, cand.Type, cand.Body
+			merged.Provenance = fillProvenance(existing.Provenance, cp)
+			return Updated, &merged
+		}
 	}
-	return Updated, &merged
+	return Conflict, nil
+}
+
+// sameOrigin reports whether two provenances can share an origin: they agree,
+// or one is unset.
+func sameOrigin(a, b schema.Provenance) bool {
+	return a.Origin == "" || b.Origin == "" || a.Origin == b.Origin
+}
+
+// SameLineage reports whether two provenances describe one native source: the
+// same origin and, where both record them, the same source file and project. Only within one
+// lineage does the merge base say which side moved.
+func SameLineage(a, b schema.Provenance) bool {
+	agree := func(x, y string) bool { return x == "" || y == "" || x == y }
+	return sameOrigin(a, b) && agree(a.Source, b.Source) && agree(a.ImportSource, b.ImportSource)
+}
+
+// candidateBase is cand's import hash when it describes cand's own content, else
+// "": a hash carried in from elsewhere (a stale copy, a hand edit) is no base.
+func candidateBase(cand *schema.CanonicalMemory) string {
+	if h := cand.Provenance.ImportHash; h != "" && h == schema.NativeHash(cand) {
+		return h
+	}
+	return ""
 }
 
 // Diff names the fields in which cand differs from existing, in a stable order:
@@ -120,7 +168,10 @@ func Diff(existing, cand *schema.CanonicalMemory) []string {
 		!sameStrings(existing.AppliesTo.Agents, cand.AppliesTo.Agents) ||
 		!sameStrings(existing.AppliesTo.Hosts, cand.AppliesTo.Hosts), "applies_to")
 	add(!sameStrings(existing.Related, cand.Related), "related")
-	add(existing.Provenance != cand.Provenance, "provenance")
+	// The merge base differs whenever the content does; it is not a finding.
+	ep, cp := existing.Provenance, cand.Provenance
+	ep.ImportHash, cp.ImportHash, ep.ImportSource, cp.ImportSource = "", "", "", ""
+	add(ep != cp, "provenance")
 	add(existing.Body != cand.Body, "body")
 	return out
 }
@@ -138,8 +189,12 @@ func sameRender(a, b *schema.CanonicalMemory) bool {
 // hybrid (say a Codex origin carrying a Claude filename) that origin-based
 // propagation and source-based migration would attribute to different harnesses.
 // Differing populated origins therefore leave stored untouched.
+//
+// ImportHash is the exception to "a populated field keeps its stored value": it
+// is the merge base, so an import that agrees with canonical always moves it to
+// the candidate's.
 func fillProvenance(stored, cand schema.Provenance) schema.Provenance {
-	if stored.Origin != "" && cand.Origin != "" && stored.Origin != cand.Origin {
+	if !sameOrigin(stored, cand) {
 		return stored
 	}
 	fill := func(dst *string, v string) {
@@ -154,6 +209,12 @@ func fillProvenance(stored, cand schema.Provenance) schema.Provenance {
 	fill(&out.Author, cand.Author)
 	fill(&out.Created, cand.Created)
 	fill(&out.Modified, cand.Modified)
+	if cand.ImportHash != "" && SameLineage(out, cand) {
+		out.ImportHash = cand.ImportHash
+		if cand.ImportSource != "" {
+			out.ImportSource = cand.ImportSource
+		}
+	}
 	return out
 }
 
@@ -185,6 +246,25 @@ func Delete(root, name string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// Replace overwrites the existing canonical memory named m.Name with m exactly,
+// provenance included (Save keeps stored provenance on a provenance-only
+// difference, so it cannot change an origin). The memory must exist; the caller
+// holds the canonical lock.
+func Replace(root string, m *schema.CanonicalMemory) (string, error) {
+	_, path, found, err := Load(root, m.Name)
+	if err != nil {
+		return path, err
+	}
+	if !found {
+		return "", fmt.Errorf("no canonical memory named %s", m.Name)
+	}
+	rendered, err := m.Render()
+	if err != nil {
+		return path, err
+	}
+	return path, writeAtomic(path, rendered)
 }
 
 // ErrWithheld reports that a canonical file claims the name but discovery

@@ -242,14 +242,14 @@ func ClaudeCommand(prompt string, allowedTools ...string) string {
 	argv := ClaudeArgv(prompt, allowedTools...)
 	parts := make([]string, len(argv))
 	for i, a := range argv {
-		parts[i] = shellQuote(a)
+		parts[i] = ShellQuote(a)
 	}
 	return strings.Join(parts, " ")
 }
 
-// shellQuote returns a unchanged when it needs no quoting, else a single-quoted
+// ShellQuote returns a unchanged when it needs no quoting, else a single-quoted
 // form in which each embedded quote is closed, escaped and reopened.
-func shellQuote(a string) string {
+func ShellQuote(a string) string {
 	if a != "" && strings.Trim(a, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./:=@,+%") == "" {
 		return a
 	}

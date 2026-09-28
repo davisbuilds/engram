@@ -35,8 +35,8 @@ is the intelligence. See `README.md` for the user-facing overview.
   closed (applies nothing) if any proposed operation is invalid.
 - **All canonical mutation serializes** under one exclusive apply lock
   (`internal/lock`, an advisory `flock` the kernel releases automatically on
-  process exit or crash) — `remember`, `share`, `import --apply`, and
-  `curate --apply` all take it.
+  process exit or crash) — `remember`, `share`, `import --apply`,
+  `curate --apply`, `forget --apply`, and `detach --apply` all take it.
 - **Scope model:** tiers `global` / `project:<repo>`, plus `applies_to` narrowing
   axes (cwd globs, agents, hosts). The host axis fails closed for an unmapped
   machine, and host labels are config-declared, never compiled in.

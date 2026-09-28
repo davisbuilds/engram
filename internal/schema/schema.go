@@ -5,6 +5,8 @@
 package schema
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
@@ -16,6 +18,10 @@ import (
 const fence = "---\n"
 
 var kebab = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+// ValidName reports whether s is a well-formed memory name (kebab-case), the
+// shape every name-keyed path under the canonical root relies on.
+func ValidName(s string) bool { return kebab.MatchString(s) }
 
 var validTypes = map[Type]bool{
 	TypeUser: true, TypeFeedback: true, TypeProject: true,
@@ -56,6 +62,11 @@ type AppliesTo struct {
 	Hosts  []string `yaml:"hosts,omitempty" json:"hosts,omitempty"`
 }
 
+// DetachedPrefix marks a provenance origin whose native source is no longer
+// tracked: `engram detach` prefixes the origin with it, so orphan detection
+// passes the memory by while the original origin stays readable.
+const DetachedPrefix = "detached:"
+
 // Provenance records where a memory came from. All fields are ISO-8601 strings
 // or free identifiers; none are load-bearing for scope decisions.
 type Provenance struct {
@@ -70,6 +81,25 @@ type Provenance struct {
 	Author   string `yaml:"author,omitempty" json:"author,omitempty"`
 	Created  string `yaml:"created,omitempty" json:"created,omitempty"`
 	Modified string `yaml:"modified,omitempty" json:"modified,omitempty"`
+	// ImportHash is NativeHash of the memory at the last import where canonical
+	// and its native source agreed: the merge base that tells import which side
+	// moved since. Empty for memories not produced by import.
+	ImportHash string `yaml:"import_hash,omitempty" json:"import_hash,omitempty"`
+	// ImportSource names the native the merge base was taken from, precisely
+	// enough to tell two same-named natives apart (Claude: <project slug>/<file>).
+	ImportSource string `yaml:"import_source,omitempty" json:"import_source,omitempty"`
+}
+
+// NativeHash fingerprints the fields a native source authors (description,
+// type, body), leaving out what canonical owns (scope, applies_to, related,
+// provenance).
+func NativeHash(m *CanonicalMemory) string {
+	h := sha256.New()
+	for _, f := range []string{m.Description, string(m.Type), m.Body} {
+		h.Write([]byte(f))
+		h.Write([]byte{0})
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
 // CanonicalMemory is one authored memory. Name, Description, Type, and Scope are

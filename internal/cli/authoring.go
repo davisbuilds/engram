@@ -11,9 +11,11 @@ import (
 	"strings"
 
 	"github.com/davisbuilds/engram/internal/config"
+	"github.com/davisbuilds/engram/internal/discover"
 	"github.com/davisbuilds/engram/internal/importer"
 	"github.com/davisbuilds/engram/internal/schema"
 	"github.com/davisbuilds/engram/internal/store"
+	"github.com/davisbuilds/engram/internal/tombstone"
 )
 
 // multiFlag collects a repeatable string flag (e.g. --applies-cwd a --applies-cwd b).
@@ -59,6 +61,10 @@ func cmdRemember(e *env, name string, args []string) int {
 	if m.Provenance.Origin == "" {
 		m.Provenance.Origin = "remember"
 	}
+	// The merge base is import's to record; an authored memory never carries
+	// one, so remember cannot fast-forward past a differing memory (see
+	// store.Plan) and still needs --force to overwrite it.
+	m.Provenance.ImportHash, m.Provenance.ImportSource = "", ""
 	if err := m.Validate(); err != nil {
 		e.emit(name, false, nil, nil, &RespError{Code: "invalid_memory", Message: err.Error()}, nil)
 		return exitUsage
@@ -160,12 +166,21 @@ func cmdImport(e *env, name string, args []string) int {
 		harness = pa.pos[0]
 	}
 	all := pa.bools["--all"]
-	refresh := map[string]bool{}
+	refresh, keep := map[string]bool{}, map[string]bool{}
 	for _, v := range pa.vals["--refresh"] {
 		addRefresh(refresh, v)
 	}
+	for _, v := range pa.vals["--keep"] {
+		addRefresh(keep, v)
+	}
+	for n := range keep {
+		if refresh[n] {
+			e.emit(name, false, nil, nil, usageError("%s cannot be both --refresh and --keep", n), nil)
+			return exitUsage
+		}
+	}
 	if harness == "" {
-		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram import <claude-code|codex> [--all] [--refresh <name>]… [--apply]"}, nil)
+		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram import <claude-code|codex> [--all] [--refresh <name>]… [--keep <name>]… [--apply]"}, nil)
 		return exitUsage
 	}
 	s, rerr := e.newSession()
@@ -223,12 +238,37 @@ func cmdImport(e *env, name string, args []string) int {
 		warns = append(warns, fmt.Sprintf("%d source(s) could not be imported and were dropped; see data.dropped", len(res.Dropped)))
 	}
 
+	// Orphan detection needs the whole native source: Codex always has it, Claude
+	// only on the all-slug scan (one slug cannot tell a deleted native from one
+	// that lives in another slug).
+	var next []NextStep
+	if harness == config.HarnessCodex || all {
+		canon, _, derr := discover.Discover(s.cfg.CanonicalRoot)
+		if derr != nil {
+			e.emit(name, false, base, warns, &RespError{Code: "discover", Message: derr.Error()}, nil)
+			return exitError
+		}
+		orphans, owarn := findOrphans(canon, harness, res)
+		base["orphaned"] = orphans
+		if owarn != "" {
+			warns = append(warns, owarn)
+		}
+		next = orphanNextSteps(harness, orphans)
+	}
+
 	// A --refresh name that matches no candidate is a typo or a stale plan; refusing
 	// it beats silently refreshing nothing. Checked before any write.
 	if missing := unmatchedRefresh(refresh, res.Memories); len(missing) > 0 {
 		e.emit(name, false, base, warns, &RespError{
 			Code:    "unknown_refresh",
 			Message: "--refresh names no imported memory: " + strings.Join(missing, ", "),
+		}, nil)
+		return exitUsage
+	}
+	if missing := unmatchedRefresh(keep, res.Memories); len(missing) > 0 {
+		e.emit(name, false, base, warns, &RespError{
+			Code:    "unknown_keep",
+			Message: "--keep names no imported memory: " + strings.Join(missing, ", "),
 		}, nil)
 		return exitUsage
 	}
@@ -241,7 +281,16 @@ func cmdImport(e *env, name string, args []string) int {
 		// Apply saves candidates in order, so a later candidate sharing a name
 		// meets what an earlier one wrote; the preview threads the same state.
 		batch := map[string]*schema.CanonicalMemory{}
+		tombs, terr := tombstone.Load(s.cfg.CanonicalRoot)
+		if terr != nil {
+			e.emit(name, false, base, warns, &RespError{Code: "tombstones", Message: terr.Error()}, nil)
+			return exitError
+		}
 		for _, m := range res.Memories {
+			if tombs.Blocks(m) {
+				items = append(items, forgottenRow(m.Name))
+				continue
+			}
 			if row, ok := withheldRow(s.cfg.CanonicalRoot, m); ok {
 				items = append(items, row)
 				continue
@@ -267,17 +316,22 @@ func cmdImport(e *env, name string, args []string) int {
 				stored = prev
 			}
 			outcome, planned := store.Plan(stored, m)
-			if outcome == store.Created || outcome == store.Updated || (outcome == store.Conflict && (force || refresh[m.Name])) {
-				if outcome == store.Conflict {
-					planned = m // a forced or refreshed conflict writes the candidate
+			overridable := outcome == store.Conflict || outcome == store.CanonicalAhead
+			if outcome == store.Created || outcome == store.Updated || (overridable && (force || refresh[m.Name])) {
+				if overridable {
+					planned = m // a forced or refreshed save writes the candidate
 				}
 				batch[m.Name] = planned
 			}
 			entry := outcomeEntry(m.Name, outcome, stored, m)
 			switch {
-			case refresh[m.Name] && outcome == store.Conflict:
+			case keep[m.Name] && outcome == store.Conflict && keepable(stored, m):
+				entry = outcomeEntry(m.Name, store.CanonicalAhead, stored, m)
+			case keep[m.Name] && outcome == store.Conflict:
+				warns = append(warns, keepDeclined(m.Name))
+			case refresh[m.Name] && overridable:
 				entry = refreshedEntry(m.Name, stored, m)
-			case force && outcome == store.Conflict:
+			case force && overridable:
 				entry = outcomeEntry(m.Name, store.Updated, stored, m)
 			}
 			item := memoryItems([]*schema.CanonicalMemory{m})[0]
@@ -289,7 +343,7 @@ func cmdImport(e *env, name string, args []string) int {
 			items = append(items, item)
 		}
 		base["memories"] = items
-		e.emit(name, true, base, warns, nil, nil)
+		e.emit(name, true, base, warns, nil, next)
 		return exitOK
 	}
 
@@ -300,9 +354,20 @@ func cmdImport(e *env, name string, args []string) int {
 	}
 	defer release()
 
+	tombs, terr := tombstone.Load(s.cfg.CanonicalRoot)
+	if terr != nil {
+		e.emit(name, false, base, warns, &RespError{Code: "tombstones", Message: terr.Error()}, nil)
+		return exitError
+	}
 	outcomes := make([]map[string]string, 0, len(res.Memories))
 	conflicts := 0
 	for _, m := range res.Memories {
+		// A forgotten memory stays forgotten; --force and --refresh do not
+		// override a tombstone (forget --restore does).
+		if tombs.Blocks(m) {
+			outcomes = append(outcomes, forgottenRow(m.Name))
+			continue
+		}
 		if verr := m.Validate(); verr != nil {
 			outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": "invalid", "error": verr.Error()})
 			continue
@@ -332,10 +397,30 @@ func cmdImport(e *env, name string, args []string) int {
 		// --refresh names memories whose canonical content the operator has chosen
 		// to replace with the native's; only those are forced, and only if they
 		// actually conflict (the plan is taken before the write to record why).
+		// --keep settles a conflict for canonical: keep its content and take the
+		// native's current hash as the base, so it reads as canonical_ahead.
+		if keep[m.Name] {
+			pre, _ := store.Plan(stored, m)
+			if pre == store.Conflict && !keepable(stored, m) {
+				warns = append(warns, keepDeclined(m.Name))
+			} else if pre == store.Conflict {
+				kept := *stored
+				kept.Provenance.ImportHash = m.Provenance.ImportHash
+				if m.Provenance.ImportSource != "" {
+					kept.Provenance.ImportSource = m.Provenance.ImportSource
+				}
+				if _, rerr := store.Replace(s.cfg.CanonicalRoot, &kept); rerr != nil {
+					e.emit(name, false, base, nil, &RespError{Code: "save", Message: rerr.Error()}, nil)
+					return exitError
+				}
+				outcomes = append(outcomes, outcomeEntry(m.Name, store.CanonicalAhead, stored, m))
+				continue
+			}
+		}
 		wasConflict := false
 		if refresh[m.Name] {
 			pre, _ := store.Plan(stored, m)
-			wasConflict = pre == store.Conflict
+			wasConflict = pre == store.Conflict || pre == store.CanonicalAhead
 			force = force || wasConflict
 		}
 		outcome, _, serr := store.Save(s.cfg.CanonicalRoot, m, force)
@@ -354,11 +439,22 @@ func cmdImport(e *env, name string, args []string) int {
 	}
 	base["results"] = outcomes
 	if conflicts > 0 {
-		e.emit(name, false, base, warns, nil, nil)
+		e.emit(name, false, base, warns, nil, next)
 		return exitConflicts
 	}
-	e.emit(name, true, base, warns, nil, nil)
+	e.emit(name, true, base, warns, nil, next)
 	return exitOK
+}
+
+// keepable reports whether --keep can settle a conflict between stored and the
+// candidate: both must be one native lineage, and the candidate must carry a
+// base to record.
+func keepable(stored, cand *schema.CanonicalMemory) bool {
+	return cand.Provenance.ImportHash != "" && store.SameLineage(stored.Provenance, cand.Provenance)
+}
+
+func keepDeclined(name string) string {
+	return "--keep " + name + " declined: canonical and this native are different sources (or the name is ambiguous in the import); resolve it with --refresh or curate"
 }
 
 // buildMemory assembles a memory from --from-json input, or from the individual
