@@ -58,24 +58,6 @@ only; shipped items live in the git history.
   normalize to one name both land in `Result.Memories`; the dry-run now predicts
   the second as a conflict, but the importer should report the collision itself
   (in `Dropped` or its own bucket) with both sources named.
-- **Codex-origin canonicals are never retired.** Codex's consolidator retitles
-  and prunes Task Groups, and each retitle mints a new canonical name while the
-  old one stays forever (in one real store, 31 of 52 Codex-origin canonicals no
-  longer existed in the source). `reconcile` then propagates both the stale and
-  the current version into every Claude slug. Import needs a "no longer in
-  source" signal (a per-origin source manifest), and a retirement decision
-  (automatic when a successor is identifiable, otherwise surfaced for review).
-- **No deterministic way to retire a canonical memory.** `curate` `remove` is the
-  only removal path, and it runs an agent. Retiring memories an operator has
-  already decided on (e.g. orphaned Codex-origin canonicals with a known
-  successor) means deleting files under the canonical root by hand, outside the
-  apply lock. A `forget <name>...` command (dry-run, `--apply`, under the lock)
-  would make that a plain write, and pairs with the tombstone item below.
-- **A retired project memory's Codex note waits for its project.** A Codex note
-  is removed as `STALE` only from a cwd where it is in view, so a note whose
-  project-scoped canonical was retired stays until the next run from within that
-  project. Whether Codex should instead get every scope in one pass (its notes
-  directory is global, and each note records its scope) is open.
 
 ## Import quality
 
@@ -116,13 +98,14 @@ only; shipped items live in the git history.
   not `created`/`modified`, to keep render output deterministic and idempotent.
   A "preserve created, bump modified on change" policy would restore timestamps
   without breaking idempotency.
-- **Canonical curation of imported memories is not durable (no tombstones).**
-  `curate` `remove` deletes a canonical file, but while the memory's native source
-  still exists the next `import` re-creates it as new; a `merge`/`update` on an
-  imported memory instead becomes a standing `conflict` against its stale native.
-  Either the operator must also clean up the native, or import needs a record of
-  deliberate removal (a tombstone list keyed by name + source) and a way to mark a
-  canonical memory as superseding its native so the conflict is not re-reported.
+- **A curated edit of an imported memory conflicts with its stale native.** A
+  `curate` `merge`/`update` (or any canonical edit) of an imported memory becomes
+  a standing import `conflict` against the unchanged native, and a native edited
+  after import conflicts the same way until `--refresh`. Recording the
+  last-imported native hash would give import a merge base: a native-only edit
+  fast-forwards, a canonical-only edit is not re-reported, and only a true
+  two-sided edit conflicts. (Removal is handled: `curate` `remove`/`merge`
+  tombstone what they take out.)
 - **`curate --apply` re-invokes the agent rather than applying a reviewed plan.**
   The proposer is non-deterministic, so the plan committed by `--apply` can differ
   from the one the operator inspected in the dry-run. A `--plan <file>` (emit the
