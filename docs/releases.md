@@ -67,18 +67,19 @@ release workflow's `workflow_run.workflows` trigger.
 
 ## Activation and recovery
 
-Before merging the automation, install the release App on this repository with
+For a new installation or recovery, verify the release App on this repository has
 Contents, Issues, and Pull requests read/write permissions, set repository
 variable `RELEASE_APP_CLIENT_ID`, and set repository secret
 `RELEASE_APP_PRIVATE_KEY`. Never commit the key. The workflow fails if these are
 missing; it does not fall back to a broader personal token. No App setup, remote
 settings, release tags, or GitHub Releases are created by a local implementation.
 
-After merge, verify the first successful main CI run creates/updates a release
-PR and that the App PR starts normal CI. Review its version and changelog against
-commits since `v0.1.0` before merging. Then verify the tagged commit, manifest,
-changelog, and GitHub Release agree. The GitHub App must not bypass branch
-protection, approve its own PRs, or merge releases.
+After a releasable main change, verify successful CI creates or updates a release
+PR and that the App PR starts normal CI. Review its version, changelog, and PR
+body for consumer behavior and migration steps since the actual release tag.
+After a release PR merge, verify the tagged commit, manifest, changelog, and
+GitHub Release agree. The GitHub App must not bypass branch protection, approve
+its own PRs, or merge releases.
 
 For a failed run, fix the reported configuration/permission/CI problem and rerun
 the failed release workflow after confirming its tested SHA is still current.
