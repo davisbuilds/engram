@@ -85,6 +85,7 @@ var (
 	shareArgs  = &argSpec{positionals: 1, values: []string{"--to"}}
 	importArgs = &argSpec{positionals: 1, values: []string{"--refresh"}, bools: []string{"--all"}}
 	curateArgs = &argSpec{values: []string{"--harness", "--model", "--effort", "--timeout"}}
+	detachArgs = &argSpec{positionals: anyPositionals}
 	forgetArgs = &argSpec{positionals: anyPositionals, values: []string{"--reason", "--successor"}, bools: []string{"--restore"}}
 )
 
@@ -96,6 +97,7 @@ func commands() []command {
 		{"share", "Move a memory to a different scope tier (writes canonical).", shareArgs, cmdShare},
 		{"sync", "Render canonical memories into the harnesses (dry-run; --apply to write).", noArgs, cmdSync},
 		{"import", "Reverse-sync a harness's native memory into canonical (one-shot; --apply).", importArgs, cmdImport},
+		{"detach", "Stop tracking an imported memory's source, so a kept orphan is no longer reported (dry-run; --apply).", detachArgs, cmdDetach},
 		{"forget", "Retire canonical memories: tombstone them so import never re-creates them, and remove their renders (dry-run; --apply; --restore undoes).", forgetArgs, cmdForget},
 		{"migrate", "Adopt hand-authored native memory canonical supersedes, in place (dry-run; --apply). Claude Code only.", harnessArg, cmdMigrate},
 		{"reconcile", "Cross-harness one-shot: import every harness → review leads → sync back (dry-run; --apply). Enricher flow in one command.", noArgs, cmdReconcile},

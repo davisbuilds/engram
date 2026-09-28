@@ -187,6 +187,25 @@ func Delete(root, name string) (bool, error) {
 	return true, nil
 }
 
+// Replace overwrites the existing canonical memory named m.Name with m exactly,
+// provenance included (Save keeps stored provenance on a provenance-only
+// difference, so it cannot change an origin). The memory must exist; the caller
+// holds the canonical lock.
+func Replace(root string, m *schema.CanonicalMemory) (string, error) {
+	_, path, found, err := Load(root, m.Name)
+	if err != nil {
+		return path, err
+	}
+	if !found {
+		return "", fmt.Errorf("no canonical memory named %s", m.Name)
+	}
+	rendered, err := m.Render()
+	if err != nil {
+		return path, err
+	}
+	return path, writeAtomic(path, rendered)
+}
+
 // ErrWithheld reports that a canonical file claims the name but discovery
 // withheld it (it failed to parse or validate, or another file shares its name).
 // The memory is not absent, so no writer may treat it as free to create.

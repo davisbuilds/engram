@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/davisbuilds/engram/internal/config"
+	"github.com/davisbuilds/engram/internal/discover"
 	"github.com/davisbuilds/engram/internal/importer"
 	"github.com/davisbuilds/engram/internal/schema"
 	"github.com/davisbuilds/engram/internal/store"
@@ -224,6 +225,24 @@ func cmdImport(e *env, name string, args []string) int {
 		warns = append(warns, fmt.Sprintf("%d source(s) could not be imported and were dropped; see data.dropped", len(res.Dropped)))
 	}
 
+	// Orphan detection needs the whole native source: Codex always has it, Claude
+	// only on the all-slug scan (one slug cannot tell a deleted native from one
+	// that lives in another slug).
+	var next []NextStep
+	if harness == config.HarnessCodex || all {
+		canon, _, derr := discover.Discover(s.cfg.CanonicalRoot)
+		if derr != nil {
+			e.emit(name, false, base, warns, &RespError{Code: "discover", Message: derr.Error()}, nil)
+			return exitError
+		}
+		orphans, owarn := findOrphans(canon, harness, res)
+		base["orphaned"] = orphans
+		if owarn != "" {
+			warns = append(warns, owarn)
+		}
+		next = orphanNextSteps(harness, orphans)
+	}
+
 	// A --refresh name that matches no candidate is a typo or a stale plan; refusing
 	// it beats silently refreshing nothing. Checked before any write.
 	if missing := unmatchedRefresh(refresh, res.Memories); len(missing) > 0 {
@@ -299,7 +318,7 @@ func cmdImport(e *env, name string, args []string) int {
 			items = append(items, item)
 		}
 		base["memories"] = items
-		e.emit(name, true, base, warns, nil, nil)
+		e.emit(name, true, base, warns, nil, next)
 		return exitOK
 	}
 
@@ -375,10 +394,10 @@ func cmdImport(e *env, name string, args []string) int {
 	}
 	base["results"] = outcomes
 	if conflicts > 0 {
-		e.emit(name, false, base, warns, nil, nil)
+		e.emit(name, false, base, warns, nil, next)
 		return exitConflicts
 	}
-	e.emit(name, true, base, warns, nil, nil)
+	e.emit(name, true, base, warns, nil, next)
 	return exitOK
 }
 

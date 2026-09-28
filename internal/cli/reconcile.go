@@ -67,6 +67,15 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		exit = worseExit(exit, exitConflicts)
 	}
 	warns = append(warns, scopeNotes...)
+	var orphanNext []NextStep
+	for i, imp := range imports {
+		orphans, owarn := findOrphans(mems, imp.harness, imp.result)
+		importEntries[i]["orphaned"] = orphans
+		if owarn != "" {
+			warns = append(warns, owarn)
+		}
+		orphanNext = append(orphanNext, orphanNextSteps(imp.harness, orphans)...)
+	}
 	for _, imp := range imports {
 		if len(imp.result.Dropped) > 0 {
 			warns = append(warns, imp.harness+": some sources could not be imported and were dropped; see data.import[].dropped")
@@ -120,6 +129,8 @@ func cmdReconcile(e *env, name string, _ []string) int {
 			Command: "engram curate --apply",
 		})
 	}
+
+	next = append(next, orphanNext...)
 
 	targets, twarns := s.enricherTargets(merged, keepStale)
 	warns = append(warns, twarns...)

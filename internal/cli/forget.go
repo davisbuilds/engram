@@ -30,7 +30,7 @@ func cmdForget(e *env, name string, args []string) int {
 		e.emit(name, false, nil, nil, rerr, nil)
 		return exitUsage
 	}
-	names, rerr := memoryNames(pa.pos)
+	names, rerr := memoryNames(pa.pos, forgetUsage)
 	if rerr == nil && pa.bools["--restore"] && (len(pa.vals["--reason"]) > 0 || len(pa.vals["--successor"]) > 0) {
 		rerr = usageError("--restore takes no --reason or --successor")
 	}
@@ -53,9 +53,9 @@ func cmdForget(e *env, name string, args []string) int {
 }
 
 // memoryNames validates and de-duplicates the names a command was given.
-func memoryNames(pos []string) ([]string, *RespError) {
+func memoryNames(pos []string, usage string) ([]string, *RespError) {
 	if len(pos) == 0 {
-		return nil, usageError(forgetUsage)
+		return nil, usageError("%s", usage)
 	}
 	seen := map[string]bool{}
 	var out []string
