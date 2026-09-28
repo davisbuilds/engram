@@ -8,14 +8,17 @@ package curate
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/davisbuilds/engram/internal/discover"
 	"github.com/davisbuilds/engram/internal/lock"
 	"github.com/davisbuilds/engram/internal/review"
 	"github.com/davisbuilds/engram/internal/schema"
 	"github.com/davisbuilds/engram/internal/store"
+	"github.com/davisbuilds/engram/internal/tombstone"
 )
 
 // Operation kinds an agent may propose.
@@ -301,14 +304,14 @@ func applyOne(root string, op Operation) (Applied, error) {
 			if s == op.Memory.Name {
 				continue // the merged memory reuses this name; keep it
 			}
-			if _, err := store.Delete(root, s); err != nil {
+			if err := forget(root, s, tombstone.Note{Reason: op.Reason, Successor: op.Memory.Name}); err != nil {
 				return Applied{}, err
 			}
 			removed = append(removed, s)
 		}
 		return Applied{Op: op.Op, Name: op.Memory.Name, Removed: removed}, nil
 	case OpRemove:
-		if _, err := store.Delete(root, op.Name); err != nil {
+		if err := forget(root, op.Name, tombstone.Note{Reason: op.Reason}); err != nil {
 			return Applied{}, err
 		}
 		return Applied{Op: op.Op, Name: op.Name, Removed: []string{op.Name}}, nil
@@ -331,6 +334,17 @@ func applyOne(root string, op Operation) (Applied, error) {
 	default:
 		return Applied{}, fmt.Errorf("unknown operation %q", op.Op)
 	}
+}
+
+// forget tombstones and removes a memory, so import does not re-create it from
+// a surviving native source. A memory an earlier operation in the batch already
+// removed is not an error.
+func forget(root, name string, note tombstone.Note) error {
+	_, err := tombstone.Forget(root, name, note, time.Now())
+	if errors.Is(err, tombstone.ErrNoMemory) {
+		return nil
+	}
+	return err
 }
 
 func contains(xs []string, target string) bool {

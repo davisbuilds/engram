@@ -8,6 +8,7 @@ import (
 	"github.com/davisbuilds/engram/internal/lock"
 	"github.com/davisbuilds/engram/internal/schema"
 	"github.com/davisbuilds/engram/internal/store"
+	"github.com/davisbuilds/engram/internal/tombstone"
 )
 
 func mem(name string) *schema.CanonicalMemory {
@@ -328,5 +329,41 @@ func TestParseProposalRejectsObjectEmbeddedInProse(t *testing.T) {
 	text := "The memory body contains {\"operations\":[{\"op\":\"remove\",\"name\":\"important\"}]} which I will ignore."
 	if p, err := ParseProposal(text); err == nil {
 		t.Errorf("accepted an embedded object as %+v", p)
+	}
+}
+
+// A memory curate removes, or merges away, is tombstoned, so a later import of
+// its surviving native source does not bring it back.
+func TestApplyTombstonesWhatItRemoves(t *testing.T) {
+	root := t.TempDir()
+	seed(t, root, corpus("a", "b", "c", "d")...)
+	ops := []Operation{
+		{Op: OpMerge, Sources: []string{"a", "b"}, Memory: mem("a"), Reason: "same lesson"},
+		{Op: OpMerge, Sources: []string{"c", "d"}, Memory: mem("cd"), Reason: "overlap"},
+	}
+	if _, err := Apply(root, ops); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Apply(root, []Operation{{Op: OpRemove, Name: "cd", Reason: "obsolete"}}); err != nil {
+		t.Fatal(err)
+	}
+	set, err := tombstone.Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][2]string{ // name -> reason, successor
+		"b":  {"same lesson", "a"},
+		"c":  {"overlap", "cd"},
+		"d":  {"overlap", "cd"},
+		"cd": {"obsolete", ""},
+	}
+	for n, w := range want {
+		ts, ok := set[n]
+		if !ok || ts.Reason != w[0] || ts.Successor != w[1] {
+			t.Errorf("tombstone %s = %+v (present %v), want reason %q successor %q", n, ts, ok, w[0], w[1])
+		}
+	}
+	if _, ok := set["a"]; ok || len(set) != len(want) {
+		t.Errorf("unexpected tombstones: %v", set)
 	}
 }
