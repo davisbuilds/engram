@@ -1,107 +1,53 @@
 # Contributing
 
+## Welcome and scope
+
 Bug reports, focused fixes, documentation improvements, and supported proposals
-are welcome. Discuss substantial harness integration, new dependencies, or public
-CLI/schema changes before major implementation. This is a solo-maintained project;
-contributions do not imply a support or response-time promise.
+are welcome. Discuss substantial harness integrations, new dependencies, or public
+CLI/schema changes before major implementation.
 
-Agent-assisted work is welcome. Submitters should understand intent, important
-behavior, tradeoffs, and verification, and explain limitations. No prompt
-transcript or manual rewrite is required. A clear
-[Backlog](docs/project/BACKLOG.md) entry can go directly to a PR; use an issue
-when persistent discussion or coordination helps.
+This is a solo-maintained project; contributions do not imply a support or
+response-time commitment.
 
-This repository uses a squash-merge workflow.
+## Understanding and agent use
 
-## Workflow
+Agent-assisted work is welcome. Submitters should understand the change's purpose,
+important behavior, tradeoffs, and verification limits. Explain what you checked
+and what remains uncertain; no prompt transcript or manual rewrite is required.
 
-1. Sync local `main`.
-2. Create a feature branch from `main`.
-3. Make focused changes and commit normally.
-4. Push branch and open a pull request.
-5. Merge with **Squash and merge** after CI passes.
-6. Let GitHub auto-delete the merged remote branch.
-7. Prune merged local branches periodically.
+Read the architecture invariants in [AGENTS](AGENTS.md): canonical data owns truth,
+renderers are pure, sync owns filesystem changes, and only marked files may be
+rewritten. [CLI contracts](docs/cli.md) own JSON and exit-code compatibility;
+[headless usage](docs/headless.md) explains agent operation. Keep machine identity
+and personal paths in configuration, out of tracked source and commit messages.
 
-## Branch Naming
+## Choosing work
 
-Use descriptive prefixes:
+[Backlog](docs/project/BACKLOG.md) records unresolved work. Backlog entries can be
+delegated directly to agents or become focused PRs. Use an issue when persistent
+discussion, investigation, or coordination helps; there is no mandatory graduation
+step. An entry or issue alone is not a feature commitment. When an issue owns the
+details, keep only a useful linked summary in the backlog.
 
-- `feat/<name>`
-- `fix/<name>`
-- `chore/<name>`
-- `docs/<name>`
+## Delivering a change
 
-## Commit Guidance
+Work on a focused branch from `main` (or an appropriate parent for stacked work).
+Keep commits coherent. Describe the problem and resulting behavior in the PR,
+with relevant verification and limitations. Merge after applicable checks pass
+and review conversations are resolved.
 
-- Keep commits logical and atomic while working on the branch.
-- Use Conventional Commit PR titles: `fix(import): preserve scope`,
-  `feat: add a renderer`, or `feat!: change the CLI contract`. The PR title
-  becomes the squash commit title, so the title check protects release parsing.
-- For a breaking change, use `!` in the title or a `BREAKING CHANGE:` footer in
-  the PR body, which becomes the squash commit body. Describe the migration.
-- Ordinary `docs`, `test`, `chore`, `build`, `ci`, `style`, and `refactor` changes
-  do not trigger releases. `perf`, `fix`, and `revert` produce patches; `feat` produces a
-  minor. Breaking changes produce a minor before 1.0 and a major afterward.
-- Review the generated release PR changelog and body for consumer behavior,
-  compatibility, and migration steps; merge through the same green CI gate.
-  See [release operations](docs/releases.md).
-- It is fine to have multiple commits in one PR; squash merge will combine them on `main`.
-  CI validates the final PR title. Main-push CI also validates the complete
-  unreleased retained history, including direct pushes; a later valid push
-  cannot bypass an earlier invalid commit.
+Start with [README](README.md) for setup and [AGENTS](AGENTS.md#build--test) for
+build, race tests, lint, formatting, and script checks. Follow the repo's behavioral
+TDD and standard-library-first dependency policy.
 
-## Public-Repository Hygiene
+The [Git policy](docs/project/GIT_HISTORY_POLICY.md) uses squash merges. Use a
+Conventional Commit PR title: it becomes the retained commit title. Mark breaking
+changes with `!` or a `BREAKING CHANGE:` footer in the PR body and explain migration.
+[Release operations](docs/releases.md) owns version categories, retained-history
+validation, and release recovery. Review consumer meaning and migration notes in
+the generated release PR; do not maintain a parallel manual release log.
 
-This is a public repository, and host identity plus harness home directories are
-**configuration, not code**. Keep local machine state out of tracked files and
-commit messages: no absolute personal paths, real host names, private-repository
-references, or personal identifiers. Scope and host labels are declared in config
-and resolved at runtime, never compiled in.
+For branch cleanup, follow the [preservation-aware Git guidance](docs/project/GIT_HISTORY_POLICY.md#recommended-ongoing-hygiene).
 
-## Architecture Invariants
-
-engram is agent-first — the CLI is deterministic plumbing; judgment lives in an
-agent. Before changing behavior, read the load-bearing invariants in
-[`AGENTS.md`](AGENTS.md): canonical is the single source of truth, renderers are
-pure while `internal/sync` owns the filesystem, and marker discipline is the
-identity contract (engram only ever rewrites files carrying its own marker;
-hand-authored files are inviolable). Preserve the stable JSON output envelope and
-documented exit codes, or bump `schemaVersion` and update [`docs/cli.md`](docs/cli.md).
-
-## Pull Request Expectations
-
-- Keep PR scope tight (one objective per PR).
-- Include a short summary and test evidence.
-- Follow TDD for behavior changes: a red test that fails for the reason you are
-  about to fix, then green.
-- Zero external dependencies beyond `gopkg.in/yaml.v3` — prefer the standard library.
-- Ensure CI passes before merge:
-  - `go build ./...`
-  - `go test -race ./...`
-  - `golangci-lint run ./...`
-  - `golangci-lint fmt --diff` (gofumpt formatting; run `gofumpt -w .` to fix)
-  - `make test-scripts` (shell/title and real Git release-history controls)
-
-## Local Branch Cleanup
-
-Follow the preservation-aware cleanup guidance in
-[Git history and branch hygiene](docs/project/GIT_HISTORY_POLICY.md#recommended-ongoing-hygiene).
-Inspect attached worktrees and confirm merged or squash-equivalent changes before
-deleting explicitly named, disposable branches.
-
-## Documentation Hygiene
-
-- Do not hardcode volatile counts in docs.
-- Prefer executable source-of-truth references (for example, `go test ./...`,
-  `.github/workflows/ci.yml`).
-- Keep `docs/` current when behavior changes, and log deferred work in
-  [`docs/project/BACKLOG.md`](docs/project/BACKLOG.md) rather than leaving it implicit.
-
-## Related Docs
-
-- Git history and branch hygiene config: [`docs/project/GIT_HISTORY_POLICY.md`](docs/project/GIT_HISTORY_POLICY.md)
-- Agent implementation guidance and architecture invariants: [`AGENTS.md`](AGENTS.md)
-- CLI interface contract (commands, envelope, exit codes, scope): [`docs/cli.md`](docs/cli.md)
-- How a headless agent drives engram: [`docs/headless.md`](docs/headless.md)
-- Project onboarding: [`README.md`](README.md)
+Update the owning reference when its claims change and reconcile affected backlog
+entries. Git and PRs hold routine delivery history.
