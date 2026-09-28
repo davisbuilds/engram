@@ -13,6 +13,10 @@ import (
 	"github.com/davisbuilds/engram/internal/schema"
 )
 
+// ForgottenDir is the directory under the canonical root that holds tombstones
+// of forgotten memories (see package tombstone). Discovery never reads it.
+const ForgottenDir = ".forgotten"
+
 // ParseError records a single file that could not be read or parsed.
 type ParseError struct {
 	Path string
@@ -40,6 +44,9 @@ func Locate(root string) ([]Located, []ParseError, error) {
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if d.IsDir() && d.Name() == ForgottenDir && path != root {
+			return filepath.SkipDir
 		}
 		if d.IsDir() || !strings.HasSuffix(path, ".md") {
 			return nil
