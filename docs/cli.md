@@ -303,7 +303,9 @@ explicit rather than ambient.
   from the shared Codex notes directory, each under its own lock. A tombstone is
   `<canonical_root>/.forgotten/<name>.yaml`, holding the name, origin, source,
   `forgotten_at`, `--reason`, `--successor`, and the forgotten file's full text;
-  discovery never reads that directory. Hand-authored files are never touched:
+  discovery never reads that directory. Forgetting a name again (another harness
+  reused it) keeps the earlier record as `<name>.<n>.yaml`, so every forgotten
+  origin stays blocked. Hand-authored files are never touched:
   each row's `natives` lists where the memory's source still lives (a Claude file,
   which gets an `rm` lead because Claude keeps loading it, or a Codex Task Group,
   which the tombstone keeps out of canonical). `--restore <name>...` writes
