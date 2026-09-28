@@ -41,6 +41,22 @@ func withHash(m *schema.CanonicalMemory) *schema.CanonicalMemory {
 	return m
 }
 
+// clearAmbiguous drops the import hash from every candidate whose name another
+// candidate in the batch shares: two natives for one canonical memory are two
+// lineages, and neither may move its merge base.
+func clearAmbiguous(ms []*schema.CanonicalMemory) []*schema.CanonicalMemory {
+	count := map[string]int{}
+	for _, m := range ms {
+		count[m.Name]++
+	}
+	for _, m := range ms {
+		if count[m.Name] > 1 {
+			m.Provenance.ImportHash = ""
+		}
+	}
+	return ms
+}
+
 // Dropped records a native source (a Claude file name, or a Codex Task Group
 // title) that could not be imported, with why — so nothing vanishes unreported.
 type Dropped struct {

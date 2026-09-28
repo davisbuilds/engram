@@ -98,11 +98,13 @@ func Plan(existing, cand *schema.CanonicalMemory) (Outcome, *schema.CanonicalMem
 	if sameRender(existing, cand) {
 		return Unchanged, existing
 	}
+	cp := cand.Provenance
+	cp.ImportHash = candidateBase(cand)
 	content := *cand
 	content.Provenance = existing.Provenance
 	if sameRender(existing, &content) {
 		merged := *existing
-		merged.Provenance = fillProvenance(existing.Provenance, cand.Provenance)
+		merged.Provenance = fillProvenance(existing.Provenance, cp)
 		if merged.Provenance == existing.Provenance {
 			return Unchanged, existing
 		}
@@ -111,25 +113,41 @@ func Plan(existing, cand *schema.CanonicalMemory) (Outcome, *schema.CanonicalMem
 	// The content differs. An import candidate against a memory with a recorded
 	// merge base can tell which side moved since the two last agreed.
 	base := existing.Provenance.ImportHash
-	if base != "" && cand.Provenance.ImportHash != "" && sameOrigin(existing.Provenance, cand.Provenance) {
+	if base != "" && cp.ImportHash != "" && SameLineage(existing.Provenance, cp) {
 		switch {
-		case cand.Provenance.ImportHash == base:
+		case cp.ImportHash == base:
 			return CanonicalAhead, existing
 		case schema.NativeHash(existing) == base:
 			// Fast-forward: take what the native authors, keep what canonical owns.
 			merged := *existing
 			merged.Description, merged.Type, merged.Body = cand.Description, cand.Type, cand.Body
-			merged.Provenance = fillProvenance(existing.Provenance, cand.Provenance)
+			merged.Provenance = fillProvenance(existing.Provenance, cp)
 			return Updated, &merged
 		}
 	}
 	return Conflict, nil
 }
 
-// sameOrigin reports whether two provenances can describe one import lineage:
-// their origins agree, or one is unset.
+// sameOrigin reports whether two provenances can share an origin: they agree,
+// or one is unset.
 func sameOrigin(a, b schema.Provenance) bool {
 	return a.Origin == "" || b.Origin == "" || a.Origin == b.Origin
+}
+
+// SameLineage reports whether two provenances describe one native source: the
+// same origin and, where both record one, the same source file. Only within one
+// lineage does the merge base say which side moved.
+func SameLineage(a, b schema.Provenance) bool {
+	return sameOrigin(a, b) && (a.Source == "" || b.Source == "" || a.Source == b.Source)
+}
+
+// candidateBase is cand's import hash when it describes cand's own content, else
+// "": a hash carried in from elsewhere (a stale copy, a hand edit) is no base.
+func candidateBase(cand *schema.CanonicalMemory) string {
+	if h := cand.Provenance.ImportHash; h != "" && h == schema.NativeHash(cand) {
+		return h
+	}
+	return ""
 }
 
 // Diff names the fields in which cand differs from existing, in a stable order:
@@ -190,7 +208,7 @@ func fillProvenance(stored, cand schema.Provenance) schema.Provenance {
 	fill(&out.Author, cand.Author)
 	fill(&out.Created, cand.Created)
 	fill(&out.Modified, cand.Modified)
-	if cand.ImportHash != "" {
+	if cand.ImportHash != "" && SameLineage(out, cand) {
 		out.ImportHash = cand.ImportHash
 	}
 	return out

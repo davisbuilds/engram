@@ -602,3 +602,31 @@ func TestImportCandidatesCarryTheirNativeHash(t *testing.T) {
 		}
 	}
 }
+
+// Two natives normalizing to one name in a batch are two lineages for one
+// canonical memory; neither may drive the merge base.
+func TestAmbiguousNamesInABatchCarryNoHash(t *testing.T) {
+	home := t.TempDir()
+	for _, slug := range []string{"-a", "-b"} {
+		dir := filepath.Join(home, "projects", slug, "memory")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		body := "---\nname: shared\ndescription: d\nmetadata:\n  type: lesson\n---\nfrom " + slug + "\n"
+		if err := os.WriteFile(filepath.Join(dir, "shared.md"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := ImportClaudeAll(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Memories) != 2 {
+		t.Fatalf("want both candidates, got %d", len(res.Memories))
+	}
+	for _, m := range res.Memories {
+		if m.Provenance.ImportHash != "" {
+			t.Errorf("an ambiguous name must carry no import_hash: %+v", m.Provenance)
+		}
+	}
+}

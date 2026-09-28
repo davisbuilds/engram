@@ -325,8 +325,10 @@ func cmdImport(e *env, name string, args []string) int {
 			}
 			entry := outcomeEntry(m.Name, outcome, stored, m)
 			switch {
-			case keep[m.Name] && outcome == store.Conflict:
+			case keep[m.Name] && outcome == store.Conflict && keepable(stored, m):
 				entry = outcomeEntry(m.Name, store.CanonicalAhead, stored, m)
+			case keep[m.Name] && outcome == store.Conflict:
+				warns = append(warns, keepDeclined(m.Name))
 			case refresh[m.Name] && overridable:
 				entry = refreshedEntry(m.Name, stored, m)
 			case force && overridable:
@@ -398,7 +400,10 @@ func cmdImport(e *env, name string, args []string) int {
 		// --keep settles a conflict for canonical: keep its content and take the
 		// native's current hash as the base, so it reads as canonical_ahead.
 		if keep[m.Name] {
-			if pre, _ := store.Plan(stored, m); pre == store.Conflict {
+			pre, _ := store.Plan(stored, m)
+			if pre == store.Conflict && !keepable(stored, m) {
+				warns = append(warns, keepDeclined(m.Name))
+			} else if pre == store.Conflict {
 				kept := *stored
 				kept.Provenance.ImportHash = m.Provenance.ImportHash
 				if _, rerr := store.Replace(s.cfg.CanonicalRoot, &kept); rerr != nil {
@@ -436,6 +441,17 @@ func cmdImport(e *env, name string, args []string) int {
 	}
 	e.emit(name, true, base, warns, nil, next)
 	return exitOK
+}
+
+// keepable reports whether --keep can settle a conflict between stored and the
+// candidate: both must be one native lineage, and the candidate must carry a
+// base to record.
+func keepable(stored, cand *schema.CanonicalMemory) bool {
+	return cand.Provenance.ImportHash != "" && store.SameLineage(stored.Provenance, cand.Provenance)
+}
+
+func keepDeclined(name string) string {
+	return "--keep " + name + " declined: canonical and this native are different sources (or the name is ambiguous in the import); resolve it with --refresh or curate"
 }
 
 // buildMemory assembles a memory from --from-json input, or from the individual

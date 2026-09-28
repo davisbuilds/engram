@@ -116,6 +116,7 @@ func ImportClaude(memoryDir, cwd string) (Result, error) {
 			Provenance:  schema.Provenance{Origin: "import:claude-code", Source: fname},
 		}))
 	}
+	res.Memories = clearAmbiguous(res.Memories)
 	return res, nil
 }
 
@@ -175,6 +176,7 @@ func ImportClaudeAll(claudeHome string) (Result, error) {
 		res.Skipped = append(res.Skipped, sub.Skipped...)
 		res.Dropped = append(res.Dropped, sub.Dropped...)
 	}
+	res.Memories = clearAmbiguous(res.Memories)
 	return res, nil
 }
 

@@ -380,6 +380,8 @@ func TestApplyKeepsStoredProvenanceOnUpdateAndMerge(t *testing.T) {
 	seed(t, root, a, b, mem("c"))
 	upd, merged := mem("a"), mem("b")
 	upd.Body, merged.Body = "curated\n", "merged\n"
+	// An agent may emit a partial provenance; it still must not replace lineage.
+	upd.Provenance = schema.Provenance{Author: "agent"}
 	ops := []Operation{
 		{Op: OpUpdate, Name: "a", Memory: upd, Reason: "tighten"},
 		{Op: OpMerge, Sources: []string{"b", "c"}, Memory: merged, Reason: "overlap"},

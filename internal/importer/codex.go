@@ -51,5 +51,6 @@ func ImportCodex(memoryFile string) (Result, error) {
 			Provenance:  schema.Provenance{Origin: "import:codex"},
 		}))
 	}
+	res.Memories = clearAmbiguous(res.Memories)
 	return res, nil
 }

@@ -344,14 +344,11 @@ func applyOne(root string, op Operation) (Applied, error) {
 	}
 }
 
-// keepProvenance returns m carrying the stored memory's provenance when m has
-// none: the agent rewrites content, not lineage, so an imported memory keeps its
-// origin and merge base, and the next import sees canonical as ahead of its
-// native instead of in conflict with it.
+// keepProvenance returns m carrying the stored memory's provenance, whatever
+// the proposal says: the agent rewrites content, not lineage, so an imported
+// memory keeps its origin and merge base, and the next import sees canonical as
+// ahead of its native instead of in conflict with it.
 func keepProvenance(root string, m *schema.CanonicalMemory) (*schema.CanonicalMemory, error) {
-	if m.Provenance != (schema.Provenance{}) {
-		return m, nil
-	}
 	stored, _, found, err := store.Load(root, m.Name)
 	if err != nil || !found {
 		return m, err

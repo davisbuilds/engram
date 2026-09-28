@@ -137,3 +137,32 @@ func TestSaveLeavesCanonicalAheadUnlessForced(t *testing.T) {
 		t.Errorf("a forced save takes the candidate:\n%s", got)
 	}
 }
+
+// A candidate whose recorded hash does not describe its own content (a stale
+// base carried in by hand) gets no merge-base treatment.
+func TestPlanIgnoresACandidateHashThatDoesNotMatchItsContent(t *testing.T) {
+	s := stored("original\n")
+	c := imported("edited\n")
+	c.Provenance.ImportHash = s.Provenance.ImportHash // stale: describes "original"
+	if out, _ := Plan(s, c); out != Conflict {
+		t.Errorf("Plan = %s, want conflict", out)
+	}
+	agree := imported("original\n")
+	agree.Provenance.ImportHash = "sha256:bogus"
+	if _, planned := Plan(s, agree); planned.Provenance.ImportHash == "sha256:bogus" {
+		t.Error("a bogus candidate hash must never become the base")
+	}
+}
+
+// The base belongs to one native source: a candidate from another source with
+// the same name (another file, another slug) conflicts rather than
+// fast-forwarding over it.
+func TestPlanNeedsTheSameSourceToFastForward(t *testing.T) {
+	s := stored("old\n")
+	s.Provenance.Source = "a.md"
+	c := imported("new\n")
+	c.Provenance.Source = "b.md"
+	if out, _ := Plan(s, c); out != Conflict {
+		t.Errorf("Plan = %s, want conflict", out)
+	}
+}

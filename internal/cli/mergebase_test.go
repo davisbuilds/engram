@@ -159,3 +159,25 @@ func TestRememberCannotPoseAsAnImport(t *testing.T) {
 		t.Error("remember overwrote canonical without --force")
 	}
 }
+
+// --keep settles one lineage; across two (a canonical from one harness, a
+// same-named native from another) it declines instead of rewriting the base.
+func TestImportKeepDeclinesAcrossLineages(t *testing.T) {
+	canon, _, _, args := setupTwoHarnesses(t)
+	seedImport(t, args)
+	file := filepath.Join(canon, "claude-lesson.md")
+	b, _ := os.ReadFile(file)
+	writeFile(t, file, strings.Replace(strings.Replace(string(b), "origin: import:claude-code", "origin: import:codex", 1), "claude body", "codex's version", 1))
+	before, _ := os.ReadFile(file)
+	code, env := runEnvelope(t, append([]string{"import", "claude-code", "--apply", "--keep", "claude-lesson"}, args...)...)
+	if code != exitConflicts {
+		t.Errorf("exit = %d, want %d (still a conflict)", code, exitConflicts)
+	}
+	if after, _ := os.ReadFile(file); string(after) != string(before) {
+		t.Error("--keep across lineages must not write")
+	}
+	warns, _ := env["warnings"].([]any)
+	if !strings.Contains(strings.Join(anyStrings(warns), "\n"), "--keep") {
+		t.Errorf("warnings %v should say --keep was declined", warns)
+	}
+}
