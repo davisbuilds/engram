@@ -227,7 +227,10 @@ explicit rather than ambient.
   scope, `applies_to` and `related`. A canonical edited since (a curated merge,
   a hand edit) with the native untouched is `canonical_ahead`: nothing is written
   and it is not a conflict. Only an edit on both sides, or a memory with no base
-  yet, is a `conflict`. A memory imported before merge bases existed gets one
+  yet, is a `conflict`. The base belongs to one native source (the same origin
+  and source file): a same-named native from another file or harness, or a name
+  two natives in one import both claim, gets no merge-base treatment and
+  conflicts as before. A memory imported before merge bases existed gets one
   the first time canonical and native agree (a one-time `updated` with no
   `differs`, as is any provenance-only backfill). **`--refresh <name>`**
   (repeatable, or comma-separated) is the explicit, per-name way to take a
@@ -238,7 +241,8 @@ explicit rather than ambient.
   **`--keep <name>`** is its opposite, for a conflict decided in canonical's
   favor: canonical's content stays, and the native's current hash becomes the
   base, so the memory reads as `canonical_ahead` until the native moves again
-  (then it conflicts again, as it should). An unknown name exits `2`
+  (then it conflicts again, as it should). Across two sources it declines with
+  a warning and the conflict stands. An unknown name exits `2`
   (`unknown_keep`), and one name cannot be given to both flags. Marker/loop-guarded
   so engram's own output never round-trips. `import` against a disabled harness
   exits `2`. **Scope is derived, not defaulted:** a memory's scope resolves to
@@ -348,7 +352,7 @@ explicit rather than ambient.
   exclusive canonical-root lock so the multi-file batch is atomic against a
   concurrent apply. **Fail closed**: if any operation in the batch is invalid,
   `--apply` applies nothing (exit `3`). An `update`, or a `merge` that reuses a
-  source's name, keeps the stored memory's provenance when the agent gives none,
+  source's name, keeps the stored memory's provenance whatever the agent gives,
   so the next import sees canonical as ahead of its native, not in conflict. A
   `remove`, and each source a `merge`
   replaces, is tombstoned (as `forget` does, with the operation's reason), so
