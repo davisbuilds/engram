@@ -61,6 +61,10 @@ func cmdRemember(e *env, name string, args []string) int {
 	if m.Provenance.Origin == "" {
 		m.Provenance.Origin = "remember"
 	}
+	// The merge base is import's to record; an authored memory never carries
+	// one, so remember cannot fast-forward past a differing memory (see
+	// store.Plan) and still needs --force to overwrite it.
+	m.Provenance.ImportHash = ""
 	if err := m.Validate(); err != nil {
 		e.emit(name, false, nil, nil, &RespError{Code: "invalid_memory", Message: err.Error()}, nil)
 		return exitUsage

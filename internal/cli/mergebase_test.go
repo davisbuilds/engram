@@ -137,3 +137,25 @@ func TestImportKeepSettlesAConflictForCanonical(t *testing.T) {
 		}
 	}
 }
+
+// remember authors; it is never an import. An import_hash in its input must not
+// let it fast-forward over an existing memory without --force.
+func TestRememberCannotPoseAsAnImport(t *testing.T) {
+	canon, _, _, args := setupTwoHarnesses(t)
+	seedImport(t, args)
+	file := filepath.Join(canon, "claude-lesson.md")
+	b, _ := os.ReadFile(file)
+	hash := regexp.MustCompile(`import_hash: (\S+)`).FindStringSubmatch(string(b))
+	if hash == nil {
+		t.Fatal("fixture: no import_hash")
+	}
+	in := filepath.Join(t.TempDir(), "m.json")
+	writeFile(t, in, `{"name":"claude-lesson","description":"a claude lesson","type":"lesson","scope":"global","body":"sneaky\n","provenance":{"origin":"import:claude-code","import_hash":"`+hash[1]+`"}}`)
+	code, _ := runEnvelope(t, append([]string{"remember", "--from-json", in}, args...)...)
+	if code != exitConflicts {
+		t.Errorf("exit = %d, want %d (a differing memory needs --force)", code, exitConflicts)
+	}
+	if after, _ := os.ReadFile(file); strings.Contains(string(after), "sneaky") {
+		t.Error("remember overwrote canonical without --force")
+	}
+}
