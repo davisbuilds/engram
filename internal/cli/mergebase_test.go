@@ -97,3 +97,43 @@ func TestMergeBaseBootstrapsOnAgreement(t *testing.T) {
 		t.Errorf("post-bootstrap native edit: exit %d row %v, want a fast-forward", code, rows["claude-lesson"])
 	}
 }
+
+// --keep <name> settles a conflict in canonical's favor: canonical is kept as
+// is, and the native's current content becomes the base, so the memory reads as
+// canonical_ahead from then on, until the native moves again.
+func TestImportKeepSettlesAConflictForCanonical(t *testing.T) {
+	canon, claudeMem, _, args := setupTwoHarnesses(t)
+	seedImport(t, args)
+	file := filepath.Join(canon, "claude-lesson.md")
+	editCanonicalBody(t, file)
+	editNative(t, claudeMem, "lesson-a.md", "claude-lesson", "native edit")
+	if code, rows := importRows(t, append([]string{"import", "claude-code"}, args...)...); code != exitOK || rows["claude-lesson"]["outcome"] != "conflict" {
+		t.Fatalf("fixture: want a two-sided conflict, got %v", rows["claude-lesson"])
+	}
+	before, _ := os.ReadFile(file)
+
+	if code, rows := importRows(t, append([]string{"import", "claude-code", "--keep", "claude-lesson"}, args...)...); code != exitOK || rows["claude-lesson"]["outcome"] != "canonical_ahead" {
+		t.Errorf("dry-run --keep: exit %d row %v, want canonical_ahead", code, rows["claude-lesson"])
+	}
+	if after, _ := os.ReadFile(file); string(after) != string(before) {
+		t.Fatal("a dry-run must not write")
+	}
+	if code, rows := importRows(t, append([]string{"import", "claude-code", "--apply", "--keep", "claude-lesson"}, args...)...); code != exitOK || rows["claude-lesson"]["outcome"] != "canonical_ahead" {
+		t.Errorf("--keep --apply: exit %d row %v, want exit 0 and canonical_ahead", code, rows["claude-lesson"])
+	}
+	after, _ := os.ReadFile(file)
+	if !strings.Contains(string(after), "curated addition") || strings.Contains(string(after), "native edit") {
+		t.Errorf("--keep must keep canonical's content:\n%s", after)
+	}
+	if code, rows := importRows(t, append([]string{"import", "claude-code", "--apply"}, args...)...); code != exitOK || rows["claude-lesson"]["outcome"] != "canonical_ahead" {
+		t.Errorf("after --keep: exit %d row %v, want canonical_ahead", code, rows["claude-lesson"])
+	}
+	for _, argv := range [][]string{
+		{"import", "claude-code", "--keep", "no-such-memory"},
+		{"import", "claude-code", "--keep", "claude-lesson", "--refresh", "claude-lesson"},
+	} {
+		if code, _ := importRows(t, append(argv, args...)...); code != exitUsage {
+			t.Errorf("%v: exit %d, want %d", argv, code, exitUsage)
+		}
+	}
+}

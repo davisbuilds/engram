@@ -162,12 +162,21 @@ func cmdImport(e *env, name string, args []string) int {
 		harness = pa.pos[0]
 	}
 	all := pa.bools["--all"]
-	refresh := map[string]bool{}
+	refresh, keep := map[string]bool{}, map[string]bool{}
 	for _, v := range pa.vals["--refresh"] {
 		addRefresh(refresh, v)
 	}
+	for _, v := range pa.vals["--keep"] {
+		addRefresh(keep, v)
+	}
+	for n := range keep {
+		if refresh[n] {
+			e.emit(name, false, nil, nil, usageError("%s cannot be both --refresh and --keep", n), nil)
+			return exitUsage
+		}
+	}
 	if harness == "" {
-		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram import <claude-code|codex> [--all] [--refresh <name>]… [--apply]"}, nil)
+		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram import <claude-code|codex> [--all] [--refresh <name>]… [--keep <name>]… [--apply]"}, nil)
 		return exitUsage
 	}
 	s, rerr := e.newSession()
@@ -252,6 +261,13 @@ func cmdImport(e *env, name string, args []string) int {
 		}, nil)
 		return exitUsage
 	}
+	if missing := unmatchedRefresh(keep, res.Memories); len(missing) > 0 {
+		e.emit(name, false, base, warns, &RespError{
+			Code:    "unknown_keep",
+			Message: "--keep names no imported memory: " + strings.Join(missing, ", "),
+		}, nil)
+		return exitUsage
+	}
 
 	if !e.apply {
 		// Dry-run: resolve scope against current canonical (unlocked — this is a
@@ -305,6 +321,8 @@ func cmdImport(e *env, name string, args []string) int {
 			}
 			entry := outcomeEntry(m.Name, outcome, stored, m)
 			switch {
+			case keep[m.Name] && outcome == store.Conflict:
+				entry = outcomeEntry(m.Name, store.CanonicalAhead, stored, m)
 			case refresh[m.Name] && overridable:
 				entry = refreshedEntry(m.Name, stored, m)
 			case force && overridable:
@@ -373,6 +391,20 @@ func cmdImport(e *env, name string, args []string) int {
 		// --refresh names memories whose canonical content the operator has chosen
 		// to replace with the native's; only those are forced, and only if they
 		// actually conflict (the plan is taken before the write to record why).
+		// --keep settles a conflict for canonical: keep its content and take the
+		// native's current hash as the base, so it reads as canonical_ahead.
+		if keep[m.Name] {
+			if pre, _ := store.Plan(stored, m); pre == store.Conflict {
+				kept := *stored
+				kept.Provenance.ImportHash = m.Provenance.ImportHash
+				if _, rerr := store.Replace(s.cfg.CanonicalRoot, &kept); rerr != nil {
+					e.emit(name, false, base, nil, &RespError{Code: "save", Message: rerr.Error()}, nil)
+					return exitError
+				}
+				outcomes = append(outcomes, outcomeEntry(m.Name, store.CanonicalAhead, stored, m))
+				continue
+			}
+		}
 		wasConflict := false
 		if refresh[m.Name] {
 			pre, _ := store.Plan(stored, m)

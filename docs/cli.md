@@ -93,7 +93,8 @@ engram [global flags] <command> [args]
     import       Reverse-sync a harness's native memory into canonical
                  (explicit, one-shot; dry-run, --apply to write; --all to
                  sweep every Claude project slug, not just the cwd's;
-                 --refresh <name> to overwrite a conflicting canonical).
+                 --refresh <name> to overwrite a conflicting canonical;
+                 --keep <name> to keep canonical and settle the conflict).
     migrate      Adopt hand-authored native memory canonical supersedes,
                  converting it to engram-owned in place so a later sync
                  neither duplicates nor conflicts (dry-run; --apply to write;
@@ -233,7 +234,12 @@ explicit rather than ambient.
   native's content into canonical over a `conflict` or `canonical_ahead`: the
   named memory is overwritten (reported as `updated`, with `differs` recording
   what was replaced), everything else behaves as without the flag, and a name
-  matching no candidate exits `2` (`unknown_refresh`) before any write. Marker/loop-guarded
+  matching no candidate exits `2` (`unknown_refresh`) before any write.
+  **`--keep <name>`** is its opposite, for a conflict decided in canonical's
+  favor: canonical's content stays, and the native's current hash becomes the
+  base, so the memory reads as `canonical_ahead` until the native moves again
+  (then it conflicts again, as it should). An unknown name exits `2`
+  (`unknown_keep`), and one name cannot be given to both flags. Marker/loop-guarded
   so engram's own output never round-trips. `import` against a disabled harness
   exits `2`. **Scope is derived, not defaulted:** a memory's scope resolves to
   `project:<repo>` when its source cwd (Claude: the import cwd; Codex: the Task
