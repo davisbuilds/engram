@@ -84,6 +84,9 @@ func cmdReconcile(e *env, name string, _ []string) int {
 
 	// 2. Under --apply, persist the imports to canonical (same outcomes as simulated).
 	if e.apply {
+		if e.beforeApplyLock != nil {
+			e.beforeApplyLock()
+		}
 		release, lerr := canonLock(s.cfg.CanonicalRoot)
 		if lerr != nil {
 			e.emit(name, false, nil, warns, lerr, nil)
@@ -109,9 +112,19 @@ func cmdReconcile(e *env, name string, _ []string) int {
 				}
 			}
 		}
+		// Propagate only what canonical holds now: a memory removed since the
+		// simulation (a concurrent forget) must not be rendered back.
+		present, _, derr := discover.Discover(s.cfg.CanonicalRoot)
+		if derr != nil {
+			release()
+			e.emit(name, false, nil, warns, &RespError{Code: "discover", Message: derr.Error()}, nil)
+			return exitError
+		}
+		merged = keepPresent(merged, present)
 		release()
 	}
-	// 3. Review + propagate against the merged set (identical for dry-run and apply).
+	// 3. Review + propagate against the merged set (as simulated; apply also drops
+	// anything removed concurrently).
 	findings := review.Analyze(merged)
 	reviewItems := make([]map[string]any, 0, len(findings))
 	var next []NextStep
@@ -279,6 +292,22 @@ func refreshedEntry(name string, stored, cand *schema.CanonicalMemory) map[strin
 		"name": name, "outcome": string(store.Updated),
 		"differs": strings.Join(store.Diff(stored, cand), ","),
 	}
+}
+
+// keepPresent drops from merged every memory whose name canonical no longer
+// holds.
+func keepPresent(merged, present []*schema.CanonicalMemory) []*schema.CanonicalMemory {
+	names := make(map[string]bool, len(present))
+	for _, m := range present {
+		names[m.Name] = true
+	}
+	out := merged[:0:0]
+	for _, m := range merged {
+		if names[m.Name] {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // forgottenRow is the result row for an import candidate a tombstone keeps out:

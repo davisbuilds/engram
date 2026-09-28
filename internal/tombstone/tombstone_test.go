@@ -48,7 +48,7 @@ func TestForgetRemovesTheMemoryAndRecordsIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, ok := set["old-lesson"]
+	got, ok := set.Latest("old-lesson")
 	if !ok {
 		t.Fatalf("Load did not return the tombstone: %v", set)
 	}
@@ -57,6 +57,7 @@ func TestForgetRemovesTheMemoryAndRecordsIt(t *testing.T) {
 		ForgottenAt: "2026-09-27T12:00:00Z", Reason: "superseded", Successor: "new-lesson",
 		Path: "old-lesson.md", Memory: string(orig),
 	}
+	got.file = ""
 	if got != want {
 		t.Errorf("tombstone = %+v\nwant %+v", got, want)
 	}
@@ -146,8 +147,8 @@ func TestRestoreRefusesATakenName(t *testing.T) {
 
 func TestBlocksMatchesNameAndOriginHarness(t *testing.T) {
 	set := Set{
-		"claude-one": {Name: "claude-one", Origin: "import:claude-code"},
-		"codex-one":  {Name: "codex-one", Origin: "detached:import:codex"},
+		"claude-one": {{Name: "claude-one", Origin: "import:claude-code"}},
+		"codex-one":  {{Name: "codex-one", Origin: "detached:import:codex"}},
 	}
 	cand := func(name, origin string) *schema.CanonicalMemory {
 		return &schema.CanonicalMemory{Name: name, Provenance: schema.Provenance{Origin: origin}}
@@ -188,5 +189,70 @@ func TestRestoreStaysInsideTheRoot(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(root), "outside.md")); !errors.Is(err, os.ErrNotExist) {
 		t.Error("restore wrote outside the canonical root")
+	}
+}
+
+// A name forgotten from one harness, reused by another and forgotten again,
+// keeps blocking both: the second forget must not drop the first record.
+func TestForgettingANameTwiceKeepsBothRecords(t *testing.T) {
+	root := t.TempDir()
+	first := saveMem(t, root, "shared", "import:codex")
+	if _, err := Forget(root, "shared", Note{Reason: "one"}, at); err != nil {
+		t.Fatal(err)
+	}
+	saveMem(t, root, "shared", "import:claude-code")
+	if _, err := Forget(root, "shared", Note{Reason: "two"}, at); err != nil {
+		t.Fatal(err)
+	}
+	set, err := Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, origin := range []string{"import:codex", "import:claude-code"} {
+		if !set.Blocks(&schema.CanonicalMemory{Name: "shared", Provenance: schema.Provenance{Origin: origin}}) {
+			t.Errorf("a %s candidate must still be blocked", origin)
+		}
+	}
+	if ts, ok := set.Latest("shared"); !ok || ts.Reason != "two" {
+		t.Errorf("Latest = %+v, want the second forget", ts)
+	}
+	// Restoring brings back the latest; the earlier record keeps blocking and
+	// becomes the one a later restore would bring back.
+	if _, err := Restore(root, "shared"); err != nil {
+		t.Fatal(err)
+	}
+	set, _ = Load(root)
+	if !set.Blocks(&schema.CanonicalMemory{Name: "shared", Provenance: schema.Provenance{Origin: "import:codex"}}) {
+		t.Error("restoring the latest record must not drop the earlier block")
+	}
+	if ts, ok := set.Latest("shared"); !ok || ts.Memory != string(first) {
+		t.Errorf("after restore, Latest should be the earlier record, got %+v", ts)
+	}
+}
+
+// A symlinked directory inside the root must not carry a restore outside it.
+func TestRestoreDoesNotFollowASymlinkOutOfTheRoot(t *testing.T) {
+	base := t.TempDir()
+	root, outside := filepath.Join(base, "root"), filepath.Join(base, "outside")
+	for _, d := range []string{root, outside} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
+		t.Fatal(err)
+	}
+	bad := "name: evil\npath: link/evil.md\nmemory: x\nforgotten_at: t\n"
+	if err := os.MkdirAll(filepath.Dir(Path(root, "evil")), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(Path(root, "evil"), []byte(bad), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Restore(root, "evil"); err == nil {
+		t.Error("a restore through a symlink out of the root must be refused")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "evil.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Error("restore wrote through the symlink, outside the root")
 	}
 }

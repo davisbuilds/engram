@@ -220,7 +220,7 @@ func (s *session) restore(e *env, name string, names []string) int {
 	items := make([]map[string]any, 0, len(names))
 	taken := false
 	for _, n := range names {
-		ts, ok := set[n]
+		ts, ok := set.Latest(n)
 		if !ok {
 			unknown = append(unknown, n)
 			continue

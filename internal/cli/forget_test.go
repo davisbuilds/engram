@@ -73,7 +73,9 @@ func TestForgetApplyRetiresTheMemoryAndItsRenders(t *testing.T) {
 		}
 	}
 	set, err := tombstone.Load(canon)
-	if err != nil || set["codex-lesson"].Reason != "retired" || set["claude-lesson"].Origin != "import:claude-code" {
+	cl, _ := set.Latest("codex-lesson")
+	al, _ := set.Latest("claude-lesson")
+	if err != nil || cl.Reason != "retired" || al.Origin != "import:claude-code" {
 		t.Errorf("tombstones = %+v (err %v)", set, err)
 	}
 

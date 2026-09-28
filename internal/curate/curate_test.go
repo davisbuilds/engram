@@ -358,7 +358,7 @@ func TestApplyTombstonesWhatItRemoves(t *testing.T) {
 		"cd": {"obsolete", ""},
 	}
 	for n, w := range want {
-		ts, ok := set[n]
+		ts, ok := set.Latest(n)
 		if !ok || ts.Reason != w[0] || ts.Successor != w[1] {
 			t.Errorf("tombstone %s = %+v (present %v), want reason %q successor %q", n, ts, ok, w[0], w[1])
 		}

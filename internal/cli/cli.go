@@ -67,6 +67,9 @@ type env struct {
 	// for a fake in tests so the curate loop is exercised without spawning a
 	// paid model.
 	runnerFor func(timeout time.Duration) agentexec.Runner
+	// beforeApplyLock, when set, runs just before reconcile --apply takes the
+	// canonical lock; tests use it to land a concurrent write in that window.
+	beforeApplyLock func()
 }
 
 // command is one entry in engram's subcommand table.

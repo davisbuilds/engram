@@ -111,3 +111,32 @@ func TestReconcileDoesNotResurrectForgottenMemories(t *testing.T) {
 		t.Errorf("the forgotten Codex lesson's Claude render should be removed as stale")
 	}
 }
+
+// A forget landing between reconcile's simulation and its apply must not have
+// its purged render re-created from the stale simulated set.
+func TestReconcileApplyHonorsAForgetThatLandsMidRun(t *testing.T) {
+	canon, claudeMem, _, args := setupTwoHarnesses(t)
+	func() {
+		defer silenceStdout(t)()
+		if code := Run(append([]string{"reconcile", "--apply"}, args...)); code != exitOK {
+			t.Fatalf("seed reconcile exit = %d", code)
+		}
+	}()
+	render := filepath.Join(claudeMem, "codex-lesson.md")
+	e := &env{jsonMode: true, apply: true, config: args[1], cwd: args[3], beforeApplyLock: func() {
+		// What a concurrent `forget codex-lesson --apply` does: tombstone the
+		// memory and purge its render.
+		if _, err := tombstone.Forget(canon, "codex-lesson", tombstone.Note{}, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(render); err != nil {
+			t.Fatal(err)
+		}
+	}}
+	defer silenceStdout(t)()
+	cmdReconcile(e, "reconcile", nil)
+	if _, err := os.Stat(render); !errors.Is(err, os.ErrNotExist) {
+		t.Error("reconcile re-created the render of a memory forgotten mid-run")
+	}
+	assertNoCanonical(t, canon, "codex-lesson")
+}
