@@ -375,6 +375,15 @@ func originHarness(m *schema.CanonicalMemory) string {
 	return ""
 }
 
+// sourceHarness is the harness a memory was imported from, looking through a
+// detach: a detached memory no longer tracks its source, but it still came
+// from there.
+func sourceHarness(m *schema.CanonicalMemory) string {
+	c := *m
+	c.Provenance.Origin = strings.TrimPrefix(c.Provenance.Origin, schema.DetachedPrefix)
+	return originHarness(&c)
+}
+
 // withheldNames maps each name a withheld canonical file claims to why it was
 // withheld. An unparseable file's name is taken from its <name>.md filename.
 func withheldNames(perrs []discover.ParseError) map[string]string {

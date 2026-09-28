@@ -7,9 +7,13 @@ import (
 )
 
 // argSpec declares the arguments one command accepts after the global flags are
-// removed: at most positionals bare arguments, the flags in values (each takes a
+// removed: at most positionals bare arguments (anyPositionals for no limit), the flags in values (each takes a
 // value, as `--flag v` or `--flag=v`, and may repeat), and the boolean flags in
 // bools. A command whose spec is nil parses its own arguments.
+// anyPositionals is the argSpec.positionals value for a command that takes any
+// number of bare arguments (a list of memory names).
+const anyPositionals = -1
+
 type argSpec struct {
 	positionals int
 	values      []string
@@ -41,7 +45,7 @@ func parseArgs(args []string, spec argSpec) (parsedArgs, *RespError) {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if !strings.HasPrefix(a, "-") {
-			if len(p.pos) == spec.positionals {
+			if spec.positionals != anyPositionals && len(p.pos) == spec.positionals {
 				return p, usageError("unexpected argument %q", a)
 			}
 			p.pos = append(p.pos, a)

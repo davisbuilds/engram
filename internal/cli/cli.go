@@ -85,6 +85,7 @@ var (
 	shareArgs  = &argSpec{positionals: 1, values: []string{"--to"}}
 	importArgs = &argSpec{positionals: 1, values: []string{"--refresh"}, bools: []string{"--all"}}
 	curateArgs = &argSpec{values: []string{"--harness", "--model", "--effort", "--timeout"}}
+	forgetArgs = &argSpec{positionals: anyPositionals, values: []string{"--reason", "--successor"}, bools: []string{"--restore"}}
 )
 
 // commands returns the full subcommand table. The table is the single source of
@@ -95,6 +96,7 @@ func commands() []command {
 		{"share", "Move a memory to a different scope tier (writes canonical).", shareArgs, cmdShare},
 		{"sync", "Render canonical memories into the harnesses (dry-run; --apply to write).", noArgs, cmdSync},
 		{"import", "Reverse-sync a harness's native memory into canonical (one-shot; --apply).", importArgs, cmdImport},
+		{"forget", "Retire canonical memories: tombstone them so import never re-creates them, and remove their renders (dry-run; --apply; --restore undoes).", forgetArgs, cmdForget},
 		{"migrate", "Adopt hand-authored native memory canonical supersedes, in place (dry-run; --apply). Claude Code only.", harnessArg, cmdMigrate},
 		{"reconcile", "Cross-harness one-shot: import every harness → review leads → sync back (dry-run; --apply). Enricher flow in one command.", noArgs, cmdReconcile},
 		{"discover", "Parse and list every canonical memory, with parse errors.", noArgs, cmdDiscover},
