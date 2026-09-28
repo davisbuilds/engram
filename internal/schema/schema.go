@@ -17,6 +17,10 @@ const fence = "---\n"
 
 var kebab = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
+// ValidName reports whether s is a well-formed memory name (kebab-case), the
+// shape every name-keyed path under the canonical root relies on.
+func ValidName(s string) bool { return kebab.MatchString(s) }
+
 var validTypes = map[Type]bool{
 	TypeUser: true, TypeFeedback: true, TypeProject: true,
 	TypeReference: true, TypeLesson: true, TypePreference: true,
@@ -55,6 +59,11 @@ type AppliesTo struct {
 	Agents []string `yaml:"agents,omitempty" json:"agents,omitempty"`
 	Hosts  []string `yaml:"hosts,omitempty" json:"hosts,omitempty"`
 }
+
+// DetachedPrefix marks a provenance origin whose native source is no longer
+// tracked: `engram detach` prefixes the origin with it, so orphan detection
+// passes the memory by while the original origin stays readable.
+const DetachedPrefix = "detached:"
 
 // Provenance records where a memory came from. All fields are ISO-8601 strings
 // or free identifiers; none are load-bearing for scope decisions.

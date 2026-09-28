@@ -16,6 +16,7 @@ import (
 	"github.com/davisbuilds/engram/internal/scope"
 	"github.com/davisbuilds/engram/internal/store"
 	"github.com/davisbuilds/engram/internal/sync"
+	"github.com/davisbuilds/engram/internal/tombstone"
 )
 
 // cmdReconcile is the on-demand cross-harness convenience: it imports each
@@ -56,11 +57,25 @@ func cmdReconcile(e *env, name string, _ []string) int {
 	// propagation run against in *both* dry-run and apply, so the preview reflects
 	// what apply will do rather than the pre-import canonical.
 	exit := exitOK
-	merged, importEntries, hadConflict, scopeNotes := mergeImports(mems, imports, withheldNames(perrs))
+	tombs, terr := tombstone.Load(s.cfg.CanonicalRoot)
+	if terr != nil {
+		e.emit(name, false, nil, warns, &RespError{Code: "tombstones", Message: terr.Error()}, nil)
+		return exitError
+	}
+	merged, importEntries, hadConflict, scopeNotes := mergeImports(mems, imports, withheldNames(perrs), tombs)
 	if hadConflict {
 		exit = worseExit(exit, exitConflicts)
 	}
 	warns = append(warns, scopeNotes...)
+	var orphanNext []NextStep
+	for i, imp := range imports {
+		orphans, owarn := findOrphans(mems, imp.harness, imp.result)
+		importEntries[i]["orphaned"] = orphans
+		if owarn != "" {
+			warns = append(warns, owarn)
+		}
+		orphanNext = append(orphanNext, orphanNextSteps(imp.harness, orphans)...)
+	}
 	for _, imp := range imports {
 		if len(imp.result.Dropped) > 0 {
 			warns = append(warns, imp.harness+": some sources could not be imported and were dropped; see data.import[].dropped")
@@ -69,15 +84,26 @@ func cmdReconcile(e *env, name string, _ []string) int {
 
 	// 2. Under --apply, persist the imports to canonical (same outcomes as simulated).
 	if e.apply {
+		if e.beforeApplyLock != nil {
+			e.beforeApplyLock()
+		}
 		release, lerr := canonLock(s.cfg.CanonicalRoot)
 		if lerr != nil {
 			e.emit(name, false, nil, warns, lerr, nil)
 			return exitError
 		}
+		// Re-read the tombstones under the lock: a forget that landed since the
+		// simulation must still keep its memory out.
+		tombs, terr = tombstone.Load(s.cfg.CanonicalRoot)
+		if terr != nil {
+			release()
+			e.emit(name, false, nil, warns, &RespError{Code: "tombstones", Message: terr.Error()}, nil)
+			return exitError
+		}
 		for _, imp := range imports {
 			for _, m := range imp.result.Memories {
-				if m.Validate() != nil {
-					continue // already counted as invalid in the simulation
+				if tombs.Blocks(m) || m.Validate() != nil {
+					continue // forgotten, or already counted as invalid in the simulation
 				}
 				if _, _, serr := store.Save(s.cfg.CanonicalRoot, m, false); serr != nil {
 					release()
@@ -86,9 +112,19 @@ func cmdReconcile(e *env, name string, _ []string) int {
 				}
 			}
 		}
+		// Propagate only what canonical holds now: a memory removed since the
+		// simulation (a concurrent forget) must not be rendered back.
+		present, _, derr := discover.Discover(s.cfg.CanonicalRoot)
+		if derr != nil {
+			release()
+			e.emit(name, false, nil, warns, &RespError{Code: "discover", Message: derr.Error()}, nil)
+			return exitError
+		}
+		merged = keepPresent(merged, present)
 		release()
 	}
-	// 3. Review + propagate against the merged set (identical for dry-run and apply).
+	// 3. Review + propagate against the merged set (as simulated; apply also drops
+	// anything removed concurrently).
 	findings := review.Analyze(merged)
 	reviewItems := make([]map[string]any, 0, len(findings))
 	var next []NextStep
@@ -106,6 +142,8 @@ func cmdReconcile(e *env, name string, _ []string) int {
 			Command: "engram curate --apply",
 		})
 	}
+
+	next = append(next, orphanNext...)
 
 	targets, twarns := s.enricherTargets(merged, keepStale)
 	warns = append(warns, twarns...)
@@ -153,11 +191,12 @@ func cmdReconcile(e *env, name string, _ []string) int {
 // backfilled provenance, any other name-collision -> conflict keeping the
 // existing memory), without writing. The merged set it returns is what review and propagation run
 // against in both dry-run and apply, so the preview reflects what apply will do.
+// A candidate a tombstone blocks is reported as forgotten and left out.
 // It also returns a per-harness import summary, whether anything conflicted or
 // was invalid (which maps to a non-zero exit), and any scope-preservation notes
 // (a provisional import held back from re-scoping an existing memory), which the
 // caller surfaces as warnings.
-func mergeImports(existing []*schema.CanonicalMemory, imports []importGather, withheld map[string]string) (merged []*schema.CanonicalMemory, entries []map[string]any, hadConflict bool, notes []string) {
+func mergeImports(existing []*schema.CanonicalMemory, imports []importGather, withheld map[string]string, tombs tombstone.Set) (merged []*schema.CanonicalMemory, entries []map[string]any, hadConflict bool, notes []string) {
 	byName := make(map[string]*schema.CanonicalMemory, len(existing))
 	order := make([]string, 0, len(existing))
 	add := func(m *schema.CanonicalMemory) {
@@ -172,6 +211,11 @@ func mergeImports(existing []*schema.CanonicalMemory, imports []importGather, wi
 	for _, imp := range imports {
 		outcomes := make([]map[string]string, 0, len(imp.result.Memories))
 		for _, m := range imp.result.Memories {
+			// A forgotten memory stays forgotten while its native lives on.
+			if tombs.Blocks(m) {
+				outcomes = append(outcomes, forgottenRow(m.Name))
+				continue
+			}
 			// A withheld canonical file still owns its name; store.Save refuses it,
 			// so the preview must too, and it must not join the merged set.
 			if reason, ok := withheld[m.Name]; ok {
@@ -248,6 +292,28 @@ func refreshedEntry(name string, stored, cand *schema.CanonicalMemory) map[strin
 		"name": name, "outcome": string(store.Updated),
 		"differs": strings.Join(store.Diff(stored, cand), ","),
 	}
+}
+
+// keepPresent drops from merged every memory whose name canonical no longer
+// holds.
+func keepPresent(merged, present []*schema.CanonicalMemory) []*schema.CanonicalMemory {
+	names := make(map[string]bool, len(present))
+	for _, m := range present {
+		names[m.Name] = true
+	}
+	out := merged[:0:0]
+	for _, m := range merged {
+		if names[m.Name] {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// forgottenRow is the result row for an import candidate a tombstone keeps out:
+// the memory was deliberately forgotten, so it is neither written nor a conflict.
+func forgottenRow(name string) map[string]string {
+	return map[string]string{"name": name, "outcome": "forgotten"}
 }
 
 // outcomeEntry is the per-memory result row shared by every import surface
@@ -347,6 +413,15 @@ func originHarness(m *schema.CanonicalMemory) string {
 		return config.HarnessCodex
 	}
 	return ""
+}
+
+// sourceHarness is the harness a memory was imported from, looking through a
+// detach: a detached memory no longer tracks its source, but it still came
+// from there.
+func sourceHarness(m *schema.CanonicalMemory) string {
+	c := *m
+	c.Provenance.Origin = strings.TrimPrefix(c.Provenance.Origin, schema.DetachedPrefix)
+	return originHarness(&c)
 }
 
 // withheldNames maps each name a withheld canonical file claims to why it was

@@ -106,6 +106,11 @@ engram [global flags] <command> [args]
     curate       Run a headless agent over the corpus; it proposes
                  add/merge/remove/rescope, engram validates and applies
                  (dry-run; --apply to write). The one command that runs an agent.
+    forget       Retire canonical memories: tombstone them so import never
+                 re-creates them, and remove their engram-owned renders
+                 (dry-run; --apply to write; --restore undoes).
+    detach       Stop tracking an imported memory's native source, so a kept
+                 orphan is no longer reported (dry-run; --apply to write).
 
   Introspection (read-only, --json everywhere):
     discover     Parse and list every canonical memory, with parse errors
@@ -168,7 +173,8 @@ explicit rather than ambient.
   agree on origin, so `origin` and `source` never come from different harnesses), a
   populated field keeps its stored value, and incoming memory can never strip provenance. Every
   canonical writer
-  (`remember`, `share`, `import --apply`, `curate --apply`) takes the shared
+  (`remember`, `share`, `import --apply`, `curate --apply`, `forget --apply`,
+  `detach --apply`) takes the shared
   exclusive canonical-root lock, so no two writers interleave; a held lock is a
   retryable error (exit `1`, `error.code = "locked"`), not a silent second write.
 - **`sync`** — computes render `Action`s (`CREATE` / `UPDATE` / `STALE` /
@@ -190,7 +196,7 @@ explicit rather than ambient.
   records is visible here and, while its canonical memory exists, that memory's
   `applies_to` axes (cwd globs, agents, hosts) admit this session. A note another project's run rendered is
   left for that project, so the note of a retired project memory is removed by
-  the next run from within that project. A target path that already exists as a hand-authored file (on a
+  the next run from within that project (`forget` removes it at once). A target path that already exists as a hand-authored file (on a
   case-insensitive filesystem, including a case variant of the name) is a
   `CONFLICT`, never an overwrite. Only a `MEMORY.md` line that *ends* with the
   `<!-- engram name=… -->` marker is engram's; a line quoting it mid-text is not.
@@ -198,7 +204,10 @@ explicit rather than ambient.
   zero side effects.
 - **`import <harness>`** — reverse-sync, explicit and one-shot. Dry-run lists every
   candidate memory with the `outcome` `--apply` would produce for it (`created` /
-  `updated` / `unchanged` / `conflict`); `--apply` writes them. Each `conflict`
+  `updated` / `unchanged` / `conflict` / `forgotten`); `--apply` writes them.
+  `forgotten` means a tombstone holds the name (see `forget`): the memory was
+  deliberately retired, so it is not written, even with `--force` or `--refresh`,
+  and it is not a conflict. Each `conflict`
   result also carries `differs`, a comma-separated list of the fields that differ
   (`description`, `type`, `scope`, `applies_to`, `related`, `provenance`, `body`),
   so the cause is visible without diffing files. A `conflict` carrying `withheld`
@@ -240,6 +249,15 @@ explicit rather than ambient.
   the filesystem) so scope is derived per project; an orphaned slug whose project
   is gone falls back to `global`. Codex keeps one consolidated source, so `--all`
   is accepted there but changes nothing.
+  **Orphans are reported, never retired.** `import codex` and
+  `import claude-code --all` (the scans that see the whole native source) list
+  under `data.orphaned` each canonical memory imported from that harness whose
+  source is gone: a Codex name matching no current Task Group, or a Claude
+  `provenance.source` file present in no slug. Each row carries `successors`:
+  current Task Groups citing a session (`thread_id=`) the orphan cites. Every
+  orphan gets two `next_steps`, `forget` it (naming a sole successor) or `detach`
+  it. An empty or missing source skips detection with a warning, since it would
+  make every memory look orphaned. A single-slug Claude import omits the field.
 - **`migrate <harness>`** — the steady-state bridge for a harness that already
   holds hand-authored memory (the slug engram imported *from*). Plain `sync`
   refuses to touch an unmarked file, so a canonical name normalized away from its
@@ -274,8 +292,31 @@ explicit rather than ambient.
   *from* a harness is not rendered back into that same harness, so reconcile
   enriches each harness with the *others'* lessons without conflicting on or
   overwriting native memory. (Plain `sync` still renders everything, for a fresh
-  machine where a harness has no native originals.) Exit follows the same codes as
+  machine where a harness has no native originals.) Each `data.import[]` entry
+  carries the same `forgotten` rows and `orphaned` list as `import`. Exit follows the same codes as
   `sync`: `3` if any propagation `CONFLICT` remains.
+- **`forget <name>...`** — retires canonical memories deterministically. Every
+  name must exist, or the batch stops before any write (exit `2`,
+  `unknown_memory`). Under `--apply`, each memory is tombstoned, then its file
+  removed, under the canonical lock; then every **engram-owned** render of the
+  name is removed from each Claude project slug (file and marked index line) and
+  from the shared Codex notes directory, each under its own lock. A tombstone is
+  `<canonical_root>/.forgotten/<name>.yaml`, holding the name, origin, source,
+  `forgotten_at`, `--reason`, `--successor`, and the forgotten file's full text;
+  discovery never reads that directory. Forgetting a name again (another harness
+  reused it) keeps the earlier record as `<name>.<n>.yaml`, so every forgotten
+  origin stays blocked. Hand-authored files are never touched:
+  each row's `natives` lists where the memory's source still lives (a Claude file,
+  which gets an `rm` lead because Claude keeps loading it, or a Codex Task Group,
+  which the tombstone keeps out of canonical). `--restore <name>...` writes
+  forgotten memories back byte for byte and removes their tombstones; a name held
+  by a canonical memory again is refused (exit `3`, `name_taken`), and an unknown
+  one exits `2`. Dry-run by default.
+- **`detach <name>...`** — keeps an orphan: prefixes an imported memory's
+  `provenance.origin` with `detached:`, so orphan detection passes it by. A
+  detached memory is an ordinary canonical memory to `reconcile`, which then
+  renders it into every harness, its former source included. A memory already
+  detached, or not imported, is `unchanged`. An unknown name exits `2`.
 - **`show <harness>`** — permissive on a disabled harness (proceeds, stderr note);
   contrast `import` (strict). Read vs write, mapped to filesystem semantics.
 - **`review`** — never mutates; every finding is a `next_step` the agent may run.
@@ -288,7 +329,9 @@ explicit rather than ambient.
   `--apply` executes it through the same `store` write-path, holding the shared
   exclusive canonical-root lock so the multi-file batch is atomic against a
   concurrent apply. **Fail closed**: if any operation in the batch is invalid,
-  `--apply` applies nothing (exit `3`).
+  `--apply` applies nothing (exit `3`). A `remove`, and each source a `merge`
+  replaces, is tombstoned (as `forget` does, with the operation's reason), so
+  a later import does not bring it back.
   Model/effort are `--model` / `--effort` (flags win over the per-harness config
   default: claude → `claude-sonnet-5`/`high`, codex → `gpt-5.6-terra`/`high`);
   `--harness` picks which agent runs (default `claude-code`). An agent run is

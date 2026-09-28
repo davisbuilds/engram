@@ -27,7 +27,7 @@ func TestMergeImportsProvenanceBackfillIsNotAConflict(t *testing.T) {
 	cand := mem("global", "d", "b")
 	cand.Provenance = schema.Provenance{Origin: "import:claude-code", Source: "m.md"}
 
-	merged, entries, hadConflict, _ := mergeImports([]*schema.CanonicalMemory{stored}, claudeImport(cand), nil)
+	merged, entries, hadConflict, _ := mergeImports([]*schema.CanonicalMemory{stored}, claudeImport(cand), nil, nil)
 
 	if hadConflict {
 		t.Error("a provenance-only difference must not register as a conflict")
@@ -52,7 +52,7 @@ func TestMergeImportsConflictNamesTheDifferingFields(t *testing.T) {
 	cand := mem("global", "d", "new body")
 	cand.Provenance = schema.Provenance{Origin: "import:claude-code", Source: "m.md"}
 
-	_, entries, hadConflict, _ := mergeImports([]*schema.CanonicalMemory{stored}, claudeImport(cand), nil)
+	_, entries, hadConflict, _ := mergeImports([]*schema.CanonicalMemory{stored}, claudeImport(cand), nil, nil)
 
 	if !hadConflict {
 		t.Fatal("a body change must conflict")

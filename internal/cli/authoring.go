@@ -11,9 +11,11 @@ import (
 	"strings"
 
 	"github.com/davisbuilds/engram/internal/config"
+	"github.com/davisbuilds/engram/internal/discover"
 	"github.com/davisbuilds/engram/internal/importer"
 	"github.com/davisbuilds/engram/internal/schema"
 	"github.com/davisbuilds/engram/internal/store"
+	"github.com/davisbuilds/engram/internal/tombstone"
 )
 
 // multiFlag collects a repeatable string flag (e.g. --applies-cwd a --applies-cwd b).
@@ -223,6 +225,24 @@ func cmdImport(e *env, name string, args []string) int {
 		warns = append(warns, fmt.Sprintf("%d source(s) could not be imported and were dropped; see data.dropped", len(res.Dropped)))
 	}
 
+	// Orphan detection needs the whole native source: Codex always has it, Claude
+	// only on the all-slug scan (one slug cannot tell a deleted native from one
+	// that lives in another slug).
+	var next []NextStep
+	if harness == config.HarnessCodex || all {
+		canon, _, derr := discover.Discover(s.cfg.CanonicalRoot)
+		if derr != nil {
+			e.emit(name, false, base, warns, &RespError{Code: "discover", Message: derr.Error()}, nil)
+			return exitError
+		}
+		orphans, owarn := findOrphans(canon, harness, res)
+		base["orphaned"] = orphans
+		if owarn != "" {
+			warns = append(warns, owarn)
+		}
+		next = orphanNextSteps(harness, orphans)
+	}
+
 	// A --refresh name that matches no candidate is a typo or a stale plan; refusing
 	// it beats silently refreshing nothing. Checked before any write.
 	if missing := unmatchedRefresh(refresh, res.Memories); len(missing) > 0 {
@@ -241,7 +261,16 @@ func cmdImport(e *env, name string, args []string) int {
 		// Apply saves candidates in order, so a later candidate sharing a name
 		// meets what an earlier one wrote; the preview threads the same state.
 		batch := map[string]*schema.CanonicalMemory{}
+		tombs, terr := tombstone.Load(s.cfg.CanonicalRoot)
+		if terr != nil {
+			e.emit(name, false, base, warns, &RespError{Code: "tombstones", Message: terr.Error()}, nil)
+			return exitError
+		}
 		for _, m := range res.Memories {
+			if tombs.Blocks(m) {
+				items = append(items, forgottenRow(m.Name))
+				continue
+			}
 			if row, ok := withheldRow(s.cfg.CanonicalRoot, m); ok {
 				items = append(items, row)
 				continue
@@ -289,7 +318,7 @@ func cmdImport(e *env, name string, args []string) int {
 			items = append(items, item)
 		}
 		base["memories"] = items
-		e.emit(name, true, base, warns, nil, nil)
+		e.emit(name, true, base, warns, nil, next)
 		return exitOK
 	}
 
@@ -300,9 +329,20 @@ func cmdImport(e *env, name string, args []string) int {
 	}
 	defer release()
 
+	tombs, terr := tombstone.Load(s.cfg.CanonicalRoot)
+	if terr != nil {
+		e.emit(name, false, base, warns, &RespError{Code: "tombstones", Message: terr.Error()}, nil)
+		return exitError
+	}
 	outcomes := make([]map[string]string, 0, len(res.Memories))
 	conflicts := 0
 	for _, m := range res.Memories {
+		// A forgotten memory stays forgotten; --force and --refresh do not
+		// override a tombstone (forget --restore does).
+		if tombs.Blocks(m) {
+			outcomes = append(outcomes, forgottenRow(m.Name))
+			continue
+		}
 		if verr := m.Validate(); verr != nil {
 			outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": "invalid", "error": verr.Error()})
 			continue
@@ -354,10 +394,10 @@ func cmdImport(e *env, name string, args []string) int {
 	}
 	base["results"] = outcomes
 	if conflicts > 0 {
-		e.emit(name, false, base, warns, nil, nil)
+		e.emit(name, false, base, warns, nil, next)
 		return exitConflicts
 	}
-	e.emit(name, true, base, warns, nil, nil)
+	e.emit(name, true, base, warns, nil, next)
 	return exitOK
 }
 
