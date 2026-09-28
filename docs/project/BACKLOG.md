@@ -106,14 +106,6 @@ only; shipped items live in the git history.
   not `created`/`modified`, to keep render output deterministic and idempotent.
   A "preserve created, bump modified on change" policy would restore timestamps
   without breaking idempotency.
-- **A curated edit of an imported memory conflicts with its stale native.** A
-  `curate` `merge`/`update` (or any canonical edit) of an imported memory becomes
-  a standing import `conflict` against the unchanged native, and a native edited
-  after import conflicts the same way until `--refresh`. Recording the
-  last-imported native hash would give import a merge base: a native-only edit
-  fast-forwards, a canonical-only edit is not re-reported, and only a true
-  two-sided edit conflicts. (Removal is handled: `curate` `remove`/`merge`
-  tombstone what they take out.)
 - **`curate --apply` re-invokes the agent rather than applying a reviewed plan.**
   The proposer is non-deterministic, so the plan committed by `--apply` can differ
   from the one the operator inspected in the dry-run. A `--plan <file>` (emit the

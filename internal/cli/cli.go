@@ -86,7 +86,7 @@ var (
 	noArgs     = &argSpec{}
 	harnessArg = &argSpec{positionals: 1}
 	shareArgs  = &argSpec{positionals: 1, values: []string{"--to"}}
-	importArgs = &argSpec{positionals: 1, values: []string{"--refresh"}, bools: []string{"--all"}}
+	importArgs = &argSpec{positionals: 1, values: []string{"--refresh", "--keep"}, bools: []string{"--all"}}
 	curateArgs = &argSpec{values: []string{"--harness", "--model", "--effort", "--timeout"}}
 	detachArgs = &argSpec{positionals: anyPositionals}
 	forgetArgs = &argSpec{positionals: anyPositionals, values: []string{"--reason", "--successor"}, bools: []string{"--restore"}}

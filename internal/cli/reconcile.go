@@ -317,12 +317,29 @@ func forgottenRow(name string) map[string]string {
 }
 
 // outcomeEntry is the per-memory result row shared by every import surface
-// (dry-run, apply, reconcile). A conflict also names the differing fields in
-// `differs`, so the cause is visible without diffing files by hand.
+// (dry-run, apply, reconcile). A conflict, a canonical_ahead and a fast-forward
+// also name the differing fields in `differs`, so the cause is visible without
+// diffing files by hand.
 func outcomeEntry(name string, outcome store.Outcome, stored, cand *schema.CanonicalMemory) map[string]string {
 	entry := map[string]string{"name": name, "outcome": string(outcome)}
-	if outcome == store.Conflict && stored != nil {
+	if stored == nil {
+		return entry
+	}
+	switch outcome {
+	case store.Conflict, store.CanonicalAhead:
 		entry["differs"] = strings.Join(store.Diff(stored, cand), ",")
+	case store.Updated:
+		// A fast-forward names what it took from the native (description, type,
+		// body); a provenance backfill has nothing to name.
+		var d []string
+		for _, f := range store.Diff(stored, cand) {
+			if f == "description" || f == "type" || f == "body" {
+				d = append(d, f)
+			}
+		}
+		if len(d) > 0 {
+			entry["differs"] = strings.Join(d, ",")
+		}
 	}
 	return entry
 }

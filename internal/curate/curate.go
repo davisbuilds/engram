@@ -291,12 +291,20 @@ func Apply(root string, ops []Operation) ([]Applied, error) {
 func applyOne(root string, op Operation) (Applied, error) {
 	switch op.Op {
 	case OpAdd, OpUpdate:
-		if _, _, err := store.Save(root, op.Memory, true); err != nil {
+		m, err := keepProvenance(root, op.Memory)
+		if err != nil {
+			return Applied{}, err
+		}
+		if _, _, err := store.Save(root, m, true); err != nil {
 			return Applied{}, err
 		}
 		return Applied{Op: op.Op, Name: op.Memory.Name}, nil
 	case OpMerge:
-		if _, _, err := store.Save(root, op.Memory, true); err != nil {
+		m, err := keepProvenance(root, op.Memory)
+		if err != nil {
+			return Applied{}, err
+		}
+		if _, _, err := store.Save(root, m, true); err != nil {
 			return Applied{}, err
 		}
 		var removed []string
@@ -334,6 +342,20 @@ func applyOne(root string, op Operation) (Applied, error) {
 	default:
 		return Applied{}, fmt.Errorf("unknown operation %q", op.Op)
 	}
+}
+
+// keepProvenance returns m carrying the stored memory's provenance, whatever
+// the proposal says: the agent rewrites content, not lineage, so an imported
+// memory keeps its origin and merge base, and the next import sees canonical as
+// ahead of its native instead of in conflict with it.
+func keepProvenance(root string, m *schema.CanonicalMemory) (*schema.CanonicalMemory, error) {
+	stored, _, found, err := store.Load(root, m.Name)
+	if err != nil || !found {
+		return m, err
+	}
+	c := *m
+	c.Provenance = stored.Provenance
+	return &c, nil
 }
 
 // forget tombstones and removes a memory, so import does not re-create it from

@@ -99,6 +99,11 @@ does not exist, a memory that fails the schema, a rename smuggled through
 `next_steps`. engram never partially applies a proposal it could not fully
 validate.
 
+**Curated edits stay curated.** An `update` or `merge` keeps the stored
+memory's provenance, including import's merge base, so a later import reports
+the curated memory as `canonical_ahead` rather than as a conflict with its
+unchanged native.
+
 **Removals stay removed.** A `remove`, and each source a `merge` replaces, is
 tombstoned, so a later `import` or `reconcile` does not re-create it from a
 native source that still exists; it reports the candidate as `forgotten`.

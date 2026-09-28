@@ -367,3 +367,32 @@ func TestApplyTombstonesWhatItRemoves(t *testing.T) {
 		t.Errorf("unexpected tombstones: %v", set)
 	}
 }
+
+// A curated update, or a merge reusing a source's name, keeps the stored
+// provenance when the agent's memory carries none, so an imported memory keeps
+// its origin and merge base and the next import sees canonical as ahead rather
+// than as a conflict.
+func TestApplyKeepsStoredProvenanceOnUpdateAndMerge(t *testing.T) {
+	root := t.TempDir()
+	prov := schema.Provenance{Origin: "import:codex", Source: "s", ImportHash: "sha256:base"}
+	a, b := mem("a"), mem("b")
+	a.Provenance, b.Provenance = prov, prov
+	seed(t, root, a, b, mem("c"))
+	upd, merged := mem("a"), mem("b")
+	upd.Body, merged.Body = "curated\n", "merged\n"
+	// An agent may emit a partial provenance; it still must not replace lineage.
+	upd.Provenance = schema.Provenance{Author: "agent"}
+	ops := []Operation{
+		{Op: OpUpdate, Name: "a", Memory: upd, Reason: "tighten"},
+		{Op: OpMerge, Sources: []string{"b", "c"}, Memory: merged, Reason: "overlap"},
+	}
+	if _, err := Apply(root, ops); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"a", "b"} {
+		m, _, _, err := store.Load(root, n)
+		if err != nil || m.Provenance != prov {
+			t.Errorf("%s provenance = %+v (err %v), want the stored %+v", n, m.Provenance, err, prov)
+		}
+	}
+}

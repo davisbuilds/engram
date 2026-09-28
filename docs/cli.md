@@ -93,7 +93,8 @@ engram [global flags] <command> [args]
     import       Reverse-sync a harness's native memory into canonical
                  (explicit, one-shot; dry-run, --apply to write; --all to
                  sweep every Claude project slug, not just the cwd's;
-                 --refresh <name> to overwrite a conflicting canonical).
+                 --refresh <name> to overwrite a conflicting canonical;
+                 --keep <name> to keep canonical and settle the conflict).
     migrate      Adopt hand-authored native memory canonical supersedes,
                  converting it to engram-owned in place so a later sync
                  neither duplicates nor conflicts (dry-run; --apply to write;
@@ -171,7 +172,9 @@ explicit rather than ambient.
   (where a memory came from, not what it says) is never a conflict: empty stored
   provenance fields are backfilled from the incoming memory (only when the two
   agree on origin, so `origin` and `source` never come from different harnesses), a
-  populated field keeps its stored value, and incoming memory can never strip provenance. Every
+  populated field keeps its stored value (except import's merge base,
+  `import_hash`, which moves forward on agreement), and incoming memory can never
+  strip provenance. Every
   canonical writer
   (`remember`, `share`, `import --apply`, `curate --apply`, `forget --apply`,
   `detach --apply`) takes the shared
@@ -204,7 +207,8 @@ explicit rather than ambient.
   zero side effects.
 - **`import <harness>`** — reverse-sync, explicit and one-shot. Dry-run lists every
   candidate memory with the `outcome` `--apply` would produce for it (`created` /
-  `updated` / `unchanged` / `conflict` / `forgotten`); `--apply` writes them.
+  `updated` / `unchanged` / `canonical_ahead` / `conflict` / `forgotten`);
+  `--apply` writes them.
   `forgotten` means a tombstone holds the name (see `forget`): the memory was
   deliberately retired, so it is not written, even with `--force` or `--refresh`,
   and it is not a conflict. Each `conflict`
@@ -215,13 +219,31 @@ explicit rather than ambient.
   fails to parse or validate, or another file shares the name): that memory is
   never written, even with `--force` or `--refresh`, until the file is fixed, and
   the rest of the batch proceeds. `reconcile` reports the same rows.
-  `updated` means a provenance-only backfill. **`--refresh <name>`** (repeatable, or
-  comma-separated) is the explicit, per-name way to take an edited native's content
-  into canonical: a named memory that conflicts is overwritten (reported as
-  `updated`, with `differs` recording what was replaced), everything else behaves
-  as without the flag, and a name matching no candidate exits `2` (`unknown_refresh`)
-  before any write. Read the dry-run first: canonical may be *ahead* of a stale
-  native (a curated merge), and `--refresh` would revert it. Marker/loop-guarded
+  **Import knows which side moved.** Each candidate records
+  `provenance.import_hash`, a hash of what the native authors (description, type,
+  body), and canonical keeps it as the *merge base* whenever the two agree. When
+  they differ: a native edited since, with canonical untouched, **fast-forwards**
+  — `updated`, with `differs` naming the fields taken; canonical keeps its own
+  scope, `applies_to` and `related`. A canonical edited since (a curated merge,
+  a hand edit) with the native untouched is `canonical_ahead`: nothing is written
+  and it is not a conflict. Only an edit on both sides, or a memory with no base
+  yet, is a `conflict`. The base belongs to one native source (the same origin
+  and source file, recorded with its project as `provenance.import_source`): a same-named native from another file or harness, or a name
+  two natives in one import both claim, gets no merge-base treatment and
+  conflicts as before. A memory imported before merge bases existed gets one
+  the first time canonical and native agree (a one-time `updated` with no
+  `differs`, as is any provenance-only backfill). **`--refresh <name>`**
+  (repeatable, or comma-separated) is the explicit, per-name way to take a
+  native's content into canonical over a `conflict` or `canonical_ahead`: the
+  named memory is overwritten (reported as `updated`, with `differs` recording
+  what was replaced), everything else behaves as without the flag, and a name
+  matching no candidate exits `2` (`unknown_refresh`) before any write.
+  **`--keep <name>`** is its opposite, for a conflict decided in canonical's
+  favor: canonical's content stays, and the native's current hash becomes the
+  base, so the memory reads as `canonical_ahead` until the native moves again
+  (then it conflicts again, as it should). Across two sources it declines with
+  a warning and the conflict stands. An unknown name exits `2`
+  (`unknown_keep`), and one name cannot be given to both flags. Marker/loop-guarded
   so engram's own output never round-trips. `import` against a disabled harness
   exits `2`. **Scope is derived, not defaulted:** a memory's scope resolves to
   `project:<repo>` when its source cwd (Claude: the import cwd; Codex: the Task
@@ -329,7 +351,10 @@ explicit rather than ambient.
   `--apply` executes it through the same `store` write-path, holding the shared
   exclusive canonical-root lock so the multi-file batch is atomic against a
   concurrent apply. **Fail closed**: if any operation in the batch is invalid,
-  `--apply` applies nothing (exit `3`). A `remove`, and each source a `merge`
+  `--apply` applies nothing (exit `3`). An `update`, or a `merge` that reuses a
+  source's name, keeps the stored memory's provenance whatever the agent gives,
+  so the next import sees canonical as ahead of its native, not in conflict. A
+  `remove`, and each source a `merge`
   replaces, is tombstoned (as `forget` does, with the operation's reason), so
   a later import does not bring it back.
   Model/effort are `--model` / `--effort` (flags win over the per-harness config
