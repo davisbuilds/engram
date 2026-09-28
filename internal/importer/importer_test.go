@@ -630,3 +630,23 @@ func TestAmbiguousNamesInABatchCarryNoHash(t *testing.T) {
 		}
 	}
 }
+
+// A Claude candidate names the exact file it came from, project slug included,
+// so separately imported same-named files stay distinct lineages.
+func TestClaudeCandidatesRecordTheirProjectFile(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "projects", "-work-a", "memory")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "shared.md"), []byte("---\nname: shared\ndescription: d\n---\nx\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := ImportClaude(dir, "")
+	if err != nil || len(res.Memories) != 1 {
+		t.Fatalf("import: %v %d", err, len(res.Memories))
+	}
+	if got := res.Memories[0].Provenance.ImportSource; got != "-work-a/shared.md" {
+		t.Errorf("import_source = %q, want -work-a/shared.md", got)
+	}
+}

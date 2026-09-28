@@ -64,7 +64,7 @@ func cmdRemember(e *env, name string, args []string) int {
 	// The merge base is import's to record; an authored memory never carries
 	// one, so remember cannot fast-forward past a differing memory (see
 	// store.Plan) and still needs --force to overwrite it.
-	m.Provenance.ImportHash = ""
+	m.Provenance.ImportHash, m.Provenance.ImportSource = "", ""
 	if err := m.Validate(); err != nil {
 		e.emit(name, false, nil, nil, &RespError{Code: "invalid_memory", Message: err.Error()}, nil)
 		return exitUsage
@@ -406,6 +406,9 @@ func cmdImport(e *env, name string, args []string) int {
 			} else if pre == store.Conflict {
 				kept := *stored
 				kept.Provenance.ImportHash = m.Provenance.ImportHash
+				if m.Provenance.ImportSource != "" {
+					kept.Provenance.ImportSource = m.Provenance.ImportSource
+				}
 				if _, rerr := store.Replace(s.cfg.CanonicalRoot, &kept); rerr != nil {
 					e.emit(name, false, base, nil, &RespError{Code: "save", Message: rerr.Error()}, nil)
 					return exitError

@@ -166,3 +166,14 @@ func TestPlanNeedsTheSameSourceToFastForward(t *testing.T) {
 		t.Errorf("Plan = %s, want conflict", out)
 	}
 }
+
+// Same basename, different Claude projects: two lineages, imported separately.
+func TestPlanTellsProjectsApartByImportSource(t *testing.T) {
+	s := stored("old\n")
+	s.Provenance.Source, s.Provenance.ImportSource = "shared.md", "-a/shared.md"
+	c := imported("new\n")
+	c.Provenance.Source, c.Provenance.ImportSource = "shared.md", "-b/shared.md"
+	if out, _ := Plan(s, c); out != Conflict {
+		t.Errorf("Plan = %s, want conflict", out)
+	}
+}

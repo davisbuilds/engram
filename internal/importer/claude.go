@@ -79,7 +79,7 @@ func ImportClaude(memoryDir, cwd string) (Result, error) {
 				Type:        schema.TypeReference,
 				Scope:       scope,
 				Body:        string(data),
-				Provenance:  schema.Provenance{Origin: "import:claude-code:no-frontmatter", Source: fname},
+				Provenance:  schema.Provenance{Origin: "import:claude-code:no-frontmatter", Source: fname, ImportSource: importSource(memoryDir, fname)},
 			}))
 			continue
 		}
@@ -113,7 +113,7 @@ func ImportClaude(memoryDir, cwd string) (Result, error) {
 			Type:        importedType(n.Metadata.Type),
 			Scope:       scope,
 			Body:        body,
-			Provenance:  schema.Provenance{Origin: "import:claude-code", Source: fname},
+			Provenance:  schema.Provenance{Origin: "import:claude-code", Source: fname, ImportSource: importSource(memoryDir, fname)},
 		}))
 	}
 	res.Memories = clearAmbiguous(res.Memories)

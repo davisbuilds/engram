@@ -85,6 +85,9 @@ type Provenance struct {
 	// and its native source agreed: the merge base that tells import which side
 	// moved since. Empty for memories not produced by import.
 	ImportHash string `yaml:"import_hash,omitempty" json:"import_hash,omitempty"`
+	// ImportSource names the native the merge base was taken from, precisely
+	// enough to tell two same-named natives apart (Claude: <project slug>/<file>).
+	ImportSource string `yaml:"import_source,omitempty" json:"import_source,omitempty"`
 }
 
 // NativeHash fingerprints the fields a native source authors (description,

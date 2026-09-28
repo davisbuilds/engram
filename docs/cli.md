@@ -228,7 +228,7 @@ explicit rather than ambient.
   a hand edit) with the native untouched is `canonical_ahead`: nothing is written
   and it is not a conflict. Only an edit on both sides, or a memory with no base
   yet, is a `conflict`. The base belongs to one native source (the same origin
-  and source file): a same-named native from another file or harness, or a name
+  and source file, recorded with its project as `provenance.import_source`): a same-named native from another file or harness, or a name
   two natives in one import both claim, gets no merge-base treatment and
   conflicts as before. A memory imported before merge bases existed gets one
   the first time canonical and native agree (a one-time `updated` with no
