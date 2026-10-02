@@ -83,13 +83,14 @@ type command struct {
 }
 
 var (
-	noArgs     = &argSpec{}
-	harnessArg = &argSpec{positionals: 1}
-	shareArgs  = &argSpec{positionals: 1, values: []string{"--to", "--applies-cwd"}, bools: []string{"--any-cwd"}}
-	importArgs = &argSpec{positionals: 1, values: []string{"--refresh", "--keep"}, bools: []string{"--all", "--shared"}}
-	curateArgs = &argSpec{values: []string{"--harness", "--model", "--effort", "--timeout"}}
-	detachArgs = &argSpec{positionals: anyPositionals}
-	forgetArgs = &argSpec{positionals: anyPositionals, values: []string{"--reason", "--successor"}, bools: []string{"--restore"}}
+	noArgs      = &argSpec{}
+	harnessArg  = &argSpec{positionals: 1}
+	shareArgs   = &argSpec{positionals: 1, values: []string{"--to", "--applies-cwd"}, bools: []string{"--any-cwd"}}
+	importArgs  = &argSpec{positionals: 1, values: []string{"--refresh", "--keep"}, bools: []string{"--all", "--shared"}}
+	curateArgs  = &argSpec{values: []string{"--harness", "--model", "--effort", "--timeout"}}
+	detachArgs  = &argSpec{positionals: anyPositionals}
+	migrateArgs = &argSpec{positionals: 1, bools: []string{"--shared"}}
+	forgetArgs  = &argSpec{positionals: anyPositionals, values: []string{"--reason", "--successor"}, bools: []string{"--restore"}}
 )
 
 // commands returns the full subcommand table. The table is the single source of
@@ -102,7 +103,7 @@ func commands() []command {
 		{"import", "Reverse-sync a harness's native memory into canonical (one-shot; --apply).", importArgs, cmdImport},
 		{"detach", "Stop tracking an imported memory's source, so a kept orphan is no longer reported (dry-run; --apply).", detachArgs, cmdDetach},
 		{"forget", "Retire canonical memories: tombstone them so import never re-creates them, and remove their renders (dry-run; --apply; --restore undoes).", forgetArgs, cmdForget},
-		{"migrate", "Adopt hand-authored native memory canonical supersedes, in place (dry-run; --apply). Claude Code only.", harnessArg, cmdMigrate},
+		{"migrate", "Adopt hand-authored native memory canonical supersedes, in place (dry-run; --apply). Claude Code only.", migrateArgs, cmdMigrate},
 		{"reconcile", "Cross-harness one-shot: import every harness → review leads → sync back (dry-run; --apply). Enricher flow in one command.", noArgs, cmdReconcile},
 		{"discover", "Parse and list every canonical memory, with parse errors.", noArgs, cmdDiscover},
 		{"list", "List memories relevant to a given cwd / agent / host.", noArgs, cmdList},

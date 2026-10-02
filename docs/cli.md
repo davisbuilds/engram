@@ -101,8 +101,9 @@ engram [global flags] <command> [args]
     migrate      Adopt hand-authored native memory canonical supersedes,
                  converting it to engram-owned in place so a later sync
                  neither duplicates nor conflicts (dry-run; --apply to write;
-                 Claude Code only). The one command allowed to rewrite an
-                 unmarked file.
+                 Claude Code only; --shared retires the originals of shared
+                 memories instead). The one command allowed to rewrite or
+                 remove an unmarked file.
     reconcile    Cross-harness one-shot: import every enabled harness into
                  canonical, surface review leads, and propagate canonical into
                  the harnesses, never back onto a memory's own source
@@ -327,6 +328,18 @@ explicit rather than ambient.
   diverged files, whose reconciliation is a judgment call engram does not make
   deterministically. Claude Code only — Codex keeps one consolidated `MEMORY.md`
   folded by its own consolidator, a separate follow-up.
+- **`migrate claude-code --shared`** — retires the hand-authored originals of
+  shared memories, so a session in the slug a memory was written in stops seeing
+  it twice (its original in `MEMORY.md`, its shared render through the rules
+  file). For each shared memory imported from Claude, the original is located by
+  `provenance.import_source` and **adopted** only when its content (description,
+  type, body, parsed exactly as import parses it) is identical to canonical's and
+  the shared render already exists: the file and its unmarked index line are
+  removed under the slug's lock, and the canonical memory is then detached, since
+  the shared render is now where it lives and where an edit to it is imported
+  from. An original that differs is `DIVERGED` and left byte-for-byte (reconcile
+  imports its edit first); one that is missing, engram-owned, or whose shared
+  render is not written yet is `SKIP`. Dry-run by default.
 - **Claude's shared memory.** Claude Code loads memory per project slug, so a
   memory every project should see is not copied into each slug. A memory that is
   `global`, has no `applies_to.cwd`, and is admitted for `claude` on this host is

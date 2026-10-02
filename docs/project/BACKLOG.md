@@ -115,12 +115,6 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
   is still seeded `global` (no prior scope to preserve). A content-hash /
   path-cache / "unresolved vs genuinely-global" signal would let that first import
   distinguish "not a repo here" from "not a repo anywhere" and flag it.
-- **A Claude memory's original still loads beside its shared render.** A global
-  memory authored natively in one slug is shared, but its hand-authored original
-  stays in that slug, so sessions there see it twice. A `migrate --shared` mode
-  (body-identity gated, detaching the canonical so it is not then orphaned)
-  would retire the original; edits to a shared render are now imported
-  (`import claude-code --shared`), so retiring it no longer loses edits.
 - **`remember` provenance timestamps.** `remember` sets `provenance.origin` but
   not `created`/`modified`, to keep render output deterministic and idempotent.
   A "preserve created, bump modified on change" policy would restore timestamps
