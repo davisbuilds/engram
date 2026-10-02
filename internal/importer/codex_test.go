@@ -147,3 +147,24 @@ func TestCodexInstructionsRequestTheEchoLabel(t *testing.T) {
 	}
 	t.Errorf("CodexInstructions shows no bullet that import recognizes as an echo:\n%s", render.CodexInstructions)
 }
+
+// TestWithoutEchoesNeedsTheFullLabel pins the label shape: only the dated label
+// marks a bullet as engram's, so genuine bullets that merely start with the same
+// words survive (Codex review, PR #39).
+func TestWithoutEchoesNeedsTheFullLabel(t *testing.T) {
+	genuine := []string{
+		"- Curated Engram updates require review",
+		"- Curated Engram update: no date given",
+		"- Curated Engram update (soon): not a date",
+	}
+	body := strings.Join(genuine, "\n") + "\n- Curated Engram update (2026-09-27): a real echo\n"
+	got := withoutEchoes(body)
+	for _, g := range genuine {
+		if !strings.Contains(got, g) {
+			t.Errorf("genuine bullet %q was stripped", g)
+		}
+	}
+	if strings.Contains(got, "a real echo") {
+		t.Error("the dated echo survived")
+	}
+}

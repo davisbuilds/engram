@@ -266,10 +266,10 @@ explicit rather than ambient.
   a warning and the conflict stands. An unknown name exits `2`
   (`unknown_keep`), and one name cannot be given to both flags. Marker/loop-guarded
   so engram's own output never round-trips. Codex's consolidator folds an engram
-  note into a Task Group as a bullet labeled `Curated Engram update (DATE):`, the
-  label engram's extension instructions request; import removes those bullets and
-  their continuation lines from the group, and skips a group left with nothing
-  else. The first import after upgrading to this behavior can report a `3`
+  note into a Task Group as a bullet labeled `Curated Engram update (YYYY-MM-DD):`,
+  the label engram's extension instructions request; only that full dated label
+  counts. Import removes those bullets and their continuation lines from the
+  group, and skips a group left with nothing else. The first import after upgrading to this behavior can report a `3`
   conflict for a memory earlier settled with `--keep` whose Codex group carries
   such a bullet; `--keep` settles it again. `import` against a disabled harness
   exits `2`. **Scope is derived, not defaulted:** a memory's scope resolves to

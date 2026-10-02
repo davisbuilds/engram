@@ -21,9 +21,9 @@ as you would any extension note. Do not edit these files by hand: engram
 overwrites them from canonical on the next sync, so hand edits are lost.
 
 When you fold a note into a consolidated Task Group, label each bullet you take
-from it exactly like this:
+from it with the date you fold it, exactly like this:
 
-- Curated Engram update (YYYY-MM-DD): the lesson
+- Curated Engram update (2026-10-02): the lesson
 
 engram recognizes that label when it imports consolidated memory, so the folded
 bullet is not imported back as a new lesson.

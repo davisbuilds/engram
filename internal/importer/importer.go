@@ -7,6 +7,7 @@ package importer
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/davisbuilds/engram/internal/gitroot"
@@ -311,10 +312,12 @@ func isEngramOrigin(body string) bool {
 	return strings.Contains(body, "extension=engram") || strings.Contains(body, "extensions/engram/")
 }
 
-// echoPrefix is how Codex's consolidator labels a bullet it folded from an
-// engram note into a consolidated Task Group: "- Curated Engram update (DATE):".
-// CodexInstructions asks for this label, so it is a signal engram requests.
-const echoPrefix = "curated engram update"
+// echoLabel matches how Codex's consolidator labels a bullet it folded from an
+// engram note into a consolidated Task Group: "- Curated Engram update
+// (YYYY-MM-DD):". CodexInstructions asks for this label, so it is a signal engram
+// requests. Only the full dated label counts: a genuine bullet that merely starts
+// with the same words is not an echo.
+var echoLabel = regexp.MustCompile(`(?i)^[-*] +curated engram update \(\d{4}-\d{2}-\d{2}\):`)
 
 // withoutEchoes returns a Task Group body with every engram echo bullet removed,
 // along with the indented lines that continue it. Code fences are content, so a
@@ -341,12 +344,9 @@ func withoutEchoes(body string) string {
 	return strings.Join(kept, "\n")
 }
 
-// isEchoBullet reports whether a trimmed line is a list item carrying echoPrefix.
+// isEchoBullet reports whether a trimmed line is a list item carrying echoLabel.
 func isEchoBullet(t string) bool {
-	if !strings.HasPrefix(t, "- ") && !strings.HasPrefix(t, "* ") {
-		return false
-	}
-	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(t[2:])), echoPrefix)
+	return echoLabel.MatchString(t)
 }
 
 // hasContent reports whether a body holds any line besides blanks and headings.
