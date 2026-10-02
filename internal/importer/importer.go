@@ -287,12 +287,7 @@ func splitTaskGroups(s string) []taskGroup {
 	fence := "" // the open fence's full marker run (e.g. ```` ````), or "" outside one
 	for _, ln := range strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n") {
 		// A heading quoted inside a code fence is content, not a new group.
-		t := strings.TrimSpace(ln)
-		if fence == "" {
-			fence = fenceRun(t)
-		} else if run := fenceRun(t); run == t && run[0] == fence[0] && len(run) >= len(fence) {
-			fence = ""
-		}
+		fence = nextFence(fence, strings.TrimSpace(ln))
 		if fence == "" && strings.HasPrefix(ln, hdr) {
 			flush()
 			cur = &taskGroup{title: strings.TrimSpace(strings.TrimPrefix(ln, hdr))}
@@ -310,10 +305,70 @@ func splitTaskGroups(s string) []taskGroup {
 // rebounding through Codex's consolidator. The guard rests on signals engram
 // controls — its note marker text and its extension path — not on any single
 // consolidator-preserved field, so it holds even if the consolidator drops
-// rollout metadata (spec SC-06). A content-hash fallback against current
-// canonical is the intended backstop once real consolidated fixtures exist.
+// rollout metadata (spec SC-06). In observed output the consolidator instead
+// folds notes into genuine groups as labeled bullets, which withoutEchoes strips.
 func isEngramOrigin(body string) bool {
 	return strings.Contains(body, "extension=engram") || strings.Contains(body, "extensions/engram/")
+}
+
+// echoPrefix is how Codex's consolidator labels a bullet it folded from an
+// engram note into a consolidated Task Group: "- Curated Engram update (DATE):".
+// CodexInstructions asks for this label, so it is a signal engram requests.
+const echoPrefix = "curated engram update"
+
+// withoutEchoes returns a Task Group body with every engram echo bullet removed,
+// along with the indented lines that continue it. Code fences are content, so a
+// bullet quoted inside one is kept.
+func withoutEchoes(body string) string {
+	lines := strings.Split(body, "\n")
+	kept := lines[:0:0]
+	fence, echoIndent := "", -1 // echoIndent: the open echo bullet's indent, or -1
+	for _, ln := range lines {
+		t := strings.TrimSpace(ln)
+		indent := len(ln) - len(strings.TrimLeft(ln, " \t"))
+		if echoIndent >= 0 {
+			if t != "" && indent > echoIndent {
+				continue // an indented line continues the echo bullet
+			}
+			echoIndent = -1
+		}
+		if fence = nextFence(fence, t); fence == "" && isEchoBullet(t) {
+			echoIndent = indent
+			continue
+		}
+		kept = append(kept, ln)
+	}
+	return strings.Join(kept, "\n")
+}
+
+// isEchoBullet reports whether a trimmed line is a list item carrying echoPrefix.
+func isEchoBullet(t string) bool {
+	if !strings.HasPrefix(t, "- ") && !strings.HasPrefix(t, "* ") {
+		return false
+	}
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(t[2:])), echoPrefix)
+}
+
+// hasContent reports whether a body holds any line besides blanks and headings.
+func hasContent(body string) bool {
+	for _, ln := range strings.Split(body, "\n") {
+		if t := strings.TrimSpace(ln); t != "" && !strings.HasPrefix(t, "#") {
+			return true
+		}
+	}
+	return false
+}
+
+// nextFence tracks Markdown code fences line by line: given the open fence (""
+// outside one) and a trimmed line, it returns the fence open after that line.
+func nextFence(fence, t string) string {
+	if fence == "" {
+		return fenceRun(t)
+	}
+	if run := fenceRun(t); run == t && run[0] == fence[0] && len(run) >= len(fence) {
+		return ""
+	}
+	return fence
 }
 
 // fenceRun returns the leading run of three or more backticks or tildes that

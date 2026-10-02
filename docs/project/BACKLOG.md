@@ -25,17 +25,16 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
 
 ## Correctness / robustness
 
-- **Codex import loop-guard: content-hash fallback.** The guard currently skips a
-  Task Group when its text carries an engram signal (`extension=engram` marker or
-  an `extensions/engram/` citation). The spec (SC-06 / EV-NEG-02) also wants a
-  content-hash fallback against current canonical, proven against a *real*
-  consolidated engram Task Group. That fixture requires observing what Codex's
-  consolidator actually preserves when it folds an extension note; capture one
-  and add the fallback + differential test before relying on import in anger.
-  The substring check also has a real false positive: any genuine Task Group that
-  merely mentions the `extensions/engram/` path (a Codex session that worked on
-  engram itself) is skipped as an echo, indistinguishable in `skipped` from a real
-  one. The content-hash fallback is what would let the path check be narrowed.
+- **Codex import loop-guard: the group-level signal check.** Import skips a Task
+  Group whose text carries `extension=engram` or an `extensions/engram/` citation,
+  and strips the `Curated Engram update (DATE):` bullets the consolidator writes
+  when it folds a note. In real consolidated output (2026-10) no group carried
+  either signal: the consolidator paraphrased notes into labeled bullets, so a
+  content-hash fallback (spec SC-06 / EV-NEG-02) would not have matched them. The
+  group check still has a false positive: a genuine group that merely mentions
+  the `extensions/engram/` path (a Codex session that worked on engram itself) is
+  skipped whole. Revisit when: a real consolidation shows a whole-group echo, or
+  the false positive drops a genuine group; then narrow the check to lines.
 - **Codex curate has no verified failure-event handling.** `ExtractCodexText` now
   parses the `codex exec --json` JSONL stream and returns the final
   `agent_message`; an exit-0 run with no assistant message is reported as "no
