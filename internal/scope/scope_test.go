@@ -131,3 +131,17 @@ func TestInViewHonorsCanonicalAgentAndHostAxes(t *testing.T) {
 		t.Error("a render whose canonical is pinned to host-a is in view from host-a")
 	}
 }
+
+// TestInViewHonorsCanonicalTier pins a narrowed memory: a note rendered while
+// its canonical was global still records "global", but once the canonical is
+// re-tiered to project:alpha the note belongs to alpha's sessions. A run from
+// beta must leave it alone rather than remove it as stale.
+func TestInViewHonorsCanonicalTier(t *testing.T) {
+	m := mem("narrowed", "project:alpha", schema.AppliesTo{})
+	if InView("global", m, "/w/beta", "codex", "") {
+		t.Error("a global-recorded render whose canonical is now project:alpha is not in view from beta")
+	}
+	if !InView("global", m, "/w/alpha/sub", "codex", "") {
+		t.Error("a global-recorded render whose canonical is now project:alpha is in view from alpha")
+	}
+}
