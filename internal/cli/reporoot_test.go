@@ -41,3 +41,26 @@ func TestSyncRendersIntoTheRepositorySlug(t *testing.T) {
 		t.Error("project memory not rendered into the repository's slug")
 	}
 }
+
+// TestListFromAWorktreeShowsTheRepositoryMemories pins list against sync: from
+// a linked worktree, the repository's project memories are relevant.
+func TestListFromAWorktreeShowsTheRepositoryMemories(t *testing.T) {
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "repo")
+	gitdir := filepath.Join(repo, ".git", "worktrees", "wt")
+	writeFile(t, filepath.Join(gitdir, "commondir"), "../..\n")
+	writeFile(t, filepath.Join(dir, "wt-elsewhere", ".git"), "gitdir: "+gitdir+"\n")
+	canon := filepath.Join(dir, "canonical")
+	writeFile(t, filepath.Join(canon, "p-mem.md"), "---\nname: p-mem\ndescription: d\ntype: lesson\nscope: project:repo\n---\nproject\n")
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+canon+"\nharnesses:\n  claude-code:\n    home: "+filepath.Join(dir, "claude")+"\n")
+	code, env := runEnvelope(t, "list", "--config", cfg, "--cwd", filepath.Join(dir, "wt-elsewhere"))
+	if code != exitOK {
+		t.Fatalf("list exit = %d", code)
+	}
+	data, _ := env["data"].(map[string]any)
+	mems, _ := data["memories"].([]any)
+	if len(mems) != 1 {
+		t.Errorf("list from a worktree = %v, want the repository's project memory", mems)
+	}
+}

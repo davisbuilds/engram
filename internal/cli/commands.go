@@ -255,7 +255,7 @@ func cmdList(e *env, name string, _ []string) int {
 		e.emit(name, false, nil, warnParseErrors(perrs), &RespError{Code: "discover", Message: err.Error()}, nil)
 		return exitError
 	}
-	relevant := scope.RelevantFor(mems, s.cwd, s.agentFor("claude"), s.host)
+	relevant := scope.RelevantFor(mems, s.claudeRoot, s.agentFor("claude"), s.host)
 	e.emit(name, true, map[string]any{
 		"cwd": s.cwd, "host": s.host, "memories": memoryItems(relevant),
 	}, warnParseErrors(perrs), nil, nil)
