@@ -37,6 +37,11 @@ is the intelligence. See `README.md` for the user-facing overview.
   (`internal/lock`, an advisory `flock` the kernel releases automatically on
   process exit or crash) — `remember`, `share`, `import --apply`,
   `curate --apply`, `forget --apply`, and `detach --apply` all take it.
+- **Claude renders split in two.** Shared memories (global, no cwd narrowing)
+  render once into `<claude home>/engram/memory/`, loaded everywhere through an
+  engram-owned `<claude home>/rules/engram-memory.md`; project slugs hold only
+  the rest. Reconcile never renders a memory back onto its own source (Codex
+  as a whole; a Claude memory's own slug).
 - **Scope model:** tiers `global` / `project:<repo>`, plus `applies_to` narrowing
   axes (cwd globs, agents, hosts). The host axis fails closed for an unmapped
   machine, and host labels are config-declared, never compiled in.

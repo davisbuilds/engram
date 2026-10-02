@@ -15,6 +15,8 @@ import (
 type Purge struct {
 	// ClaudeProjects is <claude home>/projects.
 	ClaudeProjects string
+	// SharedDir is the shared Claude memory dir (<claude home>/engram/memory).
+	SharedDir string
 	// CodexExtDir is engram's Codex extension directory.
 	CodexExtDir string
 	Names       []string
@@ -101,8 +103,21 @@ func (p Purge) applyLocked(dir string, plan func(string) ([]Action, error), res 
 	return nil
 }
 
-// claudeDirs lists every project slug's memory directory.
+// claudeDirs lists every project slug's memory directory, then the shared
+// memory dir when it exists.
 func (p Purge) claudeDirs() ([]string, error) {
+	dirs, err := p.slugDirs()
+	if err != nil {
+		return nil, err
+	}
+	if p.SharedDir != "" && fileExists(p.SharedDir) {
+		dirs = append(dirs, p.SharedDir)
+	}
+	return dirs, nil
+}
+
+// slugDirs lists every project slug's memory directory.
+func (p Purge) slugDirs() ([]string, error) {
 	if p.ClaudeProjects == "" {
 		return nil, nil
 	}

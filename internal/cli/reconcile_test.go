@@ -28,6 +28,12 @@ func setupTwoHarnesses(t *testing.T) (canon, claudeMem, codexNotes string, args 
 	return canon, claudeMem, codexNotes, []string{"--config", cfg, "--cwd", "/work/x", "--json"}
 }
 
+// sharedDirOf is the shared Claude memory dir for the Claude home holding the
+// project memory dir claudeMem (<home>/projects/<slug>/memory).
+func sharedDirOf(claudeMem string) string {
+	return filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(claudeMem))), "engram", "memory")
+}
+
 // End-to-end: reconcile --apply imports both harnesses into canonical and
 // propagates each harness's lesson into the *other* one, without conflicting on
 // or overwriting either harness's own native memory.
@@ -46,10 +52,11 @@ func TestRunReconcileApplyCrossPropagates(t *testing.T) {
 		}
 	}
 
-	// Codex's lesson propagated INTO Claude as an engram-owned file...
-	got, err := os.ReadFile(filepath.Join(claudeMem, "codex-lesson.md"))
+	// Codex's lesson (global) propagated INTO Claude's shared dir as an
+	// engram-owned file...
+	got, err := os.ReadFile(filepath.Join(sharedDirOf(claudeMem), "codex-lesson.md"))
 	if err != nil {
-		t.Fatalf("codex lesson not propagated into Claude: %v", err)
+		t.Fatalf("codex lesson not propagated into Claude's shared dir: %v", err)
 	}
 	if !strings.Contains(string(got), "origin: engram-sync") {
 		t.Errorf("propagated file not engram-owned:\n%s", got)

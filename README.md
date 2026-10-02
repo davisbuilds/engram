@@ -27,6 +27,11 @@ the others on the next sync.
 - **Agent-first CLI.** Structured output by default off a TTY, a single stable
   response envelope, documented exit codes to branch on, dry-run-by-default
   writes, and a self-describing `schema` command. See [`docs/cli.md`](docs/cli.md).
+- **One shared index for Claude.** Claude Code keeps memory per project, so
+  engram renders memories meant for every project once, into a shared dir whose
+  index a user-level rules file imports; projects hold only their own. Allow
+  Claude to read the shared files once in `~/.claude/settings.json`:
+  `"permissions": {"allow": ["Read(~/.claude/engram/**)"]}`.
 - **Scoped, explicit promotion.** Memories are `global` or `project`-scoped and
   filtered by cwd globs, agent, and host. Widening a memory's reach is an
   explicit, reviewable action — nothing leaks up implicitly.

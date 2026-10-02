@@ -145,3 +145,31 @@ func TestInViewHonorsCanonicalTier(t *testing.T) {
 		t.Error("a global-recorded render whose canonical is now project:alpha is in view from alpha")
 	}
 }
+
+// TestShared pins who joins the index every Claude project shares: a global
+// memory with no cwd narrowing, admitted on the agent and host axes. A cwd glob
+// keeps a memory per-project, since one shared file cannot honor it.
+func TestShared(t *testing.T) {
+	cases := []struct {
+		m    *schema.CanonicalMemory
+		host string
+		want bool
+	}{
+		{mem("plain-global", "global", schema.AppliesTo{}), "", true},
+		{mem("project-tier", "project:alpha", schema.AppliesTo{}), "", false},
+		{mem("cwd-narrowed", "global", schema.AppliesTo{Cwd: []string{"/w/alpha"}}), "", false},
+		{mem("for-claude", "global", schema.AppliesTo{Agents: []string{"claude"}}), "", true},
+		{mem("for-codex", "global", schema.AppliesTo{Agents: []string{"codex"}}), "", false},
+		{mem("on-a-unknown-host", "global", schema.AppliesTo{Hosts: []string{"host-a"}}), "", false},
+		{mem("on-a-from-a", "global", schema.AppliesTo{Hosts: []string{"host-a"}}), "host-a", true},
+	}
+	for _, c := range cases {
+		if got := IsShared(c.m, "claude", c.host); got != c.want {
+			t.Errorf("IsShared(%s, host=%q) = %v, want %v", c.m.Name, c.host, got, c.want)
+		}
+	}
+	got := names(Shared([]*schema.CanonicalMemory{cases[0].m, cases[1].m, cases[2].m}, "claude", ""))
+	if len(got) != 1 || !got["plain-global"] {
+		t.Errorf("Shared = %v, want only plain-global", got)
+	}
+}

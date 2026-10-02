@@ -103,7 +103,8 @@ engram [global flags] <command> [args]
                  unmarked file.
     reconcile    Cross-harness one-shot: import every enabled harness into
                  canonical, surface review leads, and propagate canonical into
-                 the *other* harness(es) (dry-run; --apply to write). The enricher
+                 the harnesses, never back onto a memory's own source
+                 (dry-run; --apply to write). The enricher
                  flow in one command; curate stays a separate, explicit step.
     curate       Run a headless agent over the corpus; it proposes
                  add/merge/remove/rescope, engram validates and applies
@@ -321,16 +322,36 @@ explicit rather than ambient.
   diverged files, whose reconciliation is a judgment call engram does not make
   deterministically. Claude Code only — Codex keeps one consolidated `MEMORY.md`
   folded by its own consolidator, a separate follow-up.
+- **Claude's shared memory.** Claude Code loads memory per project slug, so a
+  memory every project should see is not copied into each slug. A memory that is
+  `global`, has no `applies_to.cwd`, and is admitted for `claude` on this host is
+  rendered **once** into `<claude home>/engram/memory/` (an ordinary engram-owned
+  memory dir with its own `MEMORY.md`), and an engram-owned rules file,
+  `<claude home>/rules/engram-memory.md`, `@`-imports that index by absolute path,
+  so Claude Code loads it in every session. Each project slug holds only the
+  rest (project-tier and cwd-narrowed memories); an engram render of a shared
+  memory left in a slug by an earlier sync is removed as `STALE`. The rules file
+  is written after the index it imports, rewritten when it drifts, removed once
+  nothing is shared (unless `STALE` removal is held), and a hand-authored file at
+  its path is a `CONFLICT`, never overwritten. Shared renders appear in `sync`,
+  `audit`, `diff` and `reconcile` output as their own target,
+  `"harness": "claude-code:shared"`, whose rules-file action is named `_rules`.
+  Claude reads a shared memory's file outside the session's working directory,
+  which Claude Code gates by permission; allow it once in user settings with
+  `Read(<claude home>/engram/**)` (engram never edits Claude Code settings).
 - **`reconcile`** — the on-demand cross-harness convenience: it runs the enricher
   flow — `import` every enabled harness into canonical, `review` for leads, then
   propagate canonical back into the harnesses — in one invocation. Dry-run by
   default; `--apply` writes (all imports save under one canonical lock, then each
   harness is synced). Two policies make it safe and useful: it **never runs
   curate** (near-duplicate/overlap findings are emitted as `next_steps`, judgment
-  left explicit), and propagation is **cross-harness only** — a memory imported
-  *from* a harness is not rendered back into that same harness, so reconcile
-  enriches each harness with the *others'* lessons without conflicting on or
-  overwriting native memory. (Plain `sync` still renders everything, for a fresh
+  left explicit), and propagation **never echoes a memory onto its source** — a
+  memory imported from Codex is not rendered back into Codex (one store), and a
+  memory imported from a Claude project slug is not rendered back into *that
+  slug* (its `provenance.import_source`; a Claude-imported memory with none is
+  kept out of every slug). It still reaches Claude's shared memory and other
+  projects' slugs, so a lesson written in one Claude project reaches the rest
+  without conflicting on or overwriting native memory. (Plain `sync` still renders everything, for a fresh
   machine where a harness has no native originals.) Each `data.import[]` entry
   carries the same `forgotten` rows and `orphaned` list as `import`. Exit follows the same codes as
   `sync`: `3` if any propagation `CONFLICT` remains.
@@ -338,8 +359,9 @@ explicit rather than ambient.
   name must exist, or the batch stops before any write (exit `2`,
   `unknown_memory`). Under `--apply`, each memory is tombstoned, then its file
   removed, under the canonical lock; then every **engram-owned** render of the
-  name is removed from each Claude project slug (file and marked index line) and
-  from the shared Codex notes directory, each under its own lock. A tombstone is
+  name is removed from each Claude project slug and Claude's shared memory dir
+  (file and marked index line) and from the shared Codex notes directory, each
+  under its own lock. A tombstone is
   `<canonical_root>/.forgotten/<name>.yaml`, holding the name, origin, source,
   `forgotten_at`, `--reason`, `--successor`, and the forgotten file's full text;
   discovery never reads that directory. Forgetting a name again (another harness
