@@ -99,6 +99,10 @@ func TestValidateEnumScopeAndName(t *testing.T) {
 		{"bad type", CanonicalMemory{Name: "a", Description: "d", Type: "nonsense", Scope: "global"}},
 		{"bad scope", CanonicalMemory{Name: "a", Description: "d", Type: TypeUser, Scope: "team:x"}},
 		{"non-kebab name", CanonicalMemory{Name: "Not Kebab", Description: "d", Type: TypeUser, Scope: "global"}},
+		{"relative cwd glob", CanonicalMemory{Name: "a", Description: "d", Type: TypeUser, Scope: "global", AppliesTo: AppliesTo{Cwd: []string{"work/**"}}}},
+		{"unexpanded ~ cwd glob", CanonicalMemory{Name: "a", Description: "d", Type: TypeUser, Scope: "global", AppliesTo: AppliesTo{Cwd: []string{"~/dev"}}}},
+		{"unclean cwd glob", CanonicalMemory{Name: "a", Description: "d", Type: TypeUser, Scope: "global", AppliesTo: AppliesTo{Cwd: []string{"/work/"}}}},
+		{"dot-dot cwd glob", CanonicalMemory{Name: "a", Description: "d", Type: TypeUser, Scope: "global", AppliesTo: AppliesTo{Cwd: []string{"/work/../other/**"}}}},
 	}
 	for _, c := range bad {
 		if err := c.mem.Validate(); err == nil {
@@ -109,6 +113,7 @@ func TestValidateEnumScopeAndName(t *testing.T) {
 	good := []CanonicalMemory{
 		{Name: "ok-name", Description: "d", Type: TypeUser, Scope: "global"},
 		{Name: "ok-name-2", Description: "d", Type: TypeProject, Scope: "project:acme-web"},
+		{Name: "ok-cwd", Description: "d", Type: TypeUser, Scope: "global", AppliesTo: AppliesTo{Cwd: []string{"**", "/work/**", "/w/x"}}},
 	}
 	for _, m := range good {
 		if err := m.Validate(); err != nil {

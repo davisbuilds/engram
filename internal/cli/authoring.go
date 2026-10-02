@@ -58,6 +58,10 @@ func cmdRemember(e *env, name string, args []string) int {
 		e.emit(name, false, nil, nil, rerr, nil)
 		return exitUsage
 	}
+	if m.AppliesTo.Cwd, rerr = expandCwdGlobs(m.AppliesTo.Cwd); rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitError
+	}
 	if m.Provenance.Origin == "" {
 		m.Provenance.Origin = "remember"
 	}
@@ -110,9 +114,19 @@ func cmdShare(e *env, name string, args []string) int {
 	if len(pa.pos) == 1 {
 		memName = pa.pos[0]
 	}
-	if memName == "" || to == "" {
-		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram share <name> --to <scope>"}, nil)
+	cwds, anyCwd := pa.vals["--applies-cwd"], pa.bools["--any-cwd"]
+	if memName == "" || to == "" && len(cwds) == 0 && !anyCwd {
+		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram share <name> [--to <scope>] [--applies-cwd <glob>]... [--any-cwd]"}, nil)
 		return exitUsage
+	}
+	if len(cwds) > 0 && anyCwd {
+		e.emit(name, false, nil, nil, usageError("--applies-cwd and --any-cwd are mutually exclusive"), nil)
+		return exitUsage
+	}
+	cwds, rerr = expandCwdGlobs(cwds)
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitError
 	}
 
 	cfg, err := config.Load(e.config)
@@ -137,8 +151,16 @@ func cmdShare(e *env, name string, args []string) int {
 		e.emit(name, false, nil, nil, &RespError{Code: "not_found", Message: "no canonical memory named " + memName}, nil)
 		return exitUsage
 	}
-	from := m.Scope
-	m.Scope = to
+	from, fromCwd := m.Scope, m.AppliesTo.Cwd
+	if to != "" {
+		m.Scope = to
+	}
+	switch {
+	case anyCwd:
+		m.AppliesTo.Cwd = nil
+	case len(cwds) > 0:
+		m.AppliesTo.Cwd = cwds
+	}
 	if err := m.Validate(); err != nil {
 		e.emit(name, false, nil, nil, &RespError{Code: "invalid_scope", Message: err.Error()}, nil)
 		return exitUsage
@@ -150,7 +172,8 @@ func cmdShare(e *env, name string, args []string) int {
 		return exitError
 	}
 	e.emit(name, true, map[string]any{
-		"outcome": outcome, "name": memName, "from_scope": from, "to_scope": to, "path": path,
+		"outcome": outcome, "name": memName, "from_scope": from, "to_scope": m.Scope,
+		"from_applies_cwd": orEmpty(fromCwd), "to_applies_cwd": orEmpty(m.AppliesTo.Cwd), "path": path,
 	}, nil, nil, nil)
 	return exitOK
 }
@@ -499,4 +522,30 @@ func withheldRow(root string, m *schema.CanonicalMemory) (map[string]string, boo
 		return nil, false
 	}
 	return map[string]string{"name": m.Name, "outcome": string(store.Conflict), "withheld": err.Error()}, true
+}
+
+// expandCwdGlobs spells each applies_to.cwd glob the way the cwd it is matched
+// against is spelled: a leading ~ becomes the home directory (the expansion the
+// global --cwd gets), and an absolute glob is cleaned ("/work/" → "/work",
+// "/a/../b/**" → "/b/**"). Any other relative glob is left for schema validation
+// to refuse.
+func expandCwdGlobs(globs []string) ([]string, *RespError) {
+	if len(globs) == 0 {
+		return globs, nil
+	}
+	out := make([]string, len(globs))
+	for i, g := range globs {
+		if g == "~" || strings.HasPrefix(g, "~/") {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return nil, &RespError{Code: "home", Message: "cannot expand ~ in " + g + ": " + err.Error()}
+			}
+			g = home + strings.TrimPrefix(g, "~")
+		}
+		if filepath.IsAbs(g) {
+			g = filepath.Clean(g)
+		}
+		out[i] = g
+	}
+	return out, nil
 }
