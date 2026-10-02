@@ -82,6 +82,25 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		}
 	}
 
+	// Edits made in place to Claude's shared renders are an import source of
+	// their own, judged by each render's stamp after the native imports.
+	sharedPlans, rerr := s.sharedEditPlans(merged, nil)
+	if rerr != nil {
+		e.emit(name, false, nil, warns, rerr, nil)
+		return exitError
+	}
+	if len(sharedPlans) > 0 {
+		importEntries = append(importEntries, map[string]any{
+			"harness": sync.SharedHarness, "would_import": countOutcome(sharedPlans, editUpdated),
+			"results": sharedEditRows(sharedPlans), "orphaned": []map[string]any{},
+			"skipped": []string{}, "dropped": []importer.Dropped{},
+		})
+		merged = withSharedEdits(merged, sharedPlans)
+		if countOutcome(sharedPlans, editConflict)+countOutcome(sharedPlans, editInvalid) > 0 {
+			exit = worseExit(exit, exitConflicts)
+		}
+	}
+
 	// 2. Under --apply, persist the imports to canonical (same outcomes as simulated).
 	if e.apply {
 		if e.beforeApplyLock != nil {
@@ -111,6 +130,11 @@ func cmdReconcile(e *env, name string, _ []string) int {
 					return exitError
 				}
 			}
+		}
+		if serr := applySharedEdits(s.cfg.CanonicalRoot, sharedPlans, nil); serr != nil {
+			release()
+			e.emit(name, false, nil, warns, &RespError{Code: "save", Message: serr.Error()}, nil)
+			return exitError
 		}
 		// Propagate only what canonical holds now: a memory removed since the
 		// simulation (a concurrent forget) must not be rendered back.
@@ -144,6 +168,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 	}
 
 	next = append(next, orphanNext...)
+	next = append(next, sharedEditNextSteps(sharedPlans)...)
 
 	targets, twarns := s.enricherTargets(merged, keepStale)
 	warns = append(warns, twarns...)
