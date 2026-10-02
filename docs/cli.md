@@ -88,7 +88,8 @@ engram [global flags] <command> [args]
 
   Authoring & propagation (write canonical or render):
     remember     Author a canonical memory (flags, or --from-json - on stdin).
-    share        Promote a memory to a wider scope tier (writes canonical).
+    share        Change where a memory applies: its scope tier (--to) and/or
+                 its cwd globs (--applies-cwd, --any-cwd). Writes canonical.
     sync         Render canonical → harnesses. Dry-run; --apply to write.
     import       Reverse-sync a harness's native memory into canonical
                  (explicit, one-shot; dry-run, --apply to write; --all to
@@ -180,6 +181,16 @@ explicit rather than ambient.
   `detach --apply`) takes the shared
   exclusive canonical-root lock, so no two writers interleave; a held lock is a
   retryable error (exit `1`, `error.code = "locked"`), not a silent second write.
+  An `applies_to.cwd` glob must be absolute or `**`, since it is matched against
+  an absolute cwd; a leading `~` is expanded to the home directory (as for the
+  global `--cwd`), and any other relative glob fails validation.
+- **`share <name> [--to <scope>] [--applies-cwd <glob>]... [--any-cwd]`** —
+  changes where one memory applies, keeping everything else, including its
+  import provenance and merge base (unlike `remember --force`, which drops the
+  merge base). `--to` sets the scope tier, wider or narrower. `--applies-cwd`
+  (repeatable) replaces `applies_to.cwd`, and `--any-cwd` clears it; the two are
+  mutually exclusive, and at least one change is required. `data` reports
+  `from_scope`/`to_scope` and `from_applies_cwd`/`to_applies_cwd`.
 - **`sync`** — computes render `Action`s (`CREATE` / `UPDATE` / `STALE` /
   `CONFLICT`) for the relevant memories against the current cwd/agent/host and,
   with `--apply`, executes them under an exclusive lock (idempotent; a second

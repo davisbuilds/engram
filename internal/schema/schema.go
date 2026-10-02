@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -178,6 +179,13 @@ func (m *CanonicalMemory) Validate() error {
 		issues = append(issues, "scope is required")
 	case !validScope(m.Scope):
 		issues = append(issues, "scope must be 'global' or 'project:<repo>'")
+	}
+	// A cwd is always matched as an absolute, cleaned path, so a relative glob
+	// (or an unexpanded ~) could never match and would hide the memory everywhere.
+	for _, g := range m.AppliesTo.Cwd {
+		if g != "**" && !filepath.IsAbs(g) {
+			issues = append(issues, fmt.Sprintf("applies_to.cwd glob %q must be absolute or **", g))
+		}
 	}
 	if len(issues) > 0 {
 		return &ValidationError{Issues: issues}

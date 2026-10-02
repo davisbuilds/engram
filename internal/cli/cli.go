@@ -85,7 +85,7 @@ type command struct {
 var (
 	noArgs     = &argSpec{}
 	harnessArg = &argSpec{positionals: 1}
-	shareArgs  = &argSpec{positionals: 1, values: []string{"--to"}}
+	shareArgs  = &argSpec{positionals: 1, values: []string{"--to", "--applies-cwd"}, bools: []string{"--any-cwd"}}
 	importArgs = &argSpec{positionals: 1, values: []string{"--refresh", "--keep"}, bools: []string{"--all"}}
 	curateArgs = &argSpec{values: []string{"--harness", "--model", "--effort", "--timeout"}}
 	detachArgs = &argSpec{positionals: anyPositionals}
@@ -97,7 +97,7 @@ var (
 func commands() []command {
 	return []command{
 		{"remember", "Author a canonical memory (flags, or --from-json - on stdin).", nil, cmdRemember},
-		{"share", "Move a memory to a different scope tier (writes canonical).", shareArgs, cmdShare},
+		{"share", "Change where a memory applies: scope tier (--to) and/or cwd globs (--applies-cwd, --any-cwd). Writes canonical.", shareArgs, cmdShare},
 		{"sync", "Render canonical memories into the harnesses (dry-run; --apply to write).", noArgs, cmdSync},
 		{"import", "Reverse-sync a harness's native memory into canonical (one-shot; --apply).", importArgs, cmdImport},
 		{"detach", "Stop tracking an imported memory's source, so a kept orphan is no longer reported (dry-run; --apply).", detachArgs, cmdDetach},
