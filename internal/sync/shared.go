@@ -32,6 +32,8 @@ type ClaudeSharedTarget struct {
 	Desired   []*schema.CanonicalMemory
 	// KeepStale holds back removals, as for ClaudeTarget.
 	KeepStale bool
+	// Discard names edited shared renders to overwrite or remove anyway.
+	Discard map[string]bool
 }
 
 // Harness identifies this target in command output.
@@ -41,7 +43,7 @@ func (ClaudeSharedTarget) Harness() string { return SharedHarness }
 func (t ClaudeSharedTarget) DesiredMemories() []*schema.CanonicalMemory { return t.Desired }
 
 func (t ClaudeSharedTarget) dir() ClaudeTarget {
-	return ClaudeTarget{MemoryDir: t.Dir, Desired: t.Desired, KeepStale: t.KeepStale}
+	return ClaudeTarget{MemoryDir: t.Dir, Desired: t.Desired, KeepStale: t.KeepStale, Stamp: true, Discard: t.Discard}
 }
 
 // Plan computes the actions without writing: the shared dir's, then the rules
@@ -132,7 +134,7 @@ func SharedRulesContent(dir string) []byte {
 		"# Shared memory (engram)\n\n" +
 		"Memories engram shares with every project on this machine. Each entry below\n" +
 		"names a file in `" + dir + "`; read that file when the entry is relevant.\n" +
-		"They are engram renders, so an edit to one is overwritten on the next sync:\n" +
-		"change a memory through engram instead.\n\n" +
+		"To revise one, edit its file in place: engram imports the edit on its next\n" +
+		"reconcile.\n\n" +
 		"@" + index + "\n")
 }

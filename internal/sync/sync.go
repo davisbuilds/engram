@@ -87,6 +87,13 @@ type ClaudeTarget struct {
 	// canonical root is missing or a canonical file failed to parse): an owned
 	// render absent from Desired might still have a live canonical source.
 	KeepStale bool
+	// Stamp records in each render the hash of the content engram wrote
+	// (metadata.engram_base), and holds a render edited since as a CONFLICT
+	// rather than overwrite or remove it, so the edit can be imported.
+	Stamp bool
+	// Discard names edited renders to overwrite or remove anyway: the operator
+	// chose canonical over the edit.
+	Discard map[string]bool
 }
 
 // Harness identifies this target's harness.
@@ -124,6 +131,10 @@ func (t ClaudeTarget) Plan() ([]Action, error) {
 			continue
 		}
 		cur, exists := owned[m.Name]
+		if exists && t.held(m.Name, cur.content, m) {
+			actions = append(actions, Action{Conflict, m.Name, path, HeldEditNote})
+			continue
+		}
 		switch {
 		case !exists && fileExists(path):
 			// The name matched neither map, yet the path resolves to a file: a
@@ -134,7 +145,7 @@ func (t ClaudeTarget) Plan() ([]Action, error) {
 		default:
 			// Desired content is derived from the existing file so unmanaged
 			// frontmatter keys are preserved; a file already in that shape is a no-op.
-			want, cerr := claudeContent(cur.content, m)
+			want, cerr := t.content(cur.content, m)
 			if cerr != nil {
 				return nil, cerr
 			}
@@ -144,7 +155,14 @@ func (t ClaudeTarget) Plan() ([]Action, error) {
 		}
 	}
 	for name, cur := range owned {
-		if !desired[name] && !t.KeepStale {
+		switch {
+		case desired[name]:
+		case t.KeepStale && !t.Discard[name]:
+			// Held while canonical may be incomplete, unless the operator named
+			// this render for discarding.
+		case t.held(name, cur.content, nil):
+			actions = append(actions, Action{Conflict, name, cur.path, HeldEditNote + "; it no longer renders here"})
+		default:
 			actions = append(actions, Action{Stale, name, cur.path, "canonical no longer renders here"})
 		}
 	}
@@ -193,7 +211,7 @@ func (t ClaudeTarget) applyLocked() (Result, error) {
 			res.Conflicts = append(res.Conflicts, a)
 		case Create, Update:
 			// Merge onto the existing file (if any) so unmanaged frontmatter keys survive.
-			content, cerr := claudeContent(owned[a.Name].content, byName[a.Name])
+			content, cerr := t.content(owned[a.Name].content, byName[a.Name])
 			if cerr != nil {
 				return res, cerr
 			}
@@ -215,6 +233,34 @@ func (t ClaudeTarget) applyLocked() (Result, error) {
 		}
 	}
 	return res, nil
+}
+
+// HeldEditNote opens the note of a CONFLICT that holds an edited render, so a
+// caller can tell it from a hand-authored file blocking a render.
+const HeldEditNote = "edited in place since engram rendered it"
+
+// content is the file engram writes for m over existing: claudeContent, plus
+// the base stamp on a stamping target.
+func (t ClaudeTarget) content(existing []byte, m *schema.CanonicalMemory) ([]byte, error) {
+	c, err := claudeContent(existing, m)
+	if err != nil || !t.Stamp {
+		return c, err
+	}
+	return stamp(c, schema.NativeHash(m))
+}
+
+// held reports whether a stamping target must leave an owned render alone: it
+// was edited since engram wrote it, the edit is not what m (nil when m no
+// longer renders here) already says, and the operator has not discarded it.
+func (t ClaudeTarget) held(name string, content []byte, m *schema.CanonicalMemory) bool {
+	if !t.Stamp {
+		return false
+	}
+	e, edited := editedRender(content)
+	if !edited || t.Discard[name] {
+		return false
+	}
+	return m == nil || e.Hash() != schema.NativeHash(m)
 }
 
 // scanMemoryDir splits the memory dir into engram-owned files (by name) and

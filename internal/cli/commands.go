@@ -521,6 +521,13 @@ func worseExit(a, b int) int {
 func conflictNextSteps(actions []sync.Action) []NextStep {
 	var steps []NextStep
 	for _, a := range actions {
+		if a.Kind == sync.Conflict && strings.HasPrefix(a.Note, sync.HeldEditNote) {
+			steps = append(steps, NextStep{
+				Reason:  "the shared render of " + a.Name + " was edited in place; reconcile imports it, or settle it explicitly",
+				Command: "engram import claude-code --shared --apply",
+			})
+			continue
+		}
 		if a.Kind == sync.Conflict {
 			steps = append(steps, NextStep{
 				Reason:  "unmarked file at " + a.Path + " blocks rendering " + a.Name,

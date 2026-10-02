@@ -95,7 +95,9 @@ engram [global flags] <command> [args]
                  (explicit, one-shot; dry-run, --apply to write; --all to
                  sweep every Claude project slug, not just the cwd's;
                  --refresh <name> to overwrite a conflicting canonical;
-                 --keep <name> to keep canonical and settle the conflict).
+                 --keep <name> to keep canonical and settle the conflict;
+                 claude-code --shared for edits made to Claude's shared
+                 renders).
     migrate      Adopt hand-authored native memory canonical supersedes,
                  converting it to engram-owned in place so a later sync
                  neither duplicates nor conflicts (dry-run; --apply to write;
@@ -342,6 +344,25 @@ explicit rather than ambient.
   Claude reads a shared memory's file outside the session's working directory,
   which Claude Code gates by permission; allow it once in user settings with
   `Read(<claude home>/engram/**)` (engram never edits Claude Code settings).
+  **Edits to a shared render are imported, never overwritten.** Each shared
+  render records the hash of the content engram wrote (`metadata.engram_base`,
+  the same `description`/`type`/`body` hash as import's merge base). A render
+  whose content no longer matches its stamp was edited in place: `sync` holds it
+  as a `CONFLICT` (never rewriting or removing it), and `reconcile` imports it
+  as its own source, `data.import[]` entry `"harness": "claude-code:shared"`:
+  `updated` when canonical has not moved since the stamp (the edit becomes
+  canonical and the render is restamped), `unchanged` when canonical already
+  says it, `conflict` when canonical moved too, and `invalid` when the edit is
+  not a valid memory. A render without a stamp (written before stamping) has no
+  known base and is simply updated. **`import claude-code --shared`** settles the
+  held ones: a dry-run lists them; `--apply` takes every fast-forwardable edit,
+  `--refresh <name>` takes a conflicting edit anyway, and `--keep <name>` keeps
+  canonical and discards the edit, even one canonical could fast-forward to
+  (row outcome `kept`); it then re-syncs the shared dir, so taken
+  edits are restamped and discarded ones overwritten (or removed, for a memory
+  no longer shared). A `--refresh` or `--keep` name with no edited render is a
+  usage error (`not_edited`). Only `description`, `type` and `body` come from an
+  edit; scope, `applies_to` and provenance stay canonical's.
 - **`reconcile`** — the on-demand cross-harness convenience: it runs the enricher
   flow — `import` every enabled harness into canonical, `review` for leads, then
   propagate canonical back into the harnesses — in one invocation. Dry-run by

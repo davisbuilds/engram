@@ -203,13 +203,20 @@ func cmdImport(e *env, name string, args []string) int {
 		}
 	}
 	if harness == "" {
-		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram import <claude-code|codex> [--all] [--refresh <name>]… [--keep <name>]… [--apply]"}, nil)
+		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: "usage: engram import <claude-code|codex> [--all | --shared] [--refresh <name>]… [--keep <name>]… [--apply]"}, nil)
+		return exitUsage
+	}
+	if pa.bools["--shared"] && (harness != config.HarnessClaude || all) {
+		e.emit(name, false, nil, nil, usageError("--shared imports edits to Claude's shared renders: use it with claude-code and without --all"), nil)
 		return exitUsage
 	}
 	s, rerr := e.newSession()
 	if rerr != nil {
 		e.emit(name, false, nil, nil, rerr, nil)
 		return exitError
+	}
+	if pa.bools["--shared"] {
+		return cmdImportShared(e, name, s, refresh, keep)
 	}
 
 	var (
