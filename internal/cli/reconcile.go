@@ -89,7 +89,9 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		e.emit(name, false, nil, warns, rerr, nil)
 		return exitError
 	}
+	sharedEntry := -1
 	if len(sharedPlans) > 0 {
+		sharedEntry = len(importEntries)
 		importEntries = append(importEntries, map[string]any{
 			"harness": sync.SharedHarness, "would_import": countOutcome(sharedPlans, editUpdated),
 			"results": sharedEditRows(sharedPlans), "orphaned": []map[string]any{},
@@ -145,7 +147,13 @@ func cmdReconcile(e *env, name string, _ []string) int {
 			return exitError
 		}
 		merged = keepPresent(merged, present)
+		// A shared edit's fast-forward may have been skipped under the lock (its
+		// canonical moved since the simulation): propagate what canonical holds.
+		merged = fromCanonical(merged, present, sharedPlans)
 		release()
+		if sharedEntry >= 0 {
+			importEntries[sharedEntry]["results"] = sharedEditRows(sharedPlans)
+		}
 	}
 	// 3. Review + propagate against the merged set (as simulated; apply also drops
 	// anything removed concurrently).

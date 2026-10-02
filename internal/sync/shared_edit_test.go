@@ -165,3 +165,20 @@ func TestUnstampedRenderIsNotAnEdit(t *testing.T) {
 		t.Errorf("result = %+v, want an UPDATE that stamps it", res)
 	}
 }
+
+// TestDiscardBypassesTheStaleHold pins an explicit --keep under a global hold:
+// removals are held while canonical may be incomplete, but a render the
+// operator named for discarding goes anyway.
+func TestDiscardBypassesTheStaleHold(t *testing.T) {
+	m := mem("alpha")
+	tg := stampedTarget(t, m)
+	path := filepath.Join(tg.Dir, "alpha.md")
+	editBody(t, path, "edited in place\n")
+	tg.Desired, tg.KeepStale, tg.Discard = nil, true, map[string]bool{"alpha": true}
+	if _, err := tg.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("a discarded edit survived the stale hold (err=%v)", err)
+	}
+}

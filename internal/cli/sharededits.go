@@ -122,9 +122,10 @@ func sharedEditNextSteps(plans []sharedEditPlan) []NextStep {
 
 // applySharedEdits saves the planned fast-forwards under the canonical lock the
 // caller holds, re-checked against canonical as it is now: an edit planned
-// against a canonical that has since moved is left for the next run.
+// against a canonical that has since moved is not saved, and is marked a
+// conflict in plans so the caller reports it as held.
 func applySharedEdits(root string, plans []sharedEditPlan, refresh map[string]bool) error {
-	for _, p := range plans {
+	for i, p := range plans {
 		if p.outcome != editUpdated {
 			continue
 		}
@@ -133,6 +134,11 @@ func applySharedEdits(root string, plans []sharedEditPlan, refresh map[string]bo
 			return err
 		}
 		if !found || schema.NativeHash(cur) != p.edit.Base && !refresh[p.edit.Name] {
+			plans[i].outcome, plans[i].memory = editConflict, nil
+			plans[i].differs = "canonical changed during the run"
+			if !found {
+				plans[i].differs = "canonical removed"
+			}
 			continue
 		}
 		next := *cur
@@ -225,18 +231,11 @@ func cmdImportShared(e *env, name string, s *session, refresh, keep map[string]b
 			}
 		}
 	}
-	data := map[string]any{"harness": sync.SharedHarness, "apply": e.apply, "results": sharedEditRows(plans)}
-	var held []sharedEditPlan
-	for _, p := range plans {
-		if p.outcome == editConflict || p.outcome == editInvalid {
-			held = append(held, p)
-		}
-	}
-	exit := exitOK
-	if len(held) > 0 {
-		exit = exitConflicts
-	}
+	data := map[string]any{"harness": sync.SharedHarness, "apply": e.apply}
 	if e.apply {
+		if e.beforeApplyLock != nil {
+			e.beforeApplyLock()
+		}
 		release, lerr := canonLock(s.cfg.CanonicalRoot)
 		if lerr != nil {
 			e.emit(name, false, data, warns, lerr, nil)
@@ -265,6 +264,46 @@ func cmdImportShared(e *env, name string, s *session, refresh, keep map[string]b
 		}
 		data["sync"] = res
 	}
+	// Rows and held edits come after the apply, which marks an edit whose
+	// fast-forward failed its recheck as a conflict.
+	data["results"] = sharedEditRows(plans)
+	var held []sharedEditPlan
+	for _, p := range plans {
+		if p.outcome == editConflict || p.outcome == editInvalid {
+			held = append(held, p)
+		}
+	}
+	exit := exitOK
+	if len(held) > 0 {
+		exit = exitConflicts
+	}
 	e.emit(name, exit == exitOK, data, warns, nil, sharedEditNextSteps(held))
 	return exit
+}
+
+// fromCanonical replaces each memory with an edited shared render by its
+// current canonical form, so propagation renders exactly what canonical holds
+// after the apply, whether or not a fast-forward survived its recheck.
+func fromCanonical(mems, present []*schema.CanonicalMemory, plans []sharedEditPlan) []*schema.CanonicalMemory {
+	touched := map[string]bool{}
+	for _, p := range plans {
+		touched[p.edit.Name] = true
+	}
+	if len(touched) == 0 {
+		return mems
+	}
+	now := map[string]*schema.CanonicalMemory{}
+	for _, m := range present {
+		if touched[m.Name] {
+			now[m.Name] = m
+		}
+	}
+	out := make([]*schema.CanonicalMemory, 0, len(mems))
+	for _, m := range mems {
+		if c, ok := now[m.Name]; ok {
+			m = c
+		}
+		out = append(out, m)
+	}
+	return out
 }

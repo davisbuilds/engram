@@ -165,3 +165,61 @@ func TestImportSharedKeepAFastForwardableEdit(t *testing.T) {
 		t.Errorf("row should report the edit as kept-out: %s", stringify(env["data"]))
 	}
 }
+
+// TestReconcileDropsASharedEditInvalidatedMidRun pins the recheck: canonical
+// that moves between reconcile's simulation and its apply invalidates a planned
+// fast-forward, so the edit is neither saved nor propagated (and the render is
+// not restamped over it): it is held as a conflict.
+func TestReconcileDropsASharedEditInvalidatedMidRun(t *testing.T) {
+	_, c, canon, render := editedShared(t)
+	before, _ := os.ReadFile(render)
+	moved := "---\nname: g-mem\ndescription: d\ntype: lesson\nscope: global\n---\ncanonical moved\n"
+	e := &env{jsonMode: true, apply: true, config: c[1], cwd: "/work/x", beforeApplyLock: func() {
+		writeFile(t, filepath.Join(canon, "g-mem.md"), moved)
+	}}
+	defer silenceStdout(t)()
+	if code := cmdReconcile(e, "reconcile", nil); code != exitConflicts {
+		t.Errorf("exit = %d, want %d (held)", code, exitConflicts)
+	}
+	if got := gMemBody(t, canon); got != "canonical moved\n" {
+		t.Errorf("canonical body = %q, want the concurrent change kept", got)
+	}
+	if after, _ := os.ReadFile(render); string(after) != string(before) {
+		t.Errorf("the edited render was rewritten:\n%s", after)
+	}
+}
+
+// TestImportSharedReportsAnEditInvalidatedMidRun pins import --shared under the
+// same race: the skipped fast-forward is reported as a conflict, with exit 3 and
+// both resolution leads, not as a clean import.
+func TestImportSharedReportsAnEditInvalidatedMidRun(t *testing.T) {
+	_, c, canon, _ := editedShared(t)
+	moved := "---\nname: g-mem\ndescription: d\ntype: lesson\nscope: global\n---\ncanonical moved\n"
+	var code int
+	out := captureStdout(t, func() {
+		e := &env{jsonMode: true, apply: true, config: c[1], cwd: "/work/x", beforeApplyLock: func() {
+			writeFile(t, filepath.Join(canon, "g-mem.md"), moved)
+		}}
+		code = cmdImportShared(e, "import", mustSession(t, e), nil, nil)
+	})
+	if code != exitConflicts {
+		t.Errorf("exit = %d, want %d", code, exitConflicts)
+	}
+	for _, want := range []string{`"outcome": "conflict"`, "--shared --refresh g-mem", "--shared --keep g-mem"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+	if got := gMemBody(t, canon); got != "canonical moved\n" {
+		t.Errorf("canonical body = %q, want the concurrent change kept", got)
+	}
+}
+
+func mustSession(t *testing.T, e *env) *session {
+	t.Helper()
+	s, rerr := e.newSession()
+	if rerr != nil {
+		t.Fatal(rerr.Message)
+	}
+	return s
+}

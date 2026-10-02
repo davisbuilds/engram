@@ -156,7 +156,10 @@ func (t ClaudeTarget) Plan() ([]Action, error) {
 	}
 	for name, cur := range owned {
 		switch {
-		case desired[name] || t.KeepStale:
+		case desired[name]:
+		case t.KeepStale && !t.Discard[name]:
+			// Held while canonical may be incomplete, unless the operator named
+			// this render for discarding.
 		case t.held(name, cur.content, nil):
 			actions = append(actions, Action{Conflict, name, cur.path, HeldEditNote + "; it no longer renders here"})
 		default:
