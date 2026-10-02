@@ -515,6 +515,30 @@ func TestDeriveCodexScopeFromRealRepo(t *testing.T) {
 	}
 }
 
+// A Task Group recorded in a linked worktree belongs to the repository the
+// worktree was added from: the scope names that repository, not the worktree
+// directory (which a session in the main checkout would never match).
+func TestDeriveCodexScopeFromLinkedWorktree(t *testing.T) {
+	repo := mkRepo(t, "agentmonitor")
+	gitdir := filepath.Join(repo, ".git", "worktrees", "probe-cli")
+	if err := os.MkdirAll(gitdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gitdir, "commondir"), []byte("../..\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wt := filepath.Join(filepath.Dir(repo), "worktrees", "agentmonitor-probe-cli")
+	if err := os.MkdirAll(wt, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+gitdir+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := deriveCodexScope("applies_to: cwd=" + wt + "; reuse_rule=x"); got != "project:agentmonitor" {
+		t.Errorf("got %q, want project:agentmonitor", got)
+	}
+}
+
 func TestDeriveCodexScopeNonRepoPathStaysGlobal(t *testing.T) {
 	// A container directory (no .git) must not become a project scope, and a
 	// group with no applies_to line stays global.

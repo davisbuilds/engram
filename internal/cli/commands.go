@@ -11,6 +11,7 @@ import (
 
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/discover"
+	"github.com/davisbuilds/engram/internal/gitroot"
 	"github.com/davisbuilds/engram/internal/harness"
 	"github.com/davisbuilds/engram/internal/lock"
 	"github.com/davisbuilds/engram/internal/marker"
@@ -37,8 +38,13 @@ func canonLock(root string) (func(), *RespError) {
 // session resolves the cwd/host context and loads config once, shared by the
 // sync/audit/list/discover commands.
 type session struct {
-	cfg           *config.Config
-	cwd           string
+	cfg *config.Config
+	cwd string
+	// claudeRoot is the directory Claude Code keys this cwd's auto memory by:
+	// the main repository's root when cwd is inside one (a subdirectory and a
+	// linked worktree alike), else cwd itself. The project slug target, and
+	// what belongs in it, follow claudeRoot, not cwd.
+	claudeRoot    string
 	host          string
 	agentOverride string
 }
@@ -60,7 +66,11 @@ func (e *env) newSession() (*session, *RespError) {
 	if err != nil {
 		return nil, &RespError{Code: "cwd", Message: err.Error()}
 	}
-	return &session{cfg: cfg, cwd: cwd, host: e.resolveHost(cfg), agentOverride: e.agent}, nil
+	claudeRoot := cwd
+	if root, ok := gitroot.Main(cwd); ok {
+		claudeRoot = root
+	}
+	return &session{cfg: cfg, cwd: cwd, claudeRoot: claudeRoot, host: e.resolveHost(cfg), agentOverride: e.agent}, nil
 }
 
 // agentFor returns the effective agent for scope filtering: an explicit --agent
@@ -112,9 +122,9 @@ func (s *session) targets() ([]sync.Target, []string, *RespError) {
 	var targets []sync.Target
 	if h := s.cfg.Harnesses[config.HarnessClaude]; h.Enabled() {
 		agent := s.agentFor("claude")
-		rel := withoutShared(scope.RelevantFor(mems, s.cwd, agent, s.host), agent, s.host)
+		rel := withoutShared(scope.RelevantFor(mems, s.claudeRoot, agent, s.host), agent, s.host)
 		targets = append(targets, sync.ClaudeTarget{
-			MemoryDir: claudeMemoryDir(h.Home, s.cwd), Desired: rel, KeepStale: keepStale,
+			MemoryDir: claudeMemoryDir(h.Home, s.claudeRoot), Desired: rel, KeepStale: keepStale,
 		}, sharedTarget(h.Home, scope.Shared(mems, agent, s.host), keepStale))
 		warns = append(warns, harnessWarnings(harness.CheckClaude(h.Home, true))...)
 	} else {
@@ -350,7 +360,7 @@ func cmdShow(e *env, name string, args []string) int {
 		if !h.Enabled() {
 			warns = append(warns, "claude-code is disabled; showing anyway (read is permissive)")
 		}
-		items = showClaude(claudeMemoryDir(h.Home, s.cwd))
+		items = showClaude(claudeMemoryDir(h.Home, s.claudeRoot))
 	case config.HarnessCodex:
 		h := s.cfg.Harnesses[config.HarnessCodex]
 		if !h.Enabled() {

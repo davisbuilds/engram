@@ -144,7 +144,7 @@ Verb-first throughout (matches the authoring vocabulary: *remember*, *share*,
 | `--plain` | force stable line-based human output |
 | `-q, --quiet` | suppress non-essential stdout (for hooks) |
 | `--config <path>` | config file (else `$ENGRAM_CONFIG`, else XDG default) |
-| `--cwd <path>` | operate as if invoked from this directory — sets the scope/slug target; `~` is expanded, a relative path is resolved against the process cwd, and the path is cleaned, so `dir/` and `dir` map to one slug |
+| `--cwd <path>` | operate as if invoked from this directory — sets the scope/slug target; `~` is expanded, a relative path is resolved against the process cwd, and the path is cleaned, so `dir/` and `dir` map to one slug. As in Claude Code, the Claude project slug (and which memories belong in it) follows the main repository's root when the path is inside one, so a subdirectory or a linked worktree targets the repository's slug |
 | `--agent <claude\|codex>` | caller harness for scope filtering (else inferred) |
 | `--host <label>` | override the host label (else `hostname -s` mapped via config) |
 | `-h, --help` | help, anywhere in argv; the command is never run |
