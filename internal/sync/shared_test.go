@@ -183,6 +183,56 @@ func TestPurgeSharedDir(t *testing.T) {
 	}
 }
 
+// TestPurgeRemovesSharedRulesWhenEmptied pins the rules file's lifetime under
+// forget: it stays while anything is shared, and goes with the last shared
+// memory, so it never imports an index that is gone.
+func TestPurgeRemovesSharedRulesWhenEmptied(t *testing.T) {
+	tg := sharedTarget(t, mem("alpha"), mem("beta"))
+	if _, err := tg.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	p := Purge{SharedDir: tg.Dir, SharedRulesFile: tg.RulesFile, Names: []string{"alpha"}}
+	if _, err := p.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	if readOr(t, tg.RulesFile) == "" {
+		t.Fatal("rules file removed while beta is still shared")
+	}
+	p.Names = []string{"beta"}
+	actions, err := p.Plan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAction(actions, Stale, RulesActionName) {
+		t.Errorf("purge plan = %v, want STALE of the rules file", actions)
+	}
+	if _, err := p.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(tg.RulesFile); !os.IsNotExist(err) {
+		t.Errorf("rules file survived the last shared memory's purge (err=%v)", err)
+	}
+}
+
+// TestPurgeLeavesHandAuthoredRules pins marker discipline: a hand-authored file
+// at the rules path is never removed, even when nothing is shared.
+func TestPurgeLeavesHandAuthoredRules(t *testing.T) {
+	tg := sharedTarget(t, mem("alpha"))
+	if _, err := tg.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tg.RulesFile, []byte("# mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := Purge{SharedDir: tg.Dir, SharedRulesFile: tg.RulesFile, Names: []string{"alpha"}}
+	if _, err := p.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	if got := readOr(t, tg.RulesFile); got != "# mine\n" {
+		t.Errorf("hand-authored rules file changed: %q", got)
+	}
+}
+
 func hasAction(as []Action, k ActionKind, name string) bool {
 	for _, a := range as {
 		if a.Kind == k && a.Name == name {

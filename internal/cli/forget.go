@@ -112,7 +112,8 @@ func (s *session) forget(e *env, name string, names []string, note tombstone.Not
 	purge := sync.Purge{Names: names}
 	if h := s.cfg.Harnesses[config.HarnessClaude]; h.Enabled() {
 		purge.ClaudeProjects = filepath.Join(h.Home, "projects")
-		purge.SharedDir = sharedTarget(h.Home, nil, false).Dir
+		shared := sharedTarget(h.Home, nil, false)
+		purge.SharedDir, purge.SharedRulesFile = shared.Dir, shared.RulesFile
 	} else {
 		warns = append(warns, s.skippedNote(config.HarnessClaude))
 	}

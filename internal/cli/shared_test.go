@@ -148,4 +148,7 @@ func TestForgetPurgesShared(t *testing.T) {
 	if exists(filepath.Join(claude, "engram", "memory", "g-mem.md")) {
 		t.Error("forget left the shared render")
 	}
+	if exists(filepath.Join(claude, "rules", "engram-memory.md")) {
+		t.Error("forget of the last shared memory left the rules file importing a missing index")
+	}
 }

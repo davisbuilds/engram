@@ -361,7 +361,8 @@ explicit rather than ambient.
   removed, under the canonical lock; then every **engram-owned** render of the
   name is removed from each Claude project slug and Claude's shared memory dir
   (file and marked index line) and from the shared Codex notes directory, each
-  under its own lock. A tombstone is
+  under its own lock; when that leaves nothing shared, the engram-owned rules
+  file importing the shared index goes too. A tombstone is
   `<canonical_root>/.forgotten/<name>.yaml`, holding the name, origin, source,
   `forgotten_at`, `--reason`, `--successor`, and the forgotten file's full text;
   discovery never reads that directory. Forgetting a name again (another harness
