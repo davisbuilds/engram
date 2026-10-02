@@ -524,25 +524,28 @@ func withheldRow(root string, m *schema.CanonicalMemory) (map[string]string, boo
 	return map[string]string{"name": m.Name, "outcome": string(store.Conflict), "withheld": err.Error()}, true
 }
 
-// expandCwdGlobs spells a leading ~ in each applies_to.cwd glob as the home
-// directory, the same expansion the global --cwd gets, so a glob written either
-// way matches the absolute cwd it is compared against. Any other relative glob is
-// left for schema validation to refuse.
+// expandCwdGlobs spells each applies_to.cwd glob the way the cwd it is matched
+// against is spelled: a leading ~ becomes the home directory (the expansion the
+// global --cwd gets), and an absolute glob is cleaned ("/work/" → "/work",
+// "/a/../b/**" → "/b/**"). Any other relative glob is left for schema validation
+// to refuse.
 func expandCwdGlobs(globs []string) ([]string, *RespError) {
 	if len(globs) == 0 {
 		return globs, nil
 	}
 	out := make([]string, len(globs))
 	for i, g := range globs {
-		if g != "~" && !strings.HasPrefix(g, "~/") {
-			out[i] = g
-			continue
+		if g == "~" || strings.HasPrefix(g, "~/") {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return nil, &RespError{Code: "home", Message: "cannot expand ~ in " + g + ": " + err.Error()}
+			}
+			g = home + strings.TrimPrefix(g, "~")
 		}
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, &RespError{Code: "home", Message: "cannot expand ~ in " + g + ": " + err.Error()}
+		if filepath.IsAbs(g) {
+			g = filepath.Clean(g)
 		}
-		out[i] = home + strings.TrimPrefix(g, "~")
+		out[i] = g
 	}
 	return out, nil
 }

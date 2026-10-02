@@ -181,9 +181,11 @@ explicit rather than ambient.
   `detach --apply`) takes the shared
   exclusive canonical-root lock, so no two writers interleave; a held lock is a
   retryable error (exit `1`, `error.code = "locked"`), not a silent second write.
-  An `applies_to.cwd` glob must be absolute or `**`, since it is matched against
-  an absolute cwd; a leading `~` is expanded to the home directory (as for the
-  global `--cwd`), and any other relative glob fails validation.
+  An `applies_to.cwd` glob must be `**` or an absolute, clean path, since it is
+  matched against an absolute, cleaned cwd. `remember` and `share` spell input
+  that way: a leading `~` is expanded to the home directory (as for the global
+  `--cwd`) and an absolute glob is cleaned (`/work/` → `/work`). Any other
+  relative glob, or an unclean one in a canonical file, fails validation.
 - **`share <name> [--to <scope>] [--applies-cwd <glob>]... [--any-cwd]`** —
   changes where one memory applies, keeping everything else, including its
   import provenance and merge base (unlike `remember --force`, which drops the

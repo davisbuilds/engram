@@ -63,6 +63,20 @@ func TestShareAppliesCwd(t *testing.T) {
 	}
 }
 
+// TestShareCleansCwdGlobs pins that share stores the clean spelling of a glob,
+// since a session cwd is always cleaned before it is matched: "/work/" and
+// "/work/../other/**" would otherwise never match anything.
+func TestShareCleansCwdGlobs(t *testing.T) {
+	c, memFile := shareFixture(t)
+	defer silenceStdout(t)()
+	if code := Run(append([]string{"share", "a-mem", "--applies-cwd", "/work/", "--applies-cwd", "/work/../other/**"}, c...)); code != exitOK {
+		t.Fatalf("share exit = %d, want %d", code, exitOK)
+	}
+	if got, want := loadShared(t, memFile).AppliesTo.Cwd, []string{"/work", "/other/**"}; !slices.Equal(got, want) {
+		t.Errorf("applies_to.cwd = %v, want %v", got, want)
+	}
+}
+
 // TestShareAnyCwd pins the reverse: --any-cwd clears the cwd axis.
 func TestShareAnyCwd(t *testing.T) {
 	c, memFile := shareFixture(t)

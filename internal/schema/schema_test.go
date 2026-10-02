@@ -101,6 +101,8 @@ func TestValidateEnumScopeAndName(t *testing.T) {
 		{"non-kebab name", CanonicalMemory{Name: "Not Kebab", Description: "d", Type: TypeUser, Scope: "global"}},
 		{"relative cwd glob", CanonicalMemory{Name: "a", Description: "d", Type: TypeUser, Scope: "global", AppliesTo: AppliesTo{Cwd: []string{"work/**"}}}},
 		{"unexpanded ~ cwd glob", CanonicalMemory{Name: "a", Description: "d", Type: TypeUser, Scope: "global", AppliesTo: AppliesTo{Cwd: []string{"~/dev"}}}},
+		{"unclean cwd glob", CanonicalMemory{Name: "a", Description: "d", Type: TypeUser, Scope: "global", AppliesTo: AppliesTo{Cwd: []string{"/work/"}}}},
+		{"dot-dot cwd glob", CanonicalMemory{Name: "a", Description: "d", Type: TypeUser, Scope: "global", AppliesTo: AppliesTo{Cwd: []string{"/work/../other/**"}}}},
 	}
 	for _, c := range bad {
 		if err := c.mem.Validate(); err == nil {

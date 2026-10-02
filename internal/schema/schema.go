@@ -181,10 +181,11 @@ func (m *CanonicalMemory) Validate() error {
 		issues = append(issues, "scope must be 'global' or 'project:<repo>'")
 	}
 	// A cwd is always matched as an absolute, cleaned path, so a relative glob
-	// (or an unexpanded ~) could never match and would hide the memory everywhere.
+	// (or an unexpanded ~), or one spelled unclean ("/work/", "/a/../b"), could
+	// never match and would hide the memory everywhere.
 	for _, g := range m.AppliesTo.Cwd {
-		if g != "**" && !filepath.IsAbs(g) {
-			issues = append(issues, fmt.Sprintf("applies_to.cwd glob %q must be absolute or **", g))
+		if g != "**" && (!filepath.IsAbs(g) || filepath.Clean(g) != g) {
+			issues = append(issues, fmt.Sprintf("applies_to.cwd glob %q must be ** or an absolute, clean path", g))
 		}
 	}
 	if len(issues) > 0 {
