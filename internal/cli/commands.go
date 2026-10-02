@@ -360,7 +360,8 @@ func cmdShow(e *env, name string, args []string) int {
 		if !h.Enabled() {
 			warns = append(warns, "claude-code is disabled; showing anyway (read is permissive)")
 		}
-		items = showClaude(claudeMemoryDir(h.Home, s.claudeRoot))
+		items = append(showClaude(claudeMemoryDir(h.Home, s.claudeRoot), "project"),
+			showClaude(sharedTarget(h.Home, nil, false).Dir, "shared")...)
 	case config.HarnessCodex:
 		h := s.cfg.Harnesses[config.HarnessCodex]
 		if !h.Enabled() {
@@ -376,7 +377,10 @@ func cmdShow(e *env, name string, args []string) int {
 	return exitOK
 }
 
-func showClaude(dir string) []map[string]string {
+// showClaude lists the engram-owned memory files in dir, each tagged with the
+// target that holds it ("project" for the cwd's slug, "shared" for the dir
+// every project loads).
+func showClaude(dir, target string) []map[string]string {
 	items := []map[string]string{}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -392,7 +396,7 @@ func showClaude(dir string) []map[string]string {
 			continue
 		}
 		if sync.IsEngramOwned(data) {
-			items = append(items, map[string]string{"name": strings.TrimSuffix(e.Name(), ".md"), "path": path})
+			items = append(items, map[string]string{"name": strings.TrimSuffix(e.Name(), ".md"), "path": path, "target": target})
 		}
 	}
 	return items

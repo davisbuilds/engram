@@ -127,8 +127,6 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
   stays in that slug, so sessions there see it twice. A `migrate --shared` mode
   (body-identity gated, detaching the canonical so it is not then orphaned)
   would retire the original, after the edit path above exists.
-- **`show claude-code` ignores the shared dir.** It dumps the cwd slug's
-  renders only; shared renders are visible through `sync`/`audit`/`diff`.
 - **`remember` provenance timestamps.** `remember` sets `provenance.origin` but
   not `created`/`modified`, to keep render output deterministic and idempotent.
   A "preserve created, bump modified on change" policy would restore timestamps
