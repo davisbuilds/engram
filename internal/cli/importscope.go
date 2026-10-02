@@ -46,6 +46,12 @@ func decideImportScope(existing, cand *schema.CanonicalMemory, authoritative boo
 		return cand.Scope, false, ""
 	}
 	if !authoritative {
+		// An import that brings no change has nothing to decide: the stored
+		// scope was settled before (by share, or an earlier import), so saying
+		// so on every run is noise.
+		if schema.NativeHash(existing) == schema.NativeHash(cand) {
+			return existing.Scope, false, ""
+		}
 		note = fmt.Sprintf(
 			"scope for %q kept as %q; a provisional import derived %q but does not re-scope an existing memory "+
 				"(re-import from within the project, or curate, to change scope)",

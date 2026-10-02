@@ -33,10 +33,11 @@ func TestDecideImportScope_NewSeeds(t *testing.T) {
 }
 
 // A provisional (sweep/codex/reconcile) import must never re-scope an existing
-// memory: it preserves the stored scope and surfaces a note naming both scopes.
+// memory: it preserves the stored scope and, when the import brings a change,
+// surfaces a note naming both scopes.
 func TestDecideImportScope_ProvisionalPreservesAndNotes(t *testing.T) {
 	existing := mem("project:foo", "d", "b")
-	cand := mem("global", "d", "b") // repo absent on this machine -> derived global
+	cand := mem("global", "d", "b2") // repo absent on this machine -> derived global
 	got, force, note := decideImportScope(existing, cand, false)
 	if got != "project:foo" {
 		t.Fatalf("scope: got %q, want project:foo (preserved)", got)
@@ -46,6 +47,18 @@ func TestDecideImportScope_ProvisionalPreservesAndNotes(t *testing.T) {
 	}
 	if note == "" || !strings.Contains(note, "project:foo") || !strings.Contains(note, "global") {
 		t.Fatalf("note %q should name both the kept and derived scopes", note)
+	}
+}
+
+// A provisional import that brings no change (same description, type and body)
+// keeps the stored scope silently: the scope was settled before (by share, or
+// an earlier import), and repeating it on every run is noise.
+func TestDecideImportScope_ProvisionalUnchangedContentSilent(t *testing.T) {
+	existing := mem("project:foo", "d", "b")
+	cand := mem("global", "d", "b")
+	got, force, note := decideImportScope(existing, cand, false)
+	if got != "project:foo" || force || note != "" {
+		t.Fatalf("got (%q,%v,%q), want (project:foo,false,\"\")", got, force, note)
 	}
 }
 
@@ -95,8 +108,9 @@ func TestDecideImportScope_AuthoritativeBodyDiffDoesNotForce(t *testing.T) {
 // mergeImports is the shared preview/apply seam for reconcile. A provisional
 // import (ScopeAuthoritative=false) that derives a different scope for an existing
 // memory must preserve the stored scope — so the simulated outcome is Unchanged,
-// not Conflict — and surface a note. This guards the reconcile path against the
-// same silent re-scoping the single-import path avoids.
+// not Conflict. This guards the reconcile path against the same silent
+// re-scoping the single-import path avoids. With the body identical the import
+// brings no change, so it raises no note either (it would repeat every run).
 func TestMergeImportsProvisionalPreservesScope(t *testing.T) {
 	existing := []*schema.CanonicalMemory{mem("project:foo", "d", "b")}
 	// Reconstructed sweep on a machine lacking the repo derives global for the same
@@ -112,8 +126,8 @@ func TestMergeImportsProvisionalPreservesScope(t *testing.T) {
 	if hadConflict {
 		t.Errorf("preserving scope should not register a conflict")
 	}
-	if len(notes) != 1 || !strings.Contains(notes[0], "project:foo") {
-		t.Errorf("expected one preservation note naming project:foo, got %v", notes)
+	if len(notes) != 0 {
+		t.Errorf("an import that changes nothing should raise no note, got %v", notes)
 	}
 	if cand.Scope != "project:foo" {
 		t.Errorf("candidate scope = %q, want project:foo (preserved for apply)", cand.Scope)

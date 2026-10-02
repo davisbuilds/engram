@@ -272,7 +272,10 @@ explicit rather than ambient.
   probe reads the live filesystem, an `import --all` or Codex import run on a
   machine that lacks the repo would derive `global` for a memory that is really
   `project:<repo>`. Such a *provisional* import preserves the memory's stored
-  scope and emits a warning naming both scopes, rather than widening it. Only a
+  scope rather than widening it, and emits a warning naming both scopes when it
+  brings a change to the memory's content; one that changes nothing keeps the
+  scope silently, since a scope set by `share` would otherwise warn on every
+  run. Only a
   *live single* `import <harness>` (whose cwd is the real session directory) may
   revise scope — an intentional project rename honored — and only when scope is
   the sole change; if the body also diverges it is reported as a `3` conflict for
