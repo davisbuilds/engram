@@ -127,12 +127,6 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
   stays in that slug, so sessions there see it twice. A `migrate --shared` mode
   (body-identity gated, detaching the canonical so it is not then orphaned)
   would retire the original, after the edit path above exists.
-- **A re-tiered memory warns on every provisional import.** After `share --to`
-  narrows a Claude-imported memory, each `reconcile` warns that the provisional
-  import derived a different scope and kept the stored one, once per memory per
-  run. The kept scope is right; the warning repeats a decision already made.
-  Record a deliberately set scope (or compare against the last derived one) so
-  the warning fires only when the derivation changes.
 - **`show claude-code` ignores the shared dir.** It dumps the cwd slug's
   renders only; shared renders are visible through `sync`/`audit`/`diff`.
 - **`remember` provenance timestamps.** `remember` sets `provenance.origin` but
