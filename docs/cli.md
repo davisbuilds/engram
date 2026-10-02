@@ -384,6 +384,8 @@ explicit rather than ambient.
   detached, or not imported, is `unchanged`. An unknown name exits `2`.
 - **`show <harness>`** — permissive on a disabled harness (proceeds, stderr note);
   contrast `import` (strict). Read vs write, mapped to filesystem semantics.
+  `show claude-code` lists the cwd's project slug and Claude's shared memory dir
+  together; each item's `target` is `project` or `shared`.
 - **`review`** — never mutates; every finding is a `next_step` the agent may run.
 - **`curate`** — the proposer/applier loop, and the **only** command that invokes
   an agent. engram gathers the canonical corpus + `review` findings

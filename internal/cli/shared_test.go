@@ -152,3 +152,35 @@ func TestForgetPurgesShared(t *testing.T) {
 		t.Error("forget of the last shared memory left the rules file importing a missing index")
 	}
 }
+
+// TestShowListsSharedRenders pins show claude-code: it lists the shared renders
+// next to the project slug's, each tagged with the target that holds it.
+func TestShowListsSharedRenders(t *testing.T) {
+	claude, c := sharedFixture(t)
+	func() {
+		defer silenceStdout(t)()
+		if code := Run(append([]string{"sync", "--apply", "--cwd", "/work/x"}, c...)); code != exitOK {
+			t.Fatalf("sync exit = %d, want %d", code, exitOK)
+		}
+	}()
+	code, env := runEnvelope(t, append([]string{"show", "claude-code", "--cwd", "/work/x"}, c...)...)
+	if code != exitOK {
+		t.Fatalf("show exit = %d, want %d", code, exitOK)
+	}
+	data, _ := env["data"].(map[string]any)
+	got := map[string]string{}
+	for _, it := range data["memories"].([]any) {
+		m := it.(map[string]any)
+		tg, _ := m["target"].(string)
+		got[m["name"].(string)] = tg
+		if m["name"] == "g-mem" && !strings.HasPrefix(m["path"].(string), filepath.Join(claude, "engram", "memory")) {
+			t.Errorf("g-mem path = %v, want it in the shared dir", m["path"])
+		}
+	}
+	want := map[string]string{"g-mem": "shared", "p-mem": "project", "n-mem": "project"}
+	for n, tg := range want {
+		if got[n] != tg {
+			t.Errorf("%s target = %q, want %q (all: %v)", n, got[n], tg, got)
+		}
+	}
+}
