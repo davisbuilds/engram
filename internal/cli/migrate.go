@@ -149,9 +149,11 @@ func cmdMigrateShared(e *env, name string, s *session, claudeHome string) int {
 			originals = append(originals, m)
 		}
 	}
+	shared := sharedTarget(claudeHome, nil, false)
 	adopt := sync.ClaudeSharedAdopt{
 		ClaudeProjects: filepath.Join(claudeHome, "projects"),
-		SharedDir:      sharedTarget(claudeHome, nil, false).Dir,
+		SharedDir:      shared.Dir,
+		RulesFile:      shared.RulesFile,
 		Memories:       originals,
 	}
 	base := map[string]any{"harness": config.HarnessClaude, "shared": true, "apply": e.apply}

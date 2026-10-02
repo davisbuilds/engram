@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -21,6 +22,8 @@ type ClaudeSharedAdopt struct {
 	ClaudeProjects string
 	// SharedDir is the shared memory dir.
 	SharedDir string
+	// RulesFile is the rules file that imports SharedDir's index.
+	RulesFile string
 	// Memories are the shared, Claude-imported memories whose originals to
 	// consider (the caller filters).
 	Memories []*schema.CanonicalMemory
@@ -51,8 +54,14 @@ func (a ClaudeSharedAdopt) Plan() ([]MigrateAction, error) {
 }
 
 // Apply removes each adoptable original and its index line, under its slug's
-// lock and re-planned inside it.
+// lock and re-planned inside it, all while holding the shared dir's lock, so the
+// shared render it relies on cannot change underneath it.
 func (a ClaudeSharedAdopt) Apply() (MigrateResult, error) {
+	unlock, err := acquireLock(a.SharedDir)
+	if err != nil {
+		return MigrateResult{}, err
+	}
+	defer unlock()
 	var res MigrateResult
 	dirs := a.byDir()
 	keys := make([]string, 0, len(dirs))
@@ -135,7 +144,7 @@ func (a ClaudeSharedAdopt) planDir(dir string, ms []*schema.CanonicalMemory) ([]
 		case IsEngramOwned(content):
 			act.Kind, act.Reason = Skip, "not hand-authored"
 		case !a.sharedRendered(m.Name):
-			act.Kind, act.Reason = Skip, "shared render not written yet; run reconcile first"
+			act.Kind, act.Reason = Skip, "shared render not loadable yet (file, index line and rules import); run reconcile first"
 		default:
 			if hashes == nil {
 				if hashes, err = originalHashes(dir); err != nil {
@@ -156,10 +165,21 @@ func (a ClaudeSharedAdopt) planDir(dir string, ms []*schema.CanonicalMemory) ([]
 	return actions, nil
 }
 
-// sharedRendered reports whether the shared dir holds engram's render of name.
+// sharedRendered reports whether Claude can load engram's shared render of
+// name: the render is engram's, the shared index carries its line, and the rules
+// file is engram's current one, importing that index. An interrupted sync can
+// leave the render without the rest, and an original retired then would leave
+// the memory loadable nowhere.
 func (a ClaudeSharedAdopt) sharedRendered(name string) bool {
 	content, err := os.ReadFile(filepath.Join(a.SharedDir, name+".md"))
-	return err == nil && IsEngramOwned(content)
+	if err != nil || !IsEngramOwned(content) {
+		return false
+	}
+	if _, ok := currentIndexLine(a.SharedDir, name); !ok {
+		return false
+	}
+	rules, err := os.ReadFile(a.RulesFile)
+	return err == nil && bytes.Equal(rules, SharedRulesContent(a.SharedDir))
 }
 
 // originalHashes imports a slug's memory dir as Claude import would and maps

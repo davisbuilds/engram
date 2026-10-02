@@ -26,7 +26,7 @@ func adoptFixture(t *testing.T, nativeBody string) (a ClaudeSharedAdopt, native,
 	if _, err := shared.Apply(); err != nil {
 		t.Fatal(err)
 	}
-	return ClaudeSharedAdopt{ClaudeProjects: filepath.Join(home, "projects"), SharedDir: shared.Dir, Memories: []*schema.CanonicalMemory{m}}, native, index
+	return ClaudeSharedAdopt{ClaudeProjects: filepath.Join(home, "projects"), SharedDir: shared.Dir, RulesFile: shared.RulesFile, Memories: []*schema.CanonicalMemory{m}}, native, index
 }
 
 func writeAt(t *testing.T, path, content string) {
@@ -147,5 +147,42 @@ func TestAdoptSkipsAMemoryWithoutAnOriginal(t *testing.T) {
 	}
 	if _, err := os.Stat(native); !os.IsNotExist(err) {
 		t.Error("lesson should still be adopted")
+	}
+}
+
+// TestAdoptNeedsAReachableSharedRender pins reachability, not just presence:
+// a render Claude cannot load (its index line or the rules import missing, as
+// an interrupted sync leaves it) does not replace the original.
+func TestAdoptNeedsAReachableSharedRender(t *testing.T) {
+	for name, breakIt := range map[string]func(a ClaudeSharedAdopt){
+		"index line missing": func(a ClaudeSharedAdopt) {
+			writeAt(t, filepath.Join(a.SharedDir, "MEMORY.md"), "")
+		},
+		"rules file missing": func(a ClaudeSharedAdopt) {
+			if err := os.Remove(a.RulesFile); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"rules file not engram's": func(a ClaudeSharedAdopt) {
+			writeAt(t, a.RulesFile, "# hand-authored\n@"+filepath.Join(a.SharedDir, "MEMORY.md")+"\n")
+		},
+		"rules file imports elsewhere": func(a ClaudeSharedAdopt) {
+			writeAt(t, a.RulesFile, string(SharedRulesContent("/elsewhere")))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			a, native, _ := adoptFixture(t, "body of lesson\n")
+			breakIt(a)
+			res, err := a.Apply()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(res.Adopted) != 0 || kindOf(res.Skipped, "lesson") != Skip {
+				t.Errorf("result = %+v, want lesson skipped", res)
+			}
+			if _, err := os.Stat(native); err != nil {
+				t.Error("original removed while its shared render is unreachable")
+			}
+		})
 	}
 }
