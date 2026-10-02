@@ -18,6 +18,7 @@ const (
 	editUpdated   = "updated"   // canonical takes the edit
 	editConflict  = "conflict"  // both moved since the render; held for --refresh or --keep
 	editInvalid   = "invalid"   // the edit fails validation; held for --keep
+	editKept      = "kept"      // --keep: canonical stays, the edit is discarded
 )
 
 // sharedEditPlan is one edited shared render and what importing it does.
@@ -209,8 +210,12 @@ func cmdImportShared(e *env, name string, s *session, refresh, keep map[string]b
 		return exitError
 	}
 	edited := map[string]bool{}
-	for _, p := range plans {
+	for i, p := range plans {
 		edited[p.edit.Name] = true
+		// A kept edit is never taken, even one canonical could fast-forward to.
+		if keep[p.edit.Name] {
+			plans[i].outcome, plans[i].memory = editKept, nil
+		}
 	}
 	for _, set := range []map[string]bool{refresh, keep} {
 		for n := range set {
@@ -223,7 +228,7 @@ func cmdImportShared(e *env, name string, s *session, refresh, keep map[string]b
 	data := map[string]any{"harness": sync.SharedHarness, "apply": e.apply, "results": sharedEditRows(plans)}
 	var held []sharedEditPlan
 	for _, p := range plans {
-		if (p.outcome == editConflict || p.outcome == editInvalid) && !keep[p.edit.Name] {
+		if p.outcome == editConflict || p.outcome == editInvalid {
 			held = append(held, p)
 		}
 	}

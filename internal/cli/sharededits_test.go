@@ -145,3 +145,23 @@ func stringify(v any) string {
 	}
 	return string(b)
 }
+
+// TestImportSharedKeepAFastForwardableEdit pins --keep when canonical has not
+// moved: the edit could fast-forward, but the operator chose canonical, so
+// canonical is untouched and the render is restored from it.
+func TestImportSharedKeepAFastForwardableEdit(t *testing.T) {
+	_, c, canon, render := editedShared(t)
+	code, env := runEnvelope(t, append([]string{"import", "claude-code", "--shared", "--keep", "g-mem", "--apply", "--cwd", "/work/x"}, c...)...)
+	if code != exitOK {
+		t.Fatalf("import exit = %d: %v", code, env["error"])
+	}
+	if got := gMemBody(t, canon); got != "global\n" {
+		t.Errorf("canonical body = %q, want it kept (global)", got)
+	}
+	if b, _ := os.ReadFile(render); !strings.HasSuffix(string(b), "global\n") {
+		t.Errorf("render not restored from canonical:\n%s", b)
+	}
+	if !strings.Contains(stringify(env["data"]), `"outcome":"kept"`) {
+		t.Errorf("row should report the edit as kept-out: %s", stringify(env["data"]))
+	}
+}

@@ -357,7 +357,8 @@ explicit rather than ambient.
   known base and is simply updated. **`import claude-code --shared`** settles the
   held ones: a dry-run lists them; `--apply` takes every fast-forwardable edit,
   `--refresh <name>` takes a conflicting edit anyway, and `--keep <name>` keeps
-  canonical and discards the edit; it then re-syncs the shared dir, so taken
+  canonical and discards the edit, even one canonical could fast-forward to
+  (row outcome `kept`); it then re-syncs the shared dir, so taken
   edits are restamped and discarded ones overwritten (or removed, for a memory
   no longer shared). A `--refresh` or `--keep` name with no edited render is a
   usage error (`not_edited`). Only `description`, `type` and `body` come from an
