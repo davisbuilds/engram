@@ -19,6 +19,14 @@ memory store. Each note begins with an
 Treat them as durable, curated memories and fold them into consolidated memory
 as you would any extension note. Do not edit these files by hand: engram
 overwrites them from canonical on the next sync, so hand edits are lost.
+
+When you fold a note into a consolidated Task Group, label each bullet you take
+from it with the date you fold it, exactly like this:
+
+- Curated Engram update (2026-10-02): the lesson
+
+engram recognizes that label when it imports consolidated memory, so the folded
+bullet is not imported back as a new lesson.
 `
 
 // CodexRender is the rendered extension-note content for one memory. sync assigns

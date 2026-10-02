@@ -26,8 +26,9 @@ is the intelligence. See `README.md` for the user-facing overview.
   and a file without an engram ownership marker is never modified or deleted.
 - **Marker discipline is the identity contract.** engram only ever rewrites or
   removes files carrying its own marker; hand-authored files are inviolable, and
-  the reverse-sync importers loop-guard on the same signal so engram never
-  re-imports its own rendered output. The one exception is `migrate --apply`,
+  the reverse-sync importers loop-guard on the same signal (for Codex, also the
+  label its consolidator writes on a folded note) so engram never re-imports its
+  own rendered output. The one exception is `migrate --apply`,
   run explicitly after a dry-run: it adopts a hand-authored original only when
   canonical provably supersedes it (identical content, deterministic match), and
   `migrate --shared` additionally requires the memory's shared render to be
