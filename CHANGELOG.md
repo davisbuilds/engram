@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.3.0](https://github.com/davisbuilds/engram/compare/v0.2.0...v0.3.0) (2026-10-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** reject malformed arguments, disable unlisted harnesses, envelope schema 2, curate timeout ([#26](https://github.com/davisbuilds/engram/issues/26))
+
+### Features
+
+* **cli:** migrate --shared retires the originals of shared memories ([#38](https://github.com/davisbuilds/engram/issues/38)) ([4c8bae8](https://github.com/davisbuilds/engram/commit/4c8bae8aa3473f9d11ed8192db60f24b7a98babf))
+* **cli:** retire memories with forget, tombstones, orphan reports and detach ([#27](https://github.com/davisbuilds/engram/issues/27)) ([b3841b1](https://github.com/davisbuilds/engram/commit/b3841b1d52b02142ddcd1b763358513aed840989))
+* **cli:** share narrows by cwd with --applies-cwd and --any-cwd ([#31](https://github.com/davisbuilds/engram/issues/31)) ([e0b7877](https://github.com/davisbuilds/engram/commit/e0b7877a6f2e46e2196802e6269e572d58249ab0))
+* **import:** merge base: fast-forward native edits, canonical_ahead, and --keep ([#28](https://github.com/davisbuilds/engram/issues/28)) ([70cde38](https://github.com/davisbuilds/engram/commit/70cde38f19713d8d6191330c982d763779cc1a93))
+* **sync:** import edits made in place to Claude's shared renders ([#37](https://github.com/davisbuilds/engram/issues/37)) ([589973c](https://github.com/davisbuilds/engram/commit/589973c3fb28ce00478d58d986b4293b33e4b941))
+* **sync:** render Claude's shared memories once and import their index in every project ([#33](https://github.com/davisbuilds/engram/issues/33)) ([6e9769d](https://github.com/davisbuilds/engram/commit/6e9769d0ba26bf70b95bf028d54771afdad5249a))
+
+
+### Bug Fixes
+
+* **cli:** follow the main repository for Claude slugs and project scopes ([#34](https://github.com/davisbuilds/engram/issues/34)) ([f3b4a45](https://github.com/davisbuilds/engram/commit/f3b4a455677973e12ff714a8395bbed26e3bb924))
+* **cli:** keep a settled scope quietly when a provisional import changes nothing ([#35](https://github.com/davisbuilds/engram/issues/35)) ([cf498a9](https://github.com/davisbuilds/engram/commit/cf498a9515a015a3405f332e67d84d3746052d9e))
+* **cli:** reject malformed arguments, disable unlisted harnesses, envelope schema 2, curate timeout ([#26](https://github.com/davisbuilds/engram/issues/26)) ([e52a3b6](https://github.com/davisbuilds/engram/commit/e52a3b6859c8d44747cacea21e38ce1bdfc38252))
+* **cli:** show claude-code lists the shared renders too ([#36](https://github.com/davisbuilds/engram/issues/36)) ([e8d789f](https://github.com/davisbuilds/engram/commit/e8d789fa07f463f71c784c9efefaa3e5fd0ac861))
+* **import:** strip Codex consolidator echoes of engram notes ([#39](https://github.com/davisbuilds/engram/issues/39)) ([970766f](https://github.com/davisbuilds/engram/commit/970766fd4cb354d972fc61768ef7fa4625c7ca0a))
+* **sync:** keep a re-tiered memory's Codex note out of other projects' stale sweep ([#32](https://github.com/davisbuilds/engram/issues/32)) ([888f9cc](https://github.com/davisbuilds/engram/commit/888f9cca160fc7497fae42e2d56c6c4ad0401979))
+* **sync:** keep Codex notes another project's run rendered ([#23](https://github.com/davisbuilds/engram/issues/23)) ([8f40b34](https://github.com/davisbuilds/engram/commit/8f40b3455dcb5841a2510d3fd01f02fb5d9095a9))
+
 ## [0.2.0](https://github.com/davisbuilds/engram/compare/v0.1.0...v0.2.0) (2026-09-26)
 
 
