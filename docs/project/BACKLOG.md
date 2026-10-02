@@ -115,13 +115,26 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
   is still seeded `global` (no prior scope to preserve). A content-hash /
   path-cache / "unresolved vs genuinely-global" signal would let that first import
   distinguish "not a repo here" from "not a repo anywhere" and flag it.
-- **Claude-origin memory never reaches other Claude slugs.** Claude loads memory
-  per project slug, and `reconcile` propagates only across harnesses, so a
-  `global` memory authored natively in one slug is never rendered into another
-  (plain `sync` does, but it also echoes every memory back into its own harness).
-  A global lesson written in one project stays invisible to the rest unless it
-  is authored again there. A reconcile policy that excludes only the *source
-  slug*, not the whole harness, would spread it.
+- **Edits to Claude's shared renders are not durable.** A shared render is an
+  engram render, so an agent editing it in place loses the edit on the next
+  sync, and the shared dir is not an import source. Once a native original is
+  retired in favor of its shared render, that is where Claude edits it. Next:
+  stamp the render's merge base in its marker and let reconcile import an edited
+  shared render through the existing merge base (fast-forward when canonical has
+  not moved, `conflict` when both have).
+- **A Claude memory's original still loads beside its shared render.** A global
+  memory authored natively in one slug is shared, but its hand-authored original
+  stays in that slug, so sessions there see it twice. A `migrate --shared` mode
+  (body-identity gated, detaching the canonical so it is not then orphaned)
+  would retire the original, after the edit path above exists.
+- **A re-tiered memory warns on every provisional import.** After `share --to`
+  narrows a Claude-imported memory, each `reconcile` warns that the provisional
+  import derived a different scope and kept the stored one, once per memory per
+  run. The kept scope is right; the warning repeats a decision already made.
+  Record a deliberately set scope (or compare against the last derived one) so
+  the warning fires only when the derivation changes.
+- **`show claude-code` ignores the shared dir.** It dumps the cwd slug's
+  renders only; shared renders are visible through `sync`/`audit`/`diff`.
 - **`remember` provenance timestamps.** `remember` sets `provenance.origin` but
   not `created`/`modified`, to keep render output deterministic and idempotent.
   A "preserve created, bump modified on change" policy would restore timestamps

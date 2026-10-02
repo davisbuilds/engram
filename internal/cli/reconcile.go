@@ -377,18 +377,24 @@ func (s *session) gatherImports() ([]importGather, []string, *RespError) {
 	return out, warns, nil
 }
 
-// enricherTargets builds a render target per enabled harness whose desired set is
-// the scope-relevant memories *excluding those imported from that same harness* —
-// so reconcile propagates each harness's lessons to the others, not back onto the
-// native originals it already holds. (Plain `sync` renders everything; the origin
-// filter is a reconcile-specific enricher policy, right for the same-machine
-// cross-harness case reconcile serves.)
+// enricherTargets builds a render target per enabled harness whose desired set
+// leaves out the memories whose native originals that target already holds, so
+// reconcile propagates lessons without echoing one back onto its source. Codex
+// keeps one store, so every Codex-imported memory is left out of Codex. Claude
+// keeps one store per project slug, so a Claude-imported memory is left out of
+// only the slug it came from: it still reaches the shared target and other
+// projects' slugs. (Plain `sync` renders everything; the origin filter is a
+// reconcile-specific enricher policy, right for the same-machine case
+// reconcile serves.)
 func (s *session) enricherTargets(mems []*schema.CanonicalMemory, keepStale bool) ([]sync.Target, []string) {
 	var targets []sync.Target
 	var warns []string
 	if h := s.cfg.Harnesses[config.HarnessClaude]; h.Enabled() {
-		rel := excludeOrigin(scope.RelevantFor(mems, s.cwd, s.agentFor("claude"), s.host), config.HarnessClaude)
-		targets = append(targets, sync.ClaudeTarget{MemoryDir: claudeMemoryDir(h.Home, s.cwd), Desired: rel, KeepStale: keepStale})
+		agent := s.agentFor("claude")
+		dir := claudeMemoryDir(h.Home, s.cwd)
+		rel := excludeSourceSlug(withoutShared(scope.RelevantFor(mems, s.cwd, agent, s.host), agent, s.host), filepath.Base(filepath.Dir(dir)))
+		targets = append(targets, sync.ClaudeTarget{MemoryDir: dir, Desired: rel, KeepStale: keepStale},
+			sharedTarget(h.Home, scope.Shared(mems, agent, s.host), keepStale))
 		warns = append(warns, harnessWarnings(harness.CheckClaude(h.Home, true))...)
 	} else {
 		warns = append(warns, s.skippedNote(config.HarnessClaude))
@@ -413,6 +419,23 @@ func excludeOrigin(mems []*schema.CanonicalMemory, harnessName string) []*schema
 	for _, m := range mems {
 		if originHarness(m) == harnessName {
 			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// excludeSourceSlug drops the Claude-imported memories whose original lives in
+// the given project slug (the slug in provenance.import_source). One with no
+// recorded source could have come from any slug, so it is dropped too.
+func excludeSourceSlug(mems []*schema.CanonicalMemory, slug string) []*schema.CanonicalMemory {
+	out := mems[:0:0]
+	for _, m := range mems {
+		if originHarness(m) == config.HarnessClaude {
+			src, _, _ := strings.Cut(m.Provenance.ImportSource, "/")
+			if src == "" || src == slug {
+				continue
+			}
 		}
 		out = append(out, m)
 	}

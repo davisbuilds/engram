@@ -107,7 +107,7 @@ func TestReconcileDoesNotResurrectForgottenMemories(t *testing.T) {
 		}
 	}
 	assertNoCanonical(t, canon, "claude-lesson", "codex-lesson")
-	if _, err := os.Stat(filepath.Join(claudeMem, "codex-lesson.md")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(sharedDirOf(claudeMem), "codex-lesson.md")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the forgotten Codex lesson's Claude render should be removed as stale")
 	}
 }
@@ -122,7 +122,7 @@ func TestReconcileApplyHonorsAForgetThatLandsMidRun(t *testing.T) {
 			t.Fatalf("seed reconcile exit = %d", code)
 		}
 	}()
-	render := filepath.Join(claudeMem, "codex-lesson.md")
+	render := filepath.Join(sharedDirOf(claudeMem), "codex-lesson.md")
 	e := &env{jsonMode: true, apply: true, config: args[1], cwd: args[3], beforeApplyLock: func() {
 		// What a concurrent `forget codex-lesson --apply` does: tombstone the
 		// memory and purge its render.

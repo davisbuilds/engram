@@ -72,7 +72,8 @@ func TestRunSyncLifecycle(t *testing.T) {
 	if code := Run(append([]string{"sync", "--apply"}, base...)); code != exitOK {
 		t.Fatalf("apply exit = %d, want %d", code, exitOK)
 	}
-	memFile := filepath.Join(claude, "projects", "-work-x", "memory", "a-mem.md")
+	// A global memory renders once into the shared dir every project loads.
+	memFile := filepath.Join(claude, "engram", "memory", "a-mem.md")
 	if _, err := os.Stat(memFile); err != nil {
 		t.Fatalf("rendered memory file missing: %v", err)
 	}

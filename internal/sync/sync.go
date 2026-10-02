@@ -160,7 +160,11 @@ func (t ClaudeTarget) Apply() (Result, error) {
 		return Result{}, err
 	}
 	defer unlock()
+	return t.applyLocked()
+}
 
+// applyLocked is Apply for a caller already holding the memory dir's lock.
+func (t ClaudeTarget) applyLocked() (Result, error) {
 	actions, err := t.Plan()
 	if err != nil {
 		return Result{}, err

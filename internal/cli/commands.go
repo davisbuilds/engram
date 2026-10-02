@@ -111,10 +111,11 @@ func (s *session) targets() ([]sync.Target, []string, *RespError) {
 
 	var targets []sync.Target
 	if h := s.cfg.Harnesses[config.HarnessClaude]; h.Enabled() {
-		rel := scope.RelevantFor(mems, s.cwd, s.agentFor("claude"), s.host)
+		agent := s.agentFor("claude")
+		rel := withoutShared(scope.RelevantFor(mems, s.cwd, agent, s.host), agent, s.host)
 		targets = append(targets, sync.ClaudeTarget{
 			MemoryDir: claudeMemoryDir(h.Home, s.cwd), Desired: rel, KeepStale: keepStale,
-		})
+		}, sharedTarget(h.Home, scope.Shared(mems, agent, s.host), keepStale))
 		warns = append(warns, harnessWarnings(harness.CheckClaude(h.Home, true))...)
 	} else {
 		warns = append(warns, s.skippedNote(config.HarnessClaude))
@@ -425,6 +426,29 @@ func (e *env) resolveHost(cfg *config.Config) string {
 
 func claudeMemoryDir(claudeHome, cwd string) string {
 	return filepath.Join(claudeHome, "projects", slug.ForCwd(cwd), "memory")
+}
+
+// sharedTarget is the one Claude memory dir every project shares, loaded into
+// each session through an engram-owned rules file that imports its index.
+func sharedTarget(claudeHome string, shared []*schema.CanonicalMemory, keepStale bool) sync.ClaudeSharedTarget {
+	return sync.ClaudeSharedTarget{
+		Dir:       filepath.Join(claudeHome, "engram", "memory"),
+		RulesFile: filepath.Join(claudeHome, "rules", "engram-memory.md"),
+		Desired:   shared,
+		KeepStale: keepStale,
+	}
+}
+
+// withoutShared drops the memories the shared target renders, so a project
+// slug holds only what is not shared with every project.
+func withoutShared(mems []*schema.CanonicalMemory, agent, host string) []*schema.CanonicalMemory {
+	out := mems[:0:0]
+	for _, m := range mems {
+		if !scope.IsShared(m, agent, host) {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 func codexExtDir(codexHome string) string {

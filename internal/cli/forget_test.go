@@ -11,9 +11,10 @@ import (
 
 // forgetFixture reconciles both harnesses, so canonical holds claude-lesson
 // (native lesson-a.md in slug -work-x) and codex-lesson (a MEMORY.md Task
-// Group), each rendered into the other harness. It adds an engram-owned render
-// of codex-lesson in a second slug and a hand-authored file of that name in a
-// third.
+// Group), each rendered into the other harness (codex-lesson, being global,
+// into Claude's shared dir). It adds an engram-owned render of codex-lesson in a
+// second slug, as a sync before the shared dir existed would have left, and a
+// hand-authored file of that name in a third.
 func forgetFixture(t *testing.T) (canon, claudeMem, codexNotes string, args []string) {
 	t.Helper()
 	canon, claudeMem, codexNotes, args = setupTwoHarnesses(t)
@@ -24,7 +25,7 @@ func forgetFixture(t *testing.T) (canon, claudeMem, codexNotes string, args []st
 		}
 	}()
 	projects := filepath.Dir(filepath.Dir(claudeMem))
-	render, err := os.ReadFile(filepath.Join(claudeMem, "codex-lesson.md"))
+	render, err := os.ReadFile(filepath.Join(sharedDirOf(claudeMem), "codex-lesson.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,13 +51,13 @@ func TestForgetDryRunWritesNothing(t *testing.T) {
 	if !exists(filepath.Join(canon, "codex-lesson.md")) || exists(tombstone.Path(canon, "codex-lesson")) {
 		t.Error("a dry-run must not touch canonical or write a tombstone")
 	}
-	if !exists(filepath.Join(claudeMem, "codex-lesson.md")) {
+	if !exists(filepath.Join(sharedDirOf(claudeMem), "codex-lesson.md")) {
 		t.Error("a dry-run must not remove renders")
 	}
 	data, _ := env["data"].(map[string]any)
 	renders, _ := data["renders"].([]any)
 	if len(renders) != 2 {
-		t.Errorf("dry-run should plan the two engram-owned Claude renders, got %v", renders)
+		t.Errorf("dry-run should plan the two engram-owned Claude renders (shared dir and -work-y), got %v", renders)
 	}
 }
 
@@ -81,14 +82,14 @@ func TestForgetApplyRetiresTheMemoryAndItsRenders(t *testing.T) {
 
 	// Every engram-owned render is gone, index lines included...
 	for _, p := range []string{
-		filepath.Join(claudeMem, "codex-lesson.md"),
+		filepath.Join(sharedDirOf(claudeMem), "codex-lesson.md"),
 		filepath.Join(projects, "-work-y", "memory", "codex-lesson.md"),
 	} {
 		if exists(p) {
 			t.Errorf("engram render %s should be removed", p)
 		}
 	}
-	for _, dir := range []string{claudeMem, filepath.Join(projects, "-work-y", "memory")} {
+	for _, dir := range []string{sharedDirOf(claudeMem), filepath.Join(projects, "-work-y", "memory")} {
 		idx, _ := os.ReadFile(filepath.Join(dir, "MEMORY.md"))
 		if strings.Contains(string(idx), "engram name=codex-lesson") {
 			t.Errorf("%s still indexes codex-lesson:\n%s", dir, idx)

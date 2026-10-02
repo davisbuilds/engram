@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+
+	"github.com/davisbuilds/engram/internal/marker"
 )
 
 // Purge removes the engram-owned renders of forgotten memories that engram can
@@ -15,6 +17,11 @@ import (
 type Purge struct {
 	// ClaudeProjects is <claude home>/projects.
 	ClaudeProjects string
+	// SharedDir is the shared Claude memory dir (<claude home>/engram/memory).
+	SharedDir string
+	// SharedRulesFile is the rules file importing SharedDir's index, removed
+	// (when engram-owned) once the purge leaves nothing shared.
+	SharedRulesFile string
 	// CodexExtDir is engram's Codex extension directory.
 	CodexExtDir string
 	Names       []string
@@ -35,6 +42,11 @@ func (p Purge) Plan() ([]Action, error) {
 			return nil, err
 		}
 		actions = append(actions, as...)
+	}
+	if a, ok, err := p.planSharedRules(); err != nil {
+		return nil, err
+	} else if ok {
+		actions = append(actions, a)
 	}
 	as, err := p.planCodex()
 	if err != nil {
@@ -61,6 +73,22 @@ func (p Purge) Apply() (Result, error) {
 				}
 			}
 			return removeIndexLine(dir, a.Name)
+		}); err != nil {
+			return res, err
+		}
+	}
+	if p.SharedDir != "" {
+		if err := p.applyLocked(p.SharedDir, func(string) ([]Action, error) {
+			a, ok, err := p.planSharedRules()
+			if !ok {
+				return nil, err
+			}
+			return []Action{a}, err
+		}, &res, func(a Action) error {
+			if err := os.Remove(a.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+			return nil
 		}); err != nil {
 			return res, err
 		}
@@ -101,8 +129,21 @@ func (p Purge) applyLocked(dir string, plan func(string) ([]Action, error), res 
 	return nil
 }
 
-// claudeDirs lists every project slug's memory directory.
+// claudeDirs lists every project slug's memory directory, then the shared
+// memory dir when it exists.
 func (p Purge) claudeDirs() ([]string, error) {
+	dirs, err := p.slugDirs()
+	if err != nil {
+		return nil, err
+	}
+	if p.SharedDir != "" && fileExists(p.SharedDir) {
+		dirs = append(dirs, p.SharedDir)
+	}
+	return dirs, nil
+}
+
+// slugDirs lists every project slug's memory directory.
+func (p Purge) slugDirs() ([]string, error) {
 	if p.ClaudeProjects == "" {
 		return nil, nil
 	}
@@ -140,6 +181,35 @@ func (p Purge) planClaude(dir string) ([]Action, error) {
 		}
 	}
 	return actions, nil
+}
+
+// planSharedRules plans removing the engram-owned rules file when the purge
+// leaves no engram render in the shared dir, so the file never imports an
+// index that is gone. A hand-authored file at that path is never touched.
+func (p Purge) planSharedRules() (Action, bool, error) {
+	if p.SharedDir == "" || p.SharedRulesFile == "" {
+		return Action{}, false, nil
+	}
+	cur, err := os.ReadFile(p.SharedRulesFile)
+	if errors.Is(err, os.ErrNotExist) {
+		return Action{}, false, nil
+	}
+	if err != nil {
+		return Action{}, false, err
+	}
+	if !marker.IsSharedRules(cur) {
+		return Action{}, false, nil
+	}
+	owned, _, err := scanMemoryDir(p.SharedDir)
+	if err != nil {
+		return Action{}, false, err
+	}
+	for name := range owned {
+		if !slices.Contains(p.Names, name) {
+			return Action{}, false, nil
+		}
+	}
+	return Action{Stale, RulesActionName, p.SharedRulesFile, purgeNote + " (nothing left shared)"}, true, nil
 }
 
 func (p Purge) planCodex() ([]Action, error) {

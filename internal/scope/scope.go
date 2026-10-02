@@ -130,3 +130,22 @@ func InView(renderScope string, m *schema.CanonicalMemory, cwd, agent, host stri
 			listMatch(m.AppliesTo.Agents, agent) &&
 			hostMatch(m.AppliesTo.Hosts, host))
 }
+
+// IsShared reports whether m belongs in the one index every Claude project
+// shares: global, with no cwd narrowing (one file cannot honor a cwd per
+// project), and admitted for agent on host.
+func IsShared(m *schema.CanonicalMemory, agent, host string) bool {
+	return m.Scope == "global" && len(m.AppliesTo.Cwd) == 0 &&
+		listMatch(m.AppliesTo.Agents, agent) && hostMatch(m.AppliesTo.Hosts, host)
+}
+
+// Shared returns the memories IsShared admits.
+func Shared(mems []*schema.CanonicalMemory, agent, host string) []*schema.CanonicalMemory {
+	var out []*schema.CanonicalMemory
+	for _, m := range mems {
+		if IsShared(m, agent, host) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
