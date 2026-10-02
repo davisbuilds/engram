@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/davisbuilds/engram/internal/gitroot"
 	"github.com/davisbuilds/engram/internal/schema"
 	slug2 "github.com/davisbuilds/engram/internal/slug"
 )
@@ -109,22 +110,19 @@ func projectScopeFromRepo(path string) string {
 	if path == "" {
 		return "global"
 	}
+	// A linked worktree resolves to the repository it was added from. A repo at
+	// (or above) the home directory is not a project: it would claim every
+	// path beneath it.
+	root, ok := gitroot.Main(path)
+	if !ok {
+		return "global"
+	}
 	home, _ := os.UserHomeDir()
 	home = strings.TrimRight(home, string(filepath.Separator))
-	d := path
-	for {
-		if d == "" || d == string(filepath.Separator) || (home != "" && d == home) {
-			return "global"
-		}
-		if _, err := os.Stat(filepath.Join(d, ".git")); err == nil {
-			return "project:" + filepath.Base(d)
-		}
-		parent := filepath.Dir(d)
-		if parent == d {
-			return "global"
-		}
-		d = parent
+	if root == string(filepath.Separator) || home != "" && (root == home || strings.HasPrefix(home, root+string(filepath.Separator))) {
+		return "global"
 	}
+	return "project:" + filepath.Base(root)
 }
 
 // deriveCodexScope reads a Task Group's `applies_to: cwd=<path>` line and maps

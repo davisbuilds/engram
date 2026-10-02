@@ -56,8 +56,8 @@ func cmdMigrate(e *env, name string, args []string) int {
 		return exitError
 	}
 	warns := warnParseErrors(perrs)
-	rel := scope.RelevantFor(mems, s.cwd, s.agentFor("claude"), s.host)
-	tgt := sync.ClaudeMigrateTarget{MemoryDir: claudeMemoryDir(h.Home, s.cwd), Desired: rel}
+	rel := scope.RelevantFor(mems, s.claudeRoot, s.agentFor("claude"), s.host)
+	tgt := sync.ClaudeMigrateTarget{MemoryDir: claudeMemoryDir(h.Home, s.claudeRoot), Desired: rel}
 
 	base := map[string]any{"harness": harness, "apply": e.apply, "cwd": s.cwd}
 

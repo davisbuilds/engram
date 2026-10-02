@@ -227,7 +227,7 @@ func cmdImport(e *env, name string, args []string) int {
 			// Sweep every project slug, not just the current cwd's.
 			res, err = importer.ImportClaudeAll(h.Home)
 		} else {
-			res, err = importer.ImportClaude(claudeMemoryDir(h.Home, s.cwd), s.cwd)
+			res, err = importer.ImportClaude(claudeMemoryDir(h.Home, s.claudeRoot), s.cwd)
 		}
 	case config.HarnessCodex:
 		h := s.cfg.Harnesses[config.HarnessCodex]

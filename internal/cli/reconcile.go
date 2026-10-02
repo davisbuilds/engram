@@ -391,8 +391,8 @@ func (s *session) enricherTargets(mems []*schema.CanonicalMemory, keepStale bool
 	var warns []string
 	if h := s.cfg.Harnesses[config.HarnessClaude]; h.Enabled() {
 		agent := s.agentFor("claude")
-		dir := claudeMemoryDir(h.Home, s.cwd)
-		rel := excludeSourceSlug(withoutShared(scope.RelevantFor(mems, s.cwd, agent, s.host), agent, s.host), filepath.Base(filepath.Dir(dir)))
+		dir := claudeMemoryDir(h.Home, s.claudeRoot)
+		rel := excludeSourceSlug(withoutShared(scope.RelevantFor(mems, s.claudeRoot, agent, s.host), agent, s.host), filepath.Base(filepath.Dir(dir)))
 		targets = append(targets, sync.ClaudeTarget{MemoryDir: dir, Desired: rel, KeepStale: keepStale},
 			sharedTarget(h.Home, scope.Shared(mems, agent, s.host), keepStale))
 		warns = append(warns, harnessWarnings(harness.CheckClaude(h.Home, true))...)

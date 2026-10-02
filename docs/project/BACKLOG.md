@@ -164,8 +164,15 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
 
 ## CLI contract
 
-- **`--cwd` and symlinks.** `--cwd` is now tilde-expanded, made absolute and
-  cleaned, but symlinks are left as given, and the default cwd comes from
-  `os.Getwd`, which can return the logical `$PWD` (`/tmp/x`) rather than the
-  physical path (`/private/tmp/x`). Unanswered: which form Claude Code slugs. Check
-  a real slug created from a symlinked directory before choosing to resolve.
+- **`--cwd` and symlinks.** `--cwd` is tilde-expanded, made absolute and cleaned,
+  and the Claude slug follows the main repository's root (measured 2026-10-02:
+  Claude Code keeps auto memory in the repository's slug for a session in a
+  subdirectory or a linked worktree; only transcripts go under the cwd's slug).
+  Symlinks are still left as given, and the default cwd comes from `os.Getwd`,
+  which can return the logical `$PWD` (`/tmp/x`) rather than the physical path
+  (`/private/tmp/x`). Unanswered: which form Claude Code slugs. Check a real slug
+  created from a symlinked directory before choosing to resolve.
+- **Codex relevance ignores the repository root.** Codex targets judge tier and
+  in-view by the literal cwd, so from a linked worktree a `project:<repo>`
+  memory is neither rendered nor swept. Harmless (Codex keeps one store), but it
+  differs from the Claude target, which follows the repository root.
