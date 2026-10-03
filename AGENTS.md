@@ -12,6 +12,8 @@ is the intelligence. See `README.md` for the user-facing overview.
 - `docs/releases.md` — release PRs, version policy, build provenance, and activation.
 - `docs/headless.md` — how a headless agent drives engram: `next_steps` leads and
   the `curate` proposer/applier loop.
+- `docs/operating.md` — versioning the canonical store in Git and running engram
+  on more than one machine (one writer, render-only consumers).
 - `docs/project/BACKLOG.md` — future-only friction points and deferred follow-ups noted
   during implementation.
 - `CONTRIBUTING.md` — public contribution scope, review expectations, and release intent.

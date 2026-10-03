@@ -31,7 +31,11 @@ the others on the next sync.
   engram renders memories meant for every project once, into a shared dir whose
   index a user-level rules file imports; projects hold only their own. Allow
   Claude to read the shared files once in `~/.claude/settings.json`:
-  `"permissions": {"allow": ["Read(~/.claude/engram/**)"]}`.
+  `"permissions": {"allow": ["Read(~/.claude/engram/**)"]}`. Prefer a copy in
+  every project? Set `shared_index: false` under `harnesses.claude-code`.
+- **Versioned, single-writer store.** Keep canonical in Git and let one machine
+  write it while others render from a pulled copy; see
+  [`docs/operating.md`](docs/operating.md).
 - **Scoped, explicit promotion.** Memories are `global` or `project`-scoped and
   filtered by cwd globs, agent, and host. Widening a memory's reach is an
   explicit, reviewable action — nothing leaks up implicitly.
