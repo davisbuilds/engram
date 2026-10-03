@@ -148,6 +148,38 @@ func TestEditedRenderOfUnsharedMemoryIsHeld(t *testing.T) {
 	}
 }
 
+// TestKnownSettlesAnEditCanonicalHolds pins Known: an edited render of a memory
+// that no longer renders here is removed once canonical says what the edit says
+// (the edit lives on in canonical), and still held while canonical differs.
+func TestKnownSettlesAnEditCanonicalHolds(t *testing.T) {
+	m := mem("alpha")
+	tg := stampedTarget(t, m)
+	path := filepath.Join(tg.Dir, "alpha.md")
+	editBody(t, path, "edited in place\n")
+	tg.Desired = []*schema.CanonicalMemory{mem("beta")}
+
+	moved := mem("alpha")
+	moved.Body = "a different canonical body\n"
+	tg.Known = map[string]*schema.CanonicalMemory{"alpha": moved}
+	res, err := tg.Apply()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAction(res.Conflicts, Conflict, "alpha") || readOr(t, path) == "" {
+		t.Fatalf("an edit canonical does not hold was not kept: %+v", res)
+	}
+
+	took := mem("alpha")
+	took.Body = "edited in place\n"
+	tg.Known = map[string]*schema.CanonicalMemory{"alpha": took}
+	if _, err := tg.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("an edit canonical already holds was kept (err=%v)", err)
+	}
+}
+
 // TestUnstampedRenderIsNotAnEdit pins backward compatibility: a render written
 // before stamping has no base, so it is updated as before, never held.
 func TestUnstampedRenderIsNotAnEdit(t *testing.T) {

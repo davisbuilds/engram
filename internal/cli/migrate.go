@@ -53,6 +53,13 @@ func cmdMigrate(e *env, name string, args []string) int {
 		return exitUsage
 	}
 	if pa.bools["--shared"] {
+		if !h.SharesIndex() {
+			e.emit(name, false, nil, nil, &RespError{
+				Code:    "shared_index_disabled",
+				Message: "migrate --shared retires originals into the shared index, which this config turns off (shared_index: false)",
+			}, nil)
+			return exitUsage
+		}
 		return cmdMigrateShared(e, name, s, h.Home)
 	}
 

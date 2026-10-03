@@ -363,6 +363,13 @@ explicit rather than ambient.
   Claude reads a shared memory's file outside the session's working directory,
   which Claude Code gates by permission; allow it once in user settings with
   `Read(<claude home>/engram/**)` (engram never edits Claude Code settings).
+  **The shared index is on by default; `shared_index: false` turns it off** (see
+  Configuration). Every relevant memory then renders into each project slug, as
+  before the index existed, and the next `sync` removes engram's shared renders
+  and rules file as `STALE`. An edited shared render is held, never removed,
+  until `reconcile` imports it; once canonical says what the edit says, the
+  render is removed and the slug carries the edit. `migrate claude-code
+  --shared` exits `2` with `shared_index_disabled` while the index is off.
   **Edits to a shared render are imported, never overwritten.** Each shared
   render records the hash of the content engram wrote (`metadata.engram_base`,
   the same `description`/`type`/`body` hash as import's merge base). A render
@@ -469,6 +476,9 @@ explicit rather than ambient.
   the default home); an empty `harnesses:` key disables every harness. A config naming one harness — a scratch area, say — thus
   never writes the others at the user's real homes; commands skip the unlisted
   harness with a warning saying it was not listed, and `config` reports it.
+- `harnesses.claude-code.shared_index: false` turns off Claude's shared memory
+  index (default on; see Claude's shared memory above). `config` reports the
+  resolved value as `data.claude_shared_index`.
 - engram never edits another program's config silently; `hook print` emits a
   snippet for the user/agent to place, it does not mutate `settings.json`.
 
