@@ -7,7 +7,6 @@ import (
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/discover"
 	"github.com/davisbuilds/engram/internal/schema"
-	"github.com/davisbuilds/engram/internal/scope"
 	"github.com/davisbuilds/engram/internal/store"
 	"github.com/davisbuilds/engram/internal/sync"
 )
@@ -254,8 +253,7 @@ func cmdImportShared(e *env, name string, s *session, refresh, keep map[string]b
 		}
 		keepStale, hwarns := staleHold(s.cfg.CanonicalRoot, perrs)
 		warns = append(warns, hwarns...)
-		agent := s.agentFor("claude")
-		tg := sharedTarget(h.Home, scope.Shared(now, agent, s.host), keepStale)
+		_, tg := s.claudeSplit(h, now, s.agentFor("claude"), keepStale)
 		tg.Discard = keep
 		res, aerr := tg.Apply()
 		if aerr != nil {

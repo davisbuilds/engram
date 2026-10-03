@@ -48,6 +48,7 @@ func cmdConfig(e *env, name string, _ []string) int {
 	e.emit(name, anyReady, map[string]any{
 		"canonical_root":        cfg.CanonicalRoot,
 		"canonical_root_exists": canonExists,
+		"claude_shared_index":   claudeH.SharesIndex(),
 		"harnesses":             reports,
 	}, warns, nil, nil)
 	return exitOK

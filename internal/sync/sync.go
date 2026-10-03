@@ -91,6 +91,9 @@ type ClaudeTarget struct {
 	// (metadata.engram_base), and holds a render edited since as a CONFLICT
 	// rather than overwrite or remove it, so the edit can be imported.
 	Stamp bool
+	// Known holds canonical memories that do not render here, by name. An edited
+	// render of one is settled once canonical says what the edit says.
+	Known map[string]*schema.CanonicalMemory
 	// Discard names edited renders to overwrite or remove anyway: the operator
 	// chose canonical over the edit.
 	Discard map[string]bool
@@ -160,7 +163,7 @@ func (t ClaudeTarget) Plan() ([]Action, error) {
 		case t.KeepStale && !t.Discard[name]:
 			// Held while canonical may be incomplete, unless the operator named
 			// this render for discarding.
-		case t.held(name, cur.content, nil):
+		case t.held(name, cur.content, t.Known[name]):
 			actions = append(actions, Action{Conflict, name, cur.path, HeldEditNote + "; it no longer renders here"})
 		default:
 			actions = append(actions, Action{Stale, name, cur.path, "canonical no longer renders here"})
@@ -250,8 +253,9 @@ func (t ClaudeTarget) content(existing []byte, m *schema.CanonicalMemory) ([]byt
 }
 
 // held reports whether a stamping target must leave an owned render alone: it
-// was edited since engram wrote it, the edit is not what m (nil when m no
-// longer renders here) already says, and the operator has not discarded it.
+// was edited since engram wrote it, the edit is not what m (canonical's memory,
+// or nil when canonical has none by that name) already says, and the operator
+// has not discarded it.
 func (t ClaudeTarget) held(name string, content []byte, m *schema.CanonicalMemory) bool {
 	if !t.Stamp {
 		return false

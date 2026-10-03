@@ -34,6 +34,8 @@ type ClaudeSharedTarget struct {
 	KeepStale bool
 	// Discard names edited shared renders to overwrite or remove anyway.
 	Discard map[string]bool
+	// Known holds canonical memories that are not shared, as ClaudeTarget.Known.
+	Known map[string]*schema.CanonicalMemory
 }
 
 // Harness identifies this target in command output.
@@ -43,7 +45,7 @@ func (ClaudeSharedTarget) Harness() string { return SharedHarness }
 func (t ClaudeSharedTarget) DesiredMemories() []*schema.CanonicalMemory { return t.Desired }
 
 func (t ClaudeSharedTarget) dir() ClaudeTarget {
-	return ClaudeTarget{MemoryDir: t.Dir, Desired: t.Desired, KeepStale: t.KeepStale, Stamp: true, Discard: t.Discard}
+	return ClaudeTarget{MemoryDir: t.Dir, Desired: t.Desired, KeepStale: t.KeepStale, Stamp: true, Discard: t.Discard, Known: t.Known}
 }
 
 // Plan computes the actions without writing: the shared dir's, then the rules

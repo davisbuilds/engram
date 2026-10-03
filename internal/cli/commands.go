@@ -122,10 +122,10 @@ func (s *session) targets() ([]sync.Target, []string, *RespError) {
 	var targets []sync.Target
 	if h := s.cfg.Harnesses[config.HarnessClaude]; h.Enabled() {
 		agent := s.agentFor("claude")
-		rel := withoutShared(scope.RelevantFor(mems, s.claudeRoot, agent, s.host), agent, s.host)
+		rel, shared := s.claudeSplit(h, mems, agent, keepStale)
 		targets = append(targets, sync.ClaudeTarget{
 			MemoryDir: claudeMemoryDir(h.Home, s.claudeRoot), Desired: rel, KeepStale: keepStale,
-		}, sharedTarget(h.Home, scope.Shared(mems, agent, s.host), keepStale))
+		}, shared)
 		warns = append(warns, harnessWarnings(harness.CheckClaude(h.Home, true))...)
 	} else {
 		warns = append(warns, s.skippedNote(config.HarnessClaude))
@@ -451,6 +451,33 @@ func sharedTarget(claudeHome string, shared []*schema.CanonicalMemory, keepStale
 		Desired:   shared,
 		KeepStale: keepStale,
 	}
+}
+
+// claudeSplit divides the Claude memories for this session between the project
+// slug and the shared target. With the shared index on, a shared memory renders
+// only into the shared target; with it off, everything relevant renders into
+// the slug and the shared target is left wanting nothing, so its old renders and
+// rules file are cleaned up. Either way the shared target knows the canonical
+// memories it does not render, so an edit canonical already holds is settled.
+func (s *session) claudeSplit(h config.Harness, mems []*schema.CanonicalMemory, agent string, keepStale bool) ([]*schema.CanonicalMemory, sync.ClaudeSharedTarget) {
+	rel := scope.RelevantFor(mems, s.claudeRoot, agent, s.host)
+	var shared []*schema.CanonicalMemory
+	if h.SharesIndex() {
+		rel = withoutShared(rel, agent, s.host)
+		shared = scope.Shared(mems, agent, s.host)
+	}
+	tg := sharedTarget(h.Home, shared, keepStale)
+	tg.Known = map[string]*schema.CanonicalMemory{}
+	inShared := map[string]bool{}
+	for _, m := range shared {
+		inShared[m.Name] = true
+	}
+	for _, m := range mems {
+		if !inShared[m.Name] {
+			tg.Known[m.Name] = m
+		}
+	}
+	return rel, tg
 }
 
 // withoutShared drops the memories the shared target renders, so a project

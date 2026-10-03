@@ -27,6 +27,9 @@ const (
 type Harness struct {
 	Home     string `yaml:"home"`
 	Disabled bool   `yaml:"disabled"`
+	// SharedIndex (claude-code only) turns Claude's shared memory index off when
+	// false; nil means the default, on.
+	SharedIndex *bool `yaml:"shared_index"`
 	// Unlisted marks a harness the config's harnesses: section left out; it is
 	// disabled, and Unlisted lets a warning say why.
 	Unlisted bool `yaml:"-"`
@@ -34,6 +37,10 @@ type Harness struct {
 
 // Enabled reports whether engram may act on this harness.
 func (h Harness) Enabled() bool { return !h.Disabled }
+
+// SharesIndex reports whether Claude's shared memory index is on: memories every
+// project sees render once into a shared dir instead of into each project.
+func (h Harness) SharesIndex() bool { return h.SharedIndex == nil || *h.SharedIndex }
 
 // ModelChoice pins the model and reasoning effort a headless curate run uses for
 // one harness. Empty fields fall back to the built-in defaults.

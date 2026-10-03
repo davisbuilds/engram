@@ -194,3 +194,28 @@ func TestCurateTimeout(t *testing.T) {
 		}
 	}
 }
+
+// TestSharedIndexDefaultsOnAndTurnsOff pins the claude-code shared_index key:
+// absent means on, false turns it off.
+func TestSharedIndexDefaultsOnAndTurnsOff(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("harnesses:\n  claude-code:\n    home: /tmp/c\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Harnesses[HarnessClaude].SharesIndex() {
+		t.Error("the shared index should default to on")
+	}
+	if err := os.WriteFile(path, []byte("harnesses:\n  claude-code:\n    home: /tmp/c\n    shared_index: false\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, err = Load(path); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Harnesses[HarnessClaude].SharesIndex() {
+		t.Error("shared_index: false should turn the shared index off")
+	}
+}
