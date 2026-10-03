@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/davisbuilds/engram/compare/v0.3.0...v0.4.0) (2026-10-03)
+
+
+### Features
+
+* **config:** shared_index turns Claude's shared memory index off ([#40](https://github.com/davisbuilds/engram/issues/40)) ([4ffb831](https://github.com/davisbuilds/engram/commit/4ffb831a08cc5592b4b2b08f503e8a544823ff6c))
+
 ## [0.3.0](https://github.com/davisbuilds/engram/compare/v0.2.0...v0.3.0) (2026-10-02)
 
 
