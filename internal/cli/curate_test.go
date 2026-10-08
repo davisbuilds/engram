@@ -2,26 +2,30 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/davisbuilds/engram/internal/agentexec"
+	"github.com/davisbuilds/engram/internal/curate"
 )
 
 // fakeClaudeRunner returns a claude `--output-format json` envelope whose result
 // carries the given assistant text (a fenced JSON proposal in these tests), so
 // the curate loop runs end-to-end without spawning a real model.
-func fakeClaudeRunner(assistantText string) func([]string) ([]byte, error) {
-	return func([]string) ([]byte, error) {
+func fakeClaudeRunner(assistantText string) agentexec.Runner {
+	return func(agentexec.Invocation) ([]byte, error) {
 		env := map[string]any{"type": "result", "is_error": false, "result": assistantText}
 		b, _ := json.Marshal(env)
 		return b, nil
 	}
 }
 
-func curateEnv(cfg string, apply bool, runner func([]string) ([]byte, error)) *env {
+func curateEnv(cfg string, apply bool, runner agentexec.Runner) *env {
 	return &env{jsonMode: true, apply: apply, config: cfg, runnerFor: func(time.Duration) agentexec.Runner { return runner }}
 }
 
@@ -116,7 +120,7 @@ func TestCurateAgentRunFailureSurfaces(t *testing.T) {
 	cfg := filepath.Join(dir, "c.yaml")
 	writeFile(t, cfg, "canonical_root: "+canon+"\n")
 
-	failing := func([]string) ([]byte, error) { return nil, os.ErrPermission }
+	failing := func(agentexec.Invocation) ([]byte, error) { return nil, os.ErrPermission }
 	defer silenceStdout(t)()
 	code := cmdCurate(curateEnv(cfg, true, failing), "curate", []string{"--harness", "claude-code"})
 	if code != exitError {
@@ -153,5 +157,71 @@ func TestCurateTimeoutReachesTheRunner(t *testing.T) {
 	}
 	if code, _, called := run("--timeout", "soon"); code != exitUsage || called {
 		t.Errorf("--timeout soon: exit %d, agent ran %v; want %d and no run", code, called, exitUsage)
+	}
+}
+
+// The corpus reaches the agent on stdin, never in argv: a store past the OS
+// argument limit would otherwise fail at exec.
+func TestCurateSendsTheCorpusOnStdin(t *testing.T) {
+	dir := t.TempDir()
+	canon := filepath.Join(dir, "canonical")
+	writeFile(t, filepath.Join(canon, "big.md"),
+		"---\nname: big\ndescription: d\ntype: lesson\nscope: global\n---\ncorpus-marker body\n")
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+canon+"\n")
+	defer silenceStdout(t)()
+	for _, harness := range []string{"claude-code", "codex"} {
+		var got agentexec.Invocation
+		runner := func(inv agentexec.Invocation) ([]byte, error) {
+			got = inv
+			return nil, errors.New("stop after capturing the invocation")
+		}
+		cmdCurate(curateEnv(cfg, false, runner), "curate", []string{"--harness", harness})
+		if !strings.Contains(got.Stdin, "corpus-marker") {
+			t.Errorf("%s: the corpus is not on stdin", harness)
+		}
+		for _, a := range got.Argv {
+			if strings.Contains(a, "corpus-marker") {
+				t.Errorf("%s: the corpus is in argv", harness)
+			}
+		}
+	}
+}
+
+// A batch that fails midway is rolled back and reported as apply, with nothing
+// applied; one whose rollback also fails is apply_partial.
+func TestCurateApplyReportsAFailedBatch(t *testing.T) {
+	dir := t.TempDir()
+	canon := filepath.Join(dir, "canonical")
+	seedCanon(t, canon, "dup-a", "dup-b")
+	writeFile(t, filepath.Join(canon, ".forgotten"), "in the way\n")
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+canon+"\n")
+	proposal := "```json\n" + `{"operations":[
+	  {"op":"merge","sources":["dup-a","dup-b"],"memory":{"name":"dup","description":"d","type":"lesson","scope":"global","body":"b\n"},"reason":"same"}
+	]}` + "\n```"
+	var code int
+	out := captureStdout(t, func() {
+		code = cmdCurate(curateEnv(cfg, true, fakeClaudeRunner(proposal)), "curate", []string{"--harness", "claude-code"})
+	})
+	var env map[string]any
+	if err := json.Unmarshal([]byte(out), &env); err != nil {
+		t.Fatalf("stdout is not one JSON envelope: %v\n%s", err, out)
+	}
+	if code != exitError {
+		t.Fatalf("exit = %d, want %d", code, exitError)
+	}
+	if e, _ := env["error"].(map[string]any); e["code"] != "apply" {
+		t.Errorf("error = %v, want code apply", env["error"])
+	}
+	if data, _ := env["data"].(map[string]any); data["applied"] == nil || len(data["applied"].([]any)) != 0 {
+		t.Errorf("data.applied = %v, want empty after a rollback", data["applied"])
+	}
+	if exists(filepath.Join(canon, "dup.md")) || !exists(filepath.Join(canon, "dup-a.md")) {
+		t.Error("canonical was not rolled back")
+	}
+	partial := &curate.PartialApplyError{Err: errors.New("apply merge: disk full"), Rollback: errors.New("not restored: a.md")}
+	if got := applyErrorCode(fmt.Errorf("wrapped: %w", partial)); got != "apply_partial" {
+		t.Errorf("applyErrorCode(partial) = %q, want apply_partial", got)
 	}
 }

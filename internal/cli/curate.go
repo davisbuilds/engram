@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"errors"
+
 	"github.com/davisbuilds/engram/internal/agentexec"
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/curate"
@@ -67,19 +69,19 @@ func cmdCurate(e *env, name string, args []string) int {
 		return exitError
 	}
 
-	var argv []string
+	var inv agentexec.Invocation
 	switch harness {
 	case config.HarnessClaude:
-		argv = agentexec.ClaudeArgvOpts(prompt, opts)
+		inv = agentexec.ClaudeInvocation(prompt, opts)
 	case config.HarnessCodex:
-		argv = agentexec.CodexArgvOpts(prompt, opts)
+		inv = agentexec.CodexInvocation(prompt, opts)
 	}
 	invocation := map[string]any{
 		"harness": harness, "model": choice.Model, "effort": choice.Effort, "corpus_size": len(mems),
 		"timeout": timeout.String(),
 	}
 
-	stdout, err := e.runnerFor(timeout)(argv)
+	stdout, err := e.runnerFor(timeout)(inv)
 	if err != nil {
 		e.emit(name, false, map[string]any{"invocation": invocation}, warns,
 			&RespError{Code: "agent_run", Message: err.Error()}, nil)
@@ -141,12 +143,27 @@ func cmdCurate(e *env, name string, args []string) int {
 	applied, aerr := curate.Apply(cfg.CanonicalRoot, proposal.Operations)
 	if aerr != nil {
 		data["applied"] = orEmpty(applied)
-		e.emit(name, false, data, warns, &RespError{Code: "apply", Message: aerr.Error()}, nil)
+		var partial *curate.PartialApplyError
+		if errors.As(aerr, &partial) {
+			data["unrestored"] = orEmpty(partial.Unrestored)
+		}
+		e.emit(name, false, data, warns, &RespError{Code: applyErrorCode(aerr), Message: aerr.Error()}, nil)
 		return exitError
 	}
 	data["applied"] = orEmpty(applied)
 	e.emit(name, true, data, warns, nil, nil)
 	return exitOK
+}
+
+// applyErrorCode tells a failed batch that was rolled back (apply: canonical is
+// unchanged) from one that could not be (apply_partial: data.unrestored lists
+// each file that still differs from before the batch).
+func applyErrorCode(err error) string {
+	var partial *curate.PartialApplyError
+	if errors.As(err, &partial) {
+		return "apply_partial"
+	}
+	return "apply"
 }
 
 func opResultItems(results []curate.OpResult) []map[string]any {

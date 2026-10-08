@@ -39,7 +39,8 @@ is the intelligence. See `README.md` for the user-facing overview.
   engram; judgment lives in an agent. `curate` is the sole command that invokes a
   headless agent — and even there the agent only *proposes* operations; engram
   validates each against the corpus and schema and is the *only* mutator, failing
-  closed (applies nothing) if any proposed operation is invalid.
+  closed (applies nothing) if any proposed operation is invalid, and rolling the
+  batch back if a write fails midway.
 - **All canonical mutation serializes** under one exclusive apply lock
   (`internal/lock`, an advisory `flock` the kernel releases automatically on
   process exit or crash) — `remember`, `share`, `import --apply`,

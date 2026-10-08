@@ -85,7 +85,9 @@ engram curate --model claude-opus-5 --effort high --json   # override the model/
 Flow, and where each layer's authority begins and ends:
 
 1. **engram (deterministic):** gathers every canonical memory + `review`
-   findings into a corpus and builds the prompt.
+   findings into a corpus and builds the prompt. The prompt reaches the agent on
+   stdin, not as an argument, so the store's size is not capped by the OS
+   argument limit.
 2. **agent (judgment):** returns JSON `operations` — `add` / `update` / `merge` /
    `remove` / `rescope`, each with a `reason`. It is handed the corpus as text
    and needs no tools; it never touches the filesystem.
@@ -97,7 +99,9 @@ Flow, and where each layer's authority begins and ends:
 does not exist, a memory that fails the schema, a rename smuggled through
 `update`), `--apply` applies *nothing* and exits `3`, listing the offenders as
 `next_steps`. engram never partially applies a proposal it could not fully
-validate.
+validate. A write that fails partway through a valid batch rolls back the batch,
+leaving canonical as it was; only a rollback that fails too leaves it partly
+applied, reported as `apply_partial`.
 
 **Curated edits stay curated.** An `update` or `merge` keeps the stored
 memory's provenance, including import's merge base, so a later import reports

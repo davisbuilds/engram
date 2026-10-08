@@ -277,16 +277,34 @@ func Apply(root string, ops []Operation) ([]Applied, error) {
 		return nil, fmt.Errorf("refusing to apply: proposal no longer validates against current canonical (%d of %d invalid)", countInvalid(results), len(results))
 	}
 
+	snap, err := takeSnapshot(root)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot canonical before applying: %w", err)
+	}
 	applied := make([]Applied, 0, len(ops))
 	for _, op := range ops {
-		a, err := applyOne(root, op)
+		a, err := applyStep(root, op)
 		if err != nil {
-			return applied, fmt.Errorf("apply %s: %w", op.Op, err)
+			err = fmt.Errorf("apply %s: %w", op.Op, err)
+			if rerr := snap.restore(root); rerr != nil {
+				// Report what is still changed on disk, not which operations
+				// ran: rollback may have undone those, and the failing
+				// operation may have left writes of its own.
+				left, cerr := snap.changed(root)
+				if cerr != nil {
+					rerr = errors.Join(rerr, fmt.Errorf("list what is still changed: %w", cerr))
+				}
+				return nil, &PartialApplyError{Err: err, Rollback: rerr, Unrestored: left}
+			}
+			return nil, fmt.Errorf("%w; rolled back, canonical is unchanged", err)
 		}
 		applied = append(applied, a)
 	}
 	return applied, nil
 }
+
+// applyStep applies one operation; tests replace it to fail a batch midway.
+var applyStep = applyOne
 
 func applyOne(root string, op Operation) (Applied, error) {
 	switch op.Op {
@@ -295,7 +313,7 @@ func applyOne(root string, op Operation) (Applied, error) {
 		if err != nil {
 			return Applied{}, err
 		}
-		if _, _, err := store.Save(root, m, true); err != nil {
+		if err := save(root, m); err != nil {
 			return Applied{}, err
 		}
 		return Applied{Op: op.Op, Name: op.Memory.Name}, nil
@@ -304,7 +322,7 @@ func applyOne(root string, op Operation) (Applied, error) {
 		if err != nil {
 			return Applied{}, err
 		}
-		if _, _, err := store.Save(root, m, true); err != nil {
+		if err := save(root, m); err != nil {
 			return Applied{}, err
 		}
 		var removed []string
@@ -335,13 +353,29 @@ func applyOne(root string, op Operation) (Applied, error) {
 			return Applied{}, fmt.Errorf("rescope target %q not found", op.Name)
 		}
 		m.Scope = op.ToScope
-		if _, _, err := store.Save(root, m, true); err != nil {
+		if err := save(root, m); err != nil {
 			return Applied{}, err
 		}
 		return Applied{Op: op.Op, Name: op.Name}, nil
 	default:
 		return Applied{}, fmt.Errorf("unknown operation %q", op.Op)
 	}
+}
+
+// save writes m over whatever canonical holds under its name. Save reports a
+// path it cannot write (a withheld file claiming the name, or something
+// discovery does not index occupying it) as a conflict, not an error; in a
+// validated batch that is a failure, or the operation would claim a write that
+// never happened.
+func save(root string, m *schema.CanonicalMemory) error {
+	out, path, err := store.Save(root, m, true)
+	if err != nil {
+		return err
+	}
+	if out == store.Conflict {
+		return fmt.Errorf("cannot write %s: %s is in the way", m.Name, path)
+	}
+	return nil
 }
 
 // keepProvenance returns m carrying the stored memory's provenance, whatever
