@@ -287,7 +287,14 @@ func Apply(root string, ops []Operation) ([]Applied, error) {
 		if err != nil {
 			err = fmt.Errorf("apply %s: %w", op.Op, err)
 			if rerr := snap.restore(root); rerr != nil {
-				return applied, &PartialApplyError{Err: err, Rollback: rerr}
+				// Report what is still changed on disk, not which operations
+				// ran: rollback may have undone those, and the failing
+				// operation may have left writes of its own.
+				left, cerr := snap.changed(root)
+				if cerr != nil {
+					rerr = errors.Join(rerr, fmt.Errorf("list what is still changed: %w", cerr))
+				}
+				return nil, &PartialApplyError{Err: err, Rollback: rerr, Unrestored: left}
 			}
 			return nil, fmt.Errorf("%w; rolled back, canonical is unchanged", err)
 		}

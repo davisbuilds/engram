@@ -143,6 +143,10 @@ func cmdCurate(e *env, name string, args []string) int {
 	applied, aerr := curate.Apply(cfg.CanonicalRoot, proposal.Operations)
 	if aerr != nil {
 		data["applied"] = orEmpty(applied)
+		var partial *curate.PartialApplyError
+		if errors.As(aerr, &partial) {
+			data["unrestored"] = orEmpty(partial.Unrestored)
+		}
 		e.emit(name, false, data, warns, &RespError{Code: applyErrorCode(aerr), Message: aerr.Error()}, nil)
 		return exitError
 	}
@@ -152,8 +156,8 @@ func cmdCurate(e *env, name string, args []string) int {
 }
 
 // applyErrorCode tells a failed batch that was rolled back (apply: canonical is
-// unchanged) from one that could not be (apply_partial: data.applied lists what
-// stayed applied).
+// unchanged) from one that could not be (apply_partial: data.unrestored lists
+// each file that still differs from before the batch).
 func applyErrorCode(err error) string {
 	var partial *curate.PartialApplyError
 	if errors.As(err, &partial) {

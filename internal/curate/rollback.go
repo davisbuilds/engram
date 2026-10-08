@@ -13,10 +13,14 @@ import (
 	"github.com/davisbuilds/engram/internal/lock"
 )
 
-// fileState is one regular file's bytes and permission bits.
+// fileState is one file as the batch found it: a regular file's bytes and
+// permission bits, or a symlink's target. Discovery follows a symlinked memory
+// file, and a save replaces the link with a regular file, so a link is state to
+// restore like any file.
 type fileState struct {
 	data []byte
 	perm fs.FileMode
+	link string
 }
 
 // snapshot records every file a curate batch could change under the canonical
@@ -26,10 +30,12 @@ type fileState struct {
 type snapshot map[string]fileState
 
 // PartialApplyError reports a batch that failed and could not be rolled back:
-// canonical is left partly applied, and Rollback names what was not restored.
+// canonical is left partly applied. Unrestored lists each path, relative to the
+// root, that still differs from before the batch.
 type PartialApplyError struct {
-	Err      error
-	Rollback error
+	Err        error
+	Rollback   error
+	Unrestored []string
 }
 
 func (e *PartialApplyError) Error() string {
@@ -41,7 +47,7 @@ func (e *PartialApplyError) Unwrap() error { return e.Err }
 // tracked reports whether a file belongs to the store: the apply lock and
 // engram's write temporaries do not (walkTracked skips Git's metadata).
 func tracked(d fs.DirEntry) bool {
-	if !d.Type().IsRegular() {
+	if !d.Type().IsRegular() && d.Type()&fs.ModeSymlink == 0 {
 		return false
 	}
 	name := d.Name()
@@ -76,6 +82,14 @@ func walkTracked(root string, fn func(rel, path string, d fs.DirEntry) error) er
 func takeSnapshot(root string) (snapshot, error) {
 	s := snapshot{}
 	err := walkTracked(root, func(rel, path string, d fs.DirEntry) error {
+		if d.Type()&fs.ModeSymlink != 0 {
+			target, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			s[rel] = fileState{link: target}
+			return nil
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -130,12 +144,56 @@ func (s snapshot) restore(root string) error {
 	return fmt.Errorf("not restored: %s: %w", strings.Join(failed, ", "), errors.Join(errs...))
 }
 
+// changed lists each path, relative to root, that differs from the snapshot:
+// created, removed, or holding other content.
+func (s snapshot) changed(root string) ([]string, error) {
+	var out []string
+	seen := map[string]bool{}
+	if err := walkTracked(root, func(rel, _ string, _ fs.DirEntry) error {
+		seen[rel] = true
+		if _, ok := s[rel]; !ok {
+			out = append(out, rel)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	for rel, f := range s {
+		if !seen[rel] || !f.matches(filepath.Join(root, rel)) {
+			out = append(out, rel)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// matches reports whether path already holds f.
+func (f fileState) matches(path string) bool {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return false
+	}
+	if f.link != "" {
+		target, err := os.Readlink(path)
+		return err == nil && info.Mode()&fs.ModeSymlink != 0 && target == f.link
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm() != f.perm {
+		return false
+	}
+	cur, err := os.ReadFile(path)
+	return err == nil && bytes.Equal(cur, f.data)
+}
+
 // writeBack makes path hold f, unless it already does.
 func (f fileState) writeBack(path string) error {
-	if info, err := os.Lstat(path); err == nil && info.Mode().IsRegular() && info.Mode().Perm() == f.perm {
-		if cur, rerr := os.ReadFile(path); rerr == nil && bytes.Equal(cur, f.data) {
-			return nil
+	if f.matches(path) {
+		return nil
+	}
+	if f.link != "" {
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
 		}
+		return os.Symlink(f.link, path)
 	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

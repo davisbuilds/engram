@@ -117,8 +117,9 @@ func TestApplyFailsAnAddBlockedOnDisk(t *testing.T) {
 	}
 }
 
-// When the rollback itself cannot finish, Apply says so, names what it could
-// not restore, and returns the operations that did apply.
+// When the rollback itself cannot finish, Apply says so and reports what is
+// still changed on disk, not which operations ran: here the update to b is
+// undone, and only a.md, which the failing operation left blocked, differs.
 func TestApplyReportsARollbackThatFails(t *testing.T) {
 	root := t.TempDir()
 	seed(t, root, corpus("a", "b")...)
@@ -137,8 +138,8 @@ func TestApplyReportsARollbackThatFails(t *testing.T) {
 		return Applied{}, errors.New("disk full")
 	}
 	ops := []Operation{
-		{Op: OpUpdate, Name: "a", Memory: edited("a", "new\n")},
-		{Op: OpRemove, Name: "b", Reason: "old"},
+		{Op: OpUpdate, Name: "b", Memory: edited("b", "new\n")},
+		{Op: OpRemove, Name: "a", Reason: "old"},
 	}
 	applied, err := Apply(root, ops)
 	var partial *PartialApplyError
@@ -151,8 +152,42 @@ func TestApplyReportsARollbackThatFails(t *testing.T) {
 	if !strings.Contains(err.Error(), "disk full") {
 		t.Errorf("err = %v, want the original failure", err)
 	}
-	if len(applied) != 1 || applied[0].Name != "a" {
-		t.Errorf("applied = %+v, want the update that stayed applied", applied)
+	if len(applied) != 0 {
+		t.Errorf("applied = %+v, want none: the update was rolled back", applied)
+	}
+	if strings.Join(partial.Unrestored, ",") != "a.md" {
+		t.Errorf("unrestored = %v, want [a.md]", partial.Unrestored)
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "b.md")); strings.Contains(string(b), "new") {
+		t.Error("the update to b was not rolled back")
+	}
+}
+
+// A memory file that is a symlink (discovery follows it) is restored as the same
+// link: a save replaces the link with a regular file, and rollback must not
+// delete that file as one the batch created.
+func TestApplyRollbackRestoresASymlinkedMemory(t *testing.T) {
+	root := t.TempDir()
+	seed(t, root, corpus("b")...)
+	target := filepath.Join(t.TempDir(), "a.md")
+	writeTestFile(t, target, "---\nname: a\ndescription: d\ntype: lesson\nscope: global\n---\nb\n")
+	link := filepath.Join(root, "a.md")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(root, ".forgotten"), "in the way\n")
+	ops := []Operation{
+		{Op: OpUpdate, Name: "a", Memory: edited("a", "new\n")},
+		{Op: OpRemove, Name: "b", Reason: "old"},
+	}
+	if _, err := Apply(root, ops); err == nil || !strings.Contains(err.Error(), "rolled back") {
+		t.Fatalf("err = %v, want a rolled-back failure", err)
+	}
+	if got, err := os.Readlink(link); err != nil || got != target {
+		t.Fatalf("a.md is not the original symlink (readlink = %q, %v)", got, err)
+	}
+	if b, _ := os.ReadFile(target); strings.Contains(string(b), "new") {
+		t.Error("the link's target was changed")
 	}
 }
 

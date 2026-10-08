@@ -446,8 +446,9 @@ explicit rather than ambient.
   `--apply` applies nothing (exit `3`). A batch that fails while it is being
   written (an unwritable path, say) is rolled back, so canonical is left as it
   was, and reports `apply` (exit `1`) with an empty `data.applied`; if the
-  rollback fails too, it reports `apply_partial`, `data.applied` lists what stayed
-  applied, and the message names each file it could not restore. An `update`,
+  rollback fails too, it reports `apply_partial`, `data.unrestored` lists each
+  file (relative to the canonical root) that still differs from before the
+  batch, and the message names each file it could not restore. An `update`,
   or a `merge` that reuses a source's name, keeps the stored memory's provenance
   whatever the agent gives, so the next import sees canonical as ahead of its
   native, not in conflict. A `remove`, and each source a `merge` replaces, is
