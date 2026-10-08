@@ -43,11 +43,6 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
   because the error-event shape has not been observed and captured. Capture a real
   failing run and map its event to a specific error message.
 
-- **Curate: a batch can half-apply.** `curate.Apply` validates the whole batch
-  first but has no rollback if a write fails midway (e.g. a directory occupying a
-  target path), leaving canonical in neither the before nor the after state.
-  Stage writes and commit them in a final rename phase, or report a partial apply
-  as its own flagged outcome.
 - **Curate: a timed-out agent's helpers can linger as zombies.** The timeout
   SIGKILLs the agent's whole process group at once, so its helpers are reparented
   to init when the leader dies. An init that does not reap (a container's bare

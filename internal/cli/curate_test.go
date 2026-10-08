@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/davisbuilds/engram/internal/agentexec"
+	"github.com/davisbuilds/engram/internal/curate"
 )
 
 // fakeClaudeRunner returns a claude `--output-format json` envelope whose result
@@ -183,5 +185,43 @@ func TestCurateSendsTheCorpusOnStdin(t *testing.T) {
 				t.Errorf("%s: the corpus is in argv", harness)
 			}
 		}
+	}
+}
+
+// A batch that fails midway is rolled back and reported as apply, with nothing
+// applied; one whose rollback also fails is apply_partial.
+func TestCurateApplyReportsAFailedBatch(t *testing.T) {
+	dir := t.TempDir()
+	canon := filepath.Join(dir, "canonical")
+	seedCanon(t, canon, "dup-a", "dup-b")
+	writeFile(t, filepath.Join(canon, ".forgotten"), "in the way\n")
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+canon+"\n")
+	proposal := "```json\n" + `{"operations":[
+	  {"op":"merge","sources":["dup-a","dup-b"],"memory":{"name":"dup","description":"d","type":"lesson","scope":"global","body":"b\n"},"reason":"same"}
+	]}` + "\n```"
+	var code int
+	out := captureStdout(t, func() {
+		code = cmdCurate(curateEnv(cfg, true, fakeClaudeRunner(proposal)), "curate", []string{"--harness", "claude-code"})
+	})
+	var env map[string]any
+	if err := json.Unmarshal([]byte(out), &env); err != nil {
+		t.Fatalf("stdout is not one JSON envelope: %v\n%s", err, out)
+	}
+	if code != exitError {
+		t.Fatalf("exit = %d, want %d", code, exitError)
+	}
+	if e, _ := env["error"].(map[string]any); e["code"] != "apply" {
+		t.Errorf("error = %v, want code apply", env["error"])
+	}
+	if data, _ := env["data"].(map[string]any); data["applied"] == nil || len(data["applied"].([]any)) != 0 {
+		t.Errorf("data.applied = %v, want empty after a rollback", data["applied"])
+	}
+	if exists(filepath.Join(canon, "dup.md")) || !exists(filepath.Join(canon, "dup-a.md")) {
+		t.Error("canonical was not rolled back")
+	}
+	partial := &curate.PartialApplyError{Err: errors.New("apply merge: disk full"), Rollback: errors.New("not restored: a.md")}
+	if got := applyErrorCode(fmt.Errorf("wrapped: %w", partial)); got != "apply_partial" {
+		t.Errorf("applyErrorCode(partial) = %q, want apply_partial", got)
 	}
 }
