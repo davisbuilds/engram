@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/davisbuilds/engram/compare/v0.4.0...v0.4.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **curate:** pass the prompt on stdin and roll back a failed batch ([#42](https://github.com/davisbuilds/engram/issues/42)) ([6a8fa34](https://github.com/davisbuilds/engram/commit/6a8fa3435aaf0774ccdeba5d74980e602c9d4cbe))
+
 ## [0.4.0](https://github.com/davisbuilds/engram/compare/v0.3.0...v0.4.0) (2026-10-03)
 
 
