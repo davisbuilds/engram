@@ -76,8 +76,8 @@ func TestCodexArgv(t *testing.T) {
 	}
 }
 
-func TestClaudeArgvOptsCarriesModelEffortAndJSON(t *testing.T) {
-	argv := ClaudeArgvOpts("prompt here", Options{Model: "claude-sonnet-5", Effort: "high"})
+func TestClaudeInvocationCarriesModelEffortAndJSON(t *testing.T) {
+	argv := ClaudeInvocation("prompt here", Options{Model: "claude-sonnet-5", Effort: "high"}).Argv
 	joined := strings.Join(argv, " ")
 	for _, want := range []string{
 		"--output-format json", "--model claude-sonnet-5", "--effort high",
@@ -85,9 +85,6 @@ func TestClaudeArgvOptsCarriesModelEffortAndJSON(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Errorf("argv missing %q: %v", want, argv)
 		}
-	}
-	if argv[len(argv)-2] != "--" || argv[len(argv)-1] != "prompt here" {
-		t.Errorf("prompt must follow -- as the last arg: %v", argv)
 	}
 	// The proposer must run with all tools explicitly disabled (--tools ""): the
 	// corpus is untrusted, and an absent --allowedTools does not disable tools.
@@ -102,8 +99,8 @@ func TestClaudeArgvOptsCarriesModelEffortAndJSON(t *testing.T) {
 	}
 }
 
-func TestCodexArgvOptsCarriesModelAndEffort(t *testing.T) {
-	argv := CodexArgvOpts("prompt here", Options{Model: "gpt-5.6-terra", Effort: "high"})
+func TestCodexInvocationCarriesModelAndEffort(t *testing.T) {
+	argv := CodexInvocation("prompt here", Options{Model: "gpt-5.6-terra", Effort: "high"}).Argv
 	joined := strings.Join(argv, " ")
 	if !strings.Contains(joined, "--model gpt-5.6-terra") {
 		t.Errorf("argv missing model: %v", argv)
@@ -111,17 +108,14 @@ func TestCodexArgvOptsCarriesModelAndEffort(t *testing.T) {
 	if !strings.Contains(joined, "model_reasoning_effort=high") {
 		t.Errorf("codex effort must go through -c model_reasoning_effort: %v", argv)
 	}
-	if argv[len(argv)-1] != "prompt here" {
-		t.Errorf("prompt must be the last arg: %v", argv)
-	}
 }
 
 // The curate codex run must pin the structured-output and sandbox flags: --json
 // (so the proposal is read from an event, not raw stdout), a read-only sandbox
 // (untrusted corpus, engram stays the sole mutator), and the run-anywhere /
 // no-session-litter flags.
-func TestCodexArgvOptsPinsHardeningFlags(t *testing.T) {
-	argv := CodexArgvOpts("prompt here", Options{})
+func TestCodexInvocationPinsHardeningFlags(t *testing.T) {
+	argv := CodexInvocation("prompt here", Options{}).Argv
 	joined := strings.Join(argv, " ")
 	for _, want := range []string{
 		"--json", "--sandbox read-only", "--skip-git-repo-check", "--ephemeral",
@@ -130,8 +124,31 @@ func TestCodexArgvOptsPinsHardeningFlags(t *testing.T) {
 			t.Errorf("codex curate argv missing %q: %v", want, argv)
 		}
 	}
-	if argv[len(argv)-2] != "--" || argv[len(argv)-1] != "prompt here" {
-		t.Errorf("prompt must follow -- as the last arg: %v", argv)
+}
+
+// The curate prompt carries the whole corpus, so it travels on stdin: an argv is
+// capped by the OS and a large store would fail at exec. Claude reads stdin when
+// no prompt argument is given; Codex reads it for the argument "-".
+func TestInvocationsPassThePromptOnStdin(t *testing.T) {
+	const prompt = "corpus-marker prompt"
+	for name, inv := range map[string]Invocation{
+		"claude": ClaudeInvocation(prompt, Options{Model: "m", Effort: "high"}),
+		"codex":  CodexInvocation(prompt, Options{Model: "m", Effort: "high"}),
+	} {
+		if inv.Stdin != prompt {
+			t.Errorf("%s: stdin = %q, want the prompt", name, inv.Stdin)
+		}
+		for _, a := range inv.Argv {
+			if strings.Contains(a, "corpus-marker") {
+				t.Errorf("%s: the prompt is in argv: %v", name, inv.Argv)
+			}
+		}
+	}
+	if argv := ClaudeInvocation(prompt, Options{}).Argv; argv[len(argv)-1] == "--" {
+		t.Errorf("claude argv ends in a bare --: %v", argv)
+	}
+	if argv := CodexInvocation(prompt, Options{}).Argv; argv[len(argv)-2] != "--" || argv[len(argv)-1] != "-" {
+		t.Errorf("codex argv must end with -- - to read the prompt from stdin: %v", argv)
 	}
 }
 
@@ -288,7 +305,7 @@ func TestExtractClaudeTextRejectsGarbage(t *testing.T) {
 // A test that reaches the production runner (e.g. Run([]string{"curate"})) must
 // fail instead of launching a real, possibly billed, claude or codex.
 func TestExecRunnerRefusesUnderGoTest(t *testing.T) {
-	if _, err := ExecRunner([]string{"true"}); err == nil {
+	if _, err := ExecRunner(Invocation{Argv: []string{"true"}}); err == nil {
 		t.Fatal("ExecRunner spawned a process under go test; want a refusal")
 	}
 }
@@ -297,7 +314,7 @@ func TestExecRunnerRefusesUnderGoTest(t *testing.T) {
 // started, and the error says it timed out.
 func TestRunWithTimeoutKillsTheProcessGroup(t *testing.T) {
 	start := time.Now()
-	out, err := runWithTimeout([]string{"sh", "-c", "sleep 30 & echo $!; wait"}, 300*time.Millisecond)
+	out, err := runWithTimeout(Invocation{Argv: []string{"sh", "-c", "sleep 30 & echo $!; wait"}}, 300*time.Millisecond)
 	if elapsed := time.Since(start); elapsed > 10*time.Second {
 		t.Fatalf("runWithTimeout returned after %v; the deadline was not enforced", elapsed)
 	}
@@ -359,8 +376,26 @@ func TestProcessAliveTreatsZombiesAsDead(t *testing.T) {
 
 // No deadline (d <= 0) runs to completion.
 func TestRunWithTimeoutZeroMeansNoDeadline(t *testing.T) {
-	out, err := runWithTimeout([]string{"sh", "-c", "sleep 0.2; echo done"}, 0)
+	out, err := runWithTimeout(Invocation{Argv: []string{"sh", "-c", "sleep 0.2; echo done"}}, 0)
 	if err != nil || strings.TrimSpace(string(out)) != "done" {
 		t.Fatalf("out, err = %q, %v; want done, nil", out, err)
+	}
+}
+
+// A prompt larger than any argv the OS allows reaches the agent whole on stdin.
+// The control shows the same prompt failing as an argument, which is the bug
+// stdin avoids (macOS caps the argument list near 1 MB, Linux one argument at
+// 128 KB).
+func TestRunWithTimeoutFeedsAPromptPastArgMaxOnStdin(t *testing.T) {
+	big := strings.Repeat("x", 2<<20)
+	if _, err := runWithTimeout(Invocation{Argv: []string{"true", big}}, 0); err == nil {
+		t.Fatal("control: a 2 MiB argument exec'd; the OS limit this test relies on is absent")
+	}
+	out, err := runWithTimeout(Invocation{Argv: []string{"wc", "-c"}, Stdin: big}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(out)); got != strconv.Itoa(len(big)) {
+		t.Errorf("the agent read %s bytes on stdin, want %d", got, len(big))
 	}
 }

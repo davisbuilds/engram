@@ -67,19 +67,19 @@ func cmdCurate(e *env, name string, args []string) int {
 		return exitError
 	}
 
-	var argv []string
+	var inv agentexec.Invocation
 	switch harness {
 	case config.HarnessClaude:
-		argv = agentexec.ClaudeArgvOpts(prompt, opts)
+		inv = agentexec.ClaudeInvocation(prompt, opts)
 	case config.HarnessCodex:
-		argv = agentexec.CodexArgvOpts(prompt, opts)
+		inv = agentexec.CodexInvocation(prompt, opts)
 	}
 	invocation := map[string]any{
 		"harness": harness, "model": choice.Model, "effort": choice.Effort, "corpus_size": len(mems),
 		"timeout": timeout.String(),
 	}
 
-	stdout, err := e.runnerFor(timeout)(argv)
+	stdout, err := e.runnerFor(timeout)(inv)
 	if err != nil {
 		e.emit(name, false, map[string]any{"invocation": invocation}, warns,
 			&RespError{Code: "agent_run", Message: err.Error()}, nil)

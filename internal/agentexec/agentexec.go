@@ -8,6 +8,8 @@
 // sandbox against an untrusted corpus, and structured output (`claude`'s JSON
 // envelope, `codex`'s JSONL event stream) so the final message is recovered
 // deterministically rather than by scanning raw stdout for a fenced block.
+// Curate's runs (ClaudeInvocation, CodexInvocation) pass their prompt on stdin
+// instead, since it carries the whole corpus.
 package agentexec
 
 import (
@@ -48,15 +50,24 @@ func CodexArgv(prompt string) []string {
 	return []string{"codex", "exec", prompt}
 }
 
-// ClaudeArgvOpts builds a headless `claude -p` run for curate: JSON output,
+// Invocation is one headless agent run: the argv to exec and the prompt the
+// agent reads on stdin. The prompt never goes in argv: it carries the whole
+// corpus, and the OS caps an argument list (about 1 MB on macOS, one argument at
+// 128 KB on Linux), so a large store would fail at exec.
+type Invocation struct {
+	Argv  []string
+	Stdin string
+}
+
+// ClaudeInvocation builds a headless `claude -p` run for curate: JSON output,
 // model/effort passthrough, and — critically — all tools explicitly disabled via
 // `--tools ""`. The corpus is untrusted (prompt-injected memory content is
 // possible), so the proposer must have no filesystem access: an *absent*
 // --allowedTools does NOT disable tools (the session's own settings may still
 // permit Edit/Bash), whereas `--tools ""` is the documented no-tools mode. This
-// keeps engram the sole mutator even against a hostile corpus. The `--` separator
-// still guards the positional prompt.
-func ClaudeArgvOpts(prompt string, opts Options, allowedTools ...string) []string {
+// keeps engram the sole mutator even against a hostile corpus. With no prompt
+// argument, `claude -p` reads the prompt from stdin.
+func ClaudeInvocation(prompt string, opts Options) Invocation {
 	argv := []string{"claude", "-p", "--output-format", "json", "--tools", ""}
 	if opts.Model != "" {
 		argv = append(argv, "--model", opts.Model)
@@ -64,14 +75,10 @@ func ClaudeArgvOpts(prompt string, opts Options, allowedTools ...string) []strin
 	if opts.Effort != "" {
 		argv = append(argv, "--effort", opts.Effort)
 	}
-	if len(allowedTools) > 0 {
-		argv = append(argv, "--allowedTools")
-		argv = append(argv, allowedTools...)
-	}
-	return append(argv, "--", prompt)
+	return Invocation{Argv: argv, Stdin: prompt}
 }
 
-// CodexArgvOpts builds a headless `codex exec` run for curate. Beyond model and
+// CodexInvocation builds a headless `codex exec` run for curate. Beyond model and
 // effort it pins four flags, each load-bearing:
 //   - --json emits the structured JSONL event stream, so the proposal is read
 //     from the final `agent_message` event (see ExtractCodexText) rather than by
@@ -83,8 +90,9 @@ func ClaudeArgvOpts(prompt string, opts Options, allowedTools ...string) []strin
 //   - --ephemeral keeps a one-shot proposer from persisting session files to disk.
 //
 // Codex has no `--effort` flag; reasoning effort is a config override, hence
-// `-c model_reasoning_effort=<level>`. The `--` guards the positional prompt.
-func CodexArgvOpts(prompt string, opts Options) []string {
+// `-c model_reasoning_effort=<level>`. The prompt argument "-" makes codex read
+// the prompt from stdin.
+func CodexInvocation(prompt string, opts Options) Invocation {
 	argv := []string{
 		"codex", "exec",
 		"--json",
@@ -98,19 +106,19 @@ func CodexArgvOpts(prompt string, opts Options) []string {
 	if opts.Effort != "" {
 		argv = append(argv, "-c", "model_reasoning_effort="+opts.Effort)
 	}
-	return append(argv, "--", prompt)
+	return Invocation{Argv: append(argv, "--", "-"), Stdin: prompt}
 }
 
-// Runner executes an argv and returns the process's stdout. It is injected so
-// tests exercise the curate loop without ever spawning a real, paid model.
-type Runner func(argv []string) ([]byte, error)
+// Runner executes an Invocation and returns the process's stdout. It is injected
+// so tests exercise the curate loop without ever spawning a real, paid model.
+type Runner func(inv Invocation) ([]byte, error)
 
-// ExecRunner is the production Runner with no deadline: it runs the argv as a
+// ExecRunner is the production Runner with no deadline: it runs inv as a
 // subprocess and returns stdout, folding stderr into the error on failure. Under
 // go test it refuses to run anything, so a test that reaches it cannot launch a
 // real, possibly billed, agent; tests inject a Runner instead.
-func ExecRunner(argv []string) ([]byte, error) {
-	return TimeoutRunner(0)(argv)
+func ExecRunner(inv Invocation) ([]byte, error) {
+	return TimeoutRunner(0)(inv)
 }
 
 // TimeoutRunner returns a production Runner that, when d is positive, kills the
@@ -118,17 +126,18 @@ func ExecRunner(argv []string) ([]byte, error) {
 // stalled agent otherwise blocks its caller forever. It refuses under go test,
 // as ExecRunner does.
 func TimeoutRunner(d time.Duration) Runner {
-	return func(argv []string) ([]byte, error) {
+	return func(inv Invocation) ([]byte, error) {
 		if testing.Testing() {
-			return nil, fmt.Errorf("refusing to run %q under go test: inject a Runner", argv)
+			return nil, fmt.Errorf("refusing to run %q under go test: inject a Runner", inv.Argv)
 		}
-		return runWithTimeout(argv, d)
+		return runWithTimeout(inv, d)
 	}
 }
 
-// runWithTimeout runs argv, killing its process group when d (if positive)
+// runWithTimeout runs inv, killing its process group when d (if positive)
 // elapses. It is the unguarded body of the production runners.
-func runWithTimeout(argv []string, d time.Duration) ([]byte, error) {
+func runWithTimeout(inv Invocation, d time.Duration) ([]byte, error) {
+	argv := inv.Argv
 	if len(argv) == 0 {
 		return nil, fmt.Errorf("empty argv")
 	}
@@ -145,6 +154,7 @@ func runWithTimeout(argv []string, d time.Duration) ([]byte, error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = 5 * time.Second
+	cmd.Stdin = strings.NewReader(inv.Stdin)
 	var out, errBuf bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errBuf

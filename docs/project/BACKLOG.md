@@ -43,11 +43,6 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
   because the error-event shape has not been observed and captured. Capture a real
   failing run and map its event to a specific error message.
 
-- **Curate: the corpus goes through argv.** `ClaudeArgvOpts`/`CodexArgvOpts` pass
-  the whole prompt (corpus JSON + contract) as one argument, so a store past the
-  OS `ARG_MAX` (about 1 MB on macOS) fails at exec with an opaque `agent_run`
-  error. Pass the prompt on stdin; verify how `claude -p` and `codex exec` read
-  stdin first.
 - **Curate: a batch can half-apply.** `curate.Apply` validates the whole batch
   first but has no rollback if a write fails midway (e.g. a directory occupying a
   target path), leaving canonical in neither the before nor the after state.

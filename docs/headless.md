@@ -85,7 +85,9 @@ engram curate --model claude-opus-5 --effort high --json   # override the model/
 Flow, and where each layer's authority begins and ends:
 
 1. **engram (deterministic):** gathers every canonical memory + `review`
-   findings into a corpus and builds the prompt.
+   findings into a corpus and builds the prompt. The prompt reaches the agent on
+   stdin, not as an argument, so the store's size is not capped by the OS
+   argument limit.
 2. **agent (judgment):** returns JSON `operations` — `add` / `update` / `merge` /
    `remove` / `rescope`, each with a `reason`. It is handed the corpus as text
    and needs no tools; it never touches the filesystem.
