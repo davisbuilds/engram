@@ -10,6 +10,10 @@ each one into every harness's native memory location, scoped by tier, working
 directory, agent, and host — so a lesson learned in one place is available in
 the others on the next sync.
 
+The goal is continuity and fewer repeated mistakes, with memory that stays scoped
+and correctable. See the [Vision](docs/project/VISION.md) for direction, knowledge
+boundaries, and the questions guiding future work.
+
 > **Status: working, pre-1.0.** The full pipeline is implemented — a canonical
 > store, Claude Code + Codex renderers, idempotent forward `sync`, reverse-sync
 > `import`, `review`, and the headless `curate` proposer/applier loop. The

@@ -7,6 +7,9 @@ is the intelligence. See `README.md` for the user-facing overview.
 
 ## Documentation Map
 
+- `docs/project/VISION.md` — continuity, fewer repeated mistakes, intended audience,
+  knowledge boundaries, and questions guiding future work.
+
 - `docs/cli.md` — the CLI interface contract: command tree, response envelope,
   exit codes, scope model, configuration, example invocations.
 - `docs/releases.md` — release PRs, version policy, build provenance, and activation.
