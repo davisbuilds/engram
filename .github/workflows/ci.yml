@@ -48,6 +48,13 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # go.mod and go.sum must already be tidy, and downloaded modules must
+      # match go.sum.
+      - name: Go modules tidy and verified
+        run: |
+          go mod tidy -diff
+          go mod verify
+
       - name: Build
         run: go build ./...
 
