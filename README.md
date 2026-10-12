@@ -46,7 +46,7 @@ boundaries, and the questions guiding future work.
 
 ## Build
 
-Requires Go 1.26+; the only dependency is `gopkg.in/yaml.v3`.
+Requires Go 1.26.9+; the only dependency is `gopkg.in/yaml.v3`.
 
 ```bash
 make build      # -> bin/engram (version-stamped from git)
