@@ -63,8 +63,11 @@ is the intelligence. See `README.md` for the user-facing overview.
 - `go test ./...` — full suite; CI additionally runs `go test -race ./...`.
 - `gofumpt -w .` to format; `golangci-lint run ./...` to lint (config in
   `.golangci.yml`, golangci-lint v2 with gofumpt as the configured formatter).
-- CI (`.github/workflows/ci.yml`) runs build + race tests + lint + a gofumpt
-  format gate on every pull request and push to `main`. `make test-scripts` checks
+- CI (`.github/workflows/ci.yml`) runs a module tidy/verify check, build, race
+  tests, lint and a gofumpt format gate on every pull request and push to
+  `main`. `.github/workflows/security.yml` runs `govulncheck` on every pull
+  request, push to `main`, and weekly
+  (`go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...` locally). `make test-scripts` checks
   shell/title controls and real Git release-history validation; main pushes
   additionally validate the complete unreleased retained history.
 
