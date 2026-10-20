@@ -502,10 +502,12 @@ explicit rather than ambient.
   every file under it as a curate batch's rollback sees it (memories,
   tombstones and any other file; Git's metadata, the lock and write temporaries
   excepted). Raw bytes are compared, and a symlinked memory is compared by its
-  link and its target's content, so an edit that changes no parsed field (a
-  comment, an unknown key) still makes the plan stale: applying over it would
-  discard the edit. `--apply` checks the binding and validates again under the
-  canonical lock, immediately before the first write, and writes through the
+  link and its target's content; a symlink to a directory, which discovery
+  does not descend into, is compared by its link alone. So an edit that
+  changes no parsed field (a comment, an unknown key) still makes the plan
+  stale: applying over it would discard the edit. `--apply` checks the binding
+  and validates again under the canonical lock, immediately before the first
+  write, and writes through the
   same atomic, rolled-back batch as a plain `--apply`. `--save-plan` takes the
   binding and reads the corpus under one shared lock, so no engram writer can
   change the store between them, or change it and change it back (a missing

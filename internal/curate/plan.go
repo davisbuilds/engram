@@ -46,7 +46,9 @@ type Plan struct {
 // lock and write temporaries), keyed by slash-separated path relative to the
 // root. Raw bytes are hashed, so an edit that leaves a parsed memory unchanged
 // (a comment, a key the schema drops) still counts: applying over it would
-// discard it.
+// discard it. A symlink is bound by its target and, when that is a file, the
+// file's bytes; a symlink to a directory by its target alone, since neither
+// discovery nor rollback looks inside.
 type Binding struct {
 	Files map[string]string `json:"files"`
 }
@@ -89,22 +91,37 @@ func Fingerprint(root string) (Binding, error) {
 	}
 	err := walkTracked(root, func(rel, p string, d fs.DirEntry) error {
 		h := sha256.New()
+		content := true
 		if d.Type()&fs.ModeSymlink != 0 {
-			// Discovery reads a memory through its link, so both the link
-			// and what it points at are state.
 			target, err := os.Readlink(p)
 			if err != nil {
 				return err
 			}
-			h.Write([]byte("link\x00" + target + "\x00"))
+			info, err := os.Stat(p)
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				// Discovery does not descend into a linked directory, and
+				// rollback restores the link, not what it points at, so
+				// the link is all the state there is.
+				h.Write([]byte("dirlink\x00" + target))
+				content = false
+			} else {
+				// Discovery reads a memory through its link, so both the
+				// link and what it points at are state.
+				h.Write([]byte("link\x00" + target + "\x00"))
+			}
 		} else {
 			h.Write([]byte("file\x00"))
 		}
-		data, err := os.ReadFile(p)
-		if err != nil {
-			return err
+		if content {
+			data, err := os.ReadFile(p)
+			if err != nil {
+				return err
+			}
+			h.Write(data)
 		}
-		h.Write(data)
 		b.Files[filepath.ToSlash(rel)] = "sha256:" + hex.EncodeToString(h.Sum(nil))
 		return nil
 	})

@@ -49,7 +49,8 @@ func noAgent(t *testing.T) agentexec.Runner {
 	}
 }
 
-// storeTree returns every file under root but the apply lock, as path -> content.
+// storeTree returns every file under root but the apply lock, as path -> content,
+// or for a symlink, path -> "-> target".
 func storeTree(t *testing.T, root string) map[string]string {
 	t.Helper()
 	out := map[string]string{}
@@ -57,11 +58,16 @@ func storeTree(t *testing.T, root string) map[string]string {
 		if err != nil || d.IsDir() || d.Name() == lock.Name {
 			return err
 		}
+		rel, _ := filepath.Rel(root, p)
+		if d.Type()&fs.ModeSymlink != 0 {
+			target, lerr := os.Readlink(p)
+			out[filepath.ToSlash(rel)] = "-> " + target
+			return lerr
+		}
 		b, rerr := os.ReadFile(p)
 		if rerr != nil {
 			return rerr
 		}
-		rel, _ := filepath.Rel(root, p)
 		out[filepath.ToSlash(rel)] = string(b)
 		return nil
 	})
@@ -498,6 +504,97 @@ func TestCuratePlanThroughALinkedRoot(t *testing.T) {
 	}
 	if info, err := os.Lstat(link); err != nil || info.Mode()&fs.ModeSymlink == 0 {
 		t.Errorf("the root link was replaced: %v", err)
+	}
+}
+
+// newDirLinkFixture is a plan fixture whose store also holds shelf, a symlink
+// to a directory outside it that holds a valid memory, hidden.
+func newDirLinkFixture(t *testing.T, names ...string) (f planFixture, shelf string) {
+	t.Helper()
+	f = newPlanFixture(t, names...)
+	shelf = filepath.Join(f.dir, "shelf-target")
+	writeFile(t, filepath.Join(shelf, "hidden.md"),
+		"---\nname: hidden\ndescription: d\ntype: lesson\nscope: global\n---\nhidden-marker\n")
+	if err := os.Symlink(shelf, filepath.Join(f.canon, "shelf")); err != nil {
+		t.Fatal(err)
+	}
+	return f, shelf
+}
+
+// A store holding a symlink to a directory saves, previews and applies a plan.
+// The link is bound by its target, never read through: the memory behind it is
+// not shown to the agent or bound, so editing it leaves the plan current, and
+// the link survives the apply.
+func TestCuratePlanOverADirectoryLink(t *testing.T) {
+	f, shelf := newDirLinkFixture(t, "a", "b")
+	var prompt string
+	runner := func(inv agentexec.Invocation) ([]byte, error) {
+		prompt = inv.Stdin
+		return fakeClaudeRunner(fenced(`{"op":"remove","name":"a","reason":"old"}`))(inv)
+	}
+	code, resp := runCurate(t, curateEnv(f.cfg, false, runner), "--save-plan", f.plan)
+	if code != exitOK {
+		t.Fatalf("save-plan exit = %d, want %d: %v", code, exitOK, resp)
+	}
+	if !strings.Contains(prompt, `"b"`) || strings.Contains(prompt, "hidden") {
+		t.Errorf("the agent was shown the wrong corpus:\n%s", prompt)
+	}
+	files, _ := f.readPlan(t)["corpus"].(map[string]any)["files"].(map[string]any)
+	if _, ok := files["shelf"]; !ok || len(files) != 3 {
+		t.Errorf("corpus.files = %v, want a.md, b.md and shelf", files)
+	}
+
+	writeFile(t, filepath.Join(shelf, "hidden.md"),
+		"---\nname: hidden\ndescription: d\ntype: lesson\nscope: global\n---\nedited behind the link\n")
+	if code, resp := runCurate(t, curateEnv(f.cfg, false, noAgent(t)), "--plan", f.plan); code != exitOK {
+		t.Fatalf("preview exit = %d, want %d: %v", code, exitOK, resp)
+	}
+	if code, resp := f.apply(t); code != exitOK {
+		t.Fatalf("apply exit = %d, want %d: %v", code, exitOK, resp)
+	}
+	if exists(filepath.Join(f.canon, "a.md")) {
+		t.Error("a.md was not removed")
+	}
+	if got, err := os.Readlink(filepath.Join(f.canon, "shelf")); err != nil || got != shelf {
+		t.Errorf("shelf is not the original link (readlink = %q, %v)", got, err)
+	}
+	if !exists(filepath.Join(shelf, "hidden.md")) {
+		t.Error("the memory behind the link was removed")
+	}
+}
+
+// Retargeting or removing a directory link after the plan was saved makes it
+// stale, naming the link, and nothing is written.
+func TestCuratePlanRefusesAChangedDirectoryLink(t *testing.T) {
+	for name, change := range map[string]func(t *testing.T, link string){
+		"retargeted": func(t *testing.T, link string) {
+			if err := os.Remove(link); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(t.TempDir(), link); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"removed": func(t *testing.T, link string) {
+			if err := os.Remove(link); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, _ := newDirLinkFixture(t, "a", "b")
+			f.save(t, fenced(`{"op":"remove","name":"a","reason":"old"}`))
+			change(t, filepath.Join(f.canon, "shelf"))
+			before := storeTree(t, f.canon)
+			code, resp := f.apply(t)
+			if code != exitConflicts || errCode(resp) != "stale_plan" {
+				t.Fatalf("exit = %d, error = %v; want %d stale_plan", code, resp["error"], exitConflicts)
+			}
+			if drift, _ := respData(resp)["drift"].([]any); len(drift) != 1 || drift[0] != "shelf" {
+				t.Errorf("data.drift = %v, want [shelf]", drift)
+			}
+			sameStore(t, before, storeTree(t, f.canon))
+		})
 	}
 }
 

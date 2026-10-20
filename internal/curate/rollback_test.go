@@ -191,6 +191,35 @@ func TestApplyRollbackRestoresASymlinkedMemory(t *testing.T) {
 	}
 }
 
+// A saved plan applies over a store holding a symlink to a directory, and a
+// plan batch that fails rolls back around it: the link stays the same link and
+// nothing behind it is touched.
+func TestApplyPlanKeepsADirectoryLink(t *testing.T) {
+	root, shelf := dirLinkStore(t, "a", "b", "c")
+	behind := tree(t, shelf)
+	if _, err := ApplyPlan(root, testPlan(t, root, Operation{Op: OpRemove, Name: "b", Reason: "old"})); err != nil {
+		t.Fatalf("ApplyPlan: %v", err)
+	}
+
+	if err := os.Mkdir(filepath.Join(root, "x.md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	before := tree(t, root)
+	p := testPlan(t, root,
+		Operation{Op: OpUpdate, Name: "a", Memory: edited("a", "new\n")},
+		Operation{Op: OpRemove, Name: "c", Reason: "old"},
+		Operation{Op: OpAdd, Memory: mem("x")},
+	)
+	if _, err := ApplyPlan(root, p); err == nil || !strings.Contains(err.Error(), "rolled back") {
+		t.Fatalf("err = %v, want a rolled-back failure", err)
+	}
+	sameTree(t, before, tree(t, root))
+	if got, err := os.Readlink(filepath.Join(root, "shelf")); err != nil || got != shelf {
+		t.Errorf("shelf is not the original symlink (readlink = %q, %v)", got, err)
+	}
+	sameTree(t, behind, tree(t, shelf))
+}
+
 // A batch applied through a root that is a symlink to the store rolls back
 // beneath the link: the store's files, a memory linked beneath it included, are
 // restored, and the root stays the same link.

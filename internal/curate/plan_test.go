@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/davisbuilds/engram/internal/discover"
 	"github.com/davisbuilds/engram/internal/lock"
 )
 
@@ -55,6 +56,88 @@ func TestFingerprintBindsTheStoreFiles(t *testing.T) {
 	if d := strings.Join(before.Drift(fingerprint(t, root)), ","); d != ".forgotten/x.yaml,l.md" {
 		t.Errorf("drift = %s, want .forgotten/x.yaml,l.md", d)
 	}
+}
+
+// A symlink beneath the root that points at a directory is bound by its target
+// alone. Discovery does not descend into it and rollback restores the link, not
+// what it points at, so the directory's files are neither bound nor corpus:
+// changing them is no drift. Retargeting or removing the link is, and so is the
+// target turning into a file, whose content discovery could then read.
+func TestFingerprintBindsADirectoryLinkByItsTarget(t *testing.T) {
+	root, shelf := dirLinkStore(t, "a")
+	before := fingerprint(t, root)
+	if got := strings.Join(keys(before.Files), ","); got != "a.md,shelf" {
+		t.Fatalf("bound files = %s, want a.md,shelf", got)
+	}
+	mems, perrs, err := discover.Discover(root)
+	if err != nil || len(perrs) != 0 || len(mems) != 1 || mems[0].Name != "a" {
+		t.Fatalf("Discover = %v, %v, %v; want only a", mems, perrs, err)
+	}
+
+	writeTestFile(t, filepath.Join(shelf, "hidden.md"), "---\nname: hidden\ndescription: d\ntype: lesson\nscope: global\n---\nedited\n")
+	writeTestFile(t, filepath.Join(shelf, "more.md"), "added\n")
+	if d := before.Drift(fingerprint(t, root)); len(d) != 0 {
+		t.Errorf("drift = %v, want none for files behind a directory link", d)
+	}
+	if d := before.Drift(fingerprint(t, linkedRootTo(t, root))); len(d) != 0 {
+		t.Errorf("a root link binds a directory link beneath it differently: drift %v", d)
+	}
+
+	for name, change := range map[string]func(t *testing.T, root, shelf string){
+		"retargeted": func(t *testing.T, root, _ string) {
+			link := filepath.Join(root, "shelf")
+			if err := os.Remove(link); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(t.TempDir(), link); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"removed": func(t *testing.T, root, _ string) {
+			if err := os.Remove(filepath.Join(root, "shelf")); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"target now a file": func(t *testing.T, _, shelf string) {
+			if err := os.RemoveAll(shelf); err != nil {
+				t.Fatal(err)
+			}
+			writeTestFile(t, shelf, "a file now\n")
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root, shelf := dirLinkStore(t, "a")
+			before := fingerprint(t, root)
+			change(t, root, shelf)
+			if d := strings.Join(before.Drift(fingerprint(t, root)), ","); d != "shelf" {
+				t.Errorf("drift = %s, want shelf", d)
+			}
+		})
+	}
+}
+
+// dirLinkStore returns a store holding names and shelf, a symlink to a
+// directory outside it that holds a valid memory, hidden, and that directory.
+func dirLinkStore(t *testing.T, names ...string) (root, shelf string) {
+	t.Helper()
+	root = t.TempDir()
+	seed(t, root, corpus(names...)...)
+	shelf = t.TempDir()
+	writeTestFile(t, filepath.Join(shelf, "hidden.md"), "---\nname: hidden\ndescription: d\ntype: lesson\nscope: global\n---\nb\n")
+	if err := os.Symlink(shelf, filepath.Join(root, "shelf")); err != nil {
+		t.Fatal(err)
+	}
+	return root, shelf
+}
+
+// linkedRootTo returns a symlink to the directory real.
+func linkedRootTo(t *testing.T, real string) string {
+	t.Helper()
+	link := filepath.Join(t.TempDir(), "canonical")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	return link
 }
 
 // linkedRoot returns a canonical root that is a symlink to a store holding
