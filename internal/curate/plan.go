@@ -248,15 +248,20 @@ func ValidatePlan(ops []Operation, corpus []*schema.CanonicalMemory) []OpResult 
 	return results
 }
 
-// sameRoot reports whether two spellings name one canonical root.
+// sameRoot reports whether two spellings name one canonical root. Both are made
+// absolute before their links are resolved, so a relative spelling resolves to
+// the same path as an absolute one; a missing root matches only its own path.
 func sameRoot(a, b string) bool {
 	aa, err1 := filepath.Abs(a)
 	ba, err2 := filepath.Abs(b)
-	if err1 == nil && err2 == nil && aa == ba {
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	if aa == ba {
 		return true
 	}
-	ar, err1 := filepath.EvalSymlinks(a)
-	br, err2 := filepath.EvalSymlinks(b)
+	ar, err1 := filepath.EvalSymlinks(aa)
+	br, err2 := filepath.EvalSymlinks(ba)
 	return err1 == nil && err2 == nil && ar == br
 }
 

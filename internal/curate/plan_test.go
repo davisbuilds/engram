@@ -221,6 +221,68 @@ func TestApplyPlanThroughALinkedRoot(t *testing.T) {
 	sameTree(t, before, tree(t, real))
 }
 
+// A root spelled relative to the working directory names the same store as its
+// absolute and linked spellings: a plan made through any of them applies through
+// any other. Another store is refused however either is spelled, and a missing
+// root matches only its own path.
+func TestApplyPlanThroughARelativeRoot(t *testing.T) {
+	for _, tc := range []struct{ made, applied string }{
+		{"canonical", "store"},
+		{"store", "canonical"},
+		{"link", "store"},
+		{"store", "link"},
+		{"canonical", "real"},
+		{"real", "canonical"},
+	} {
+		t.Run(tc.made+" then "+tc.applied, func(t *testing.T) {
+			link, real := linkedRoot(t, "a", "b")
+			t.Chdir(filepath.Dir(real))
+			at := map[string]string{"link": link, "real": real, "canonical": "canonical", "store": "store"}
+			p := testPlan(t, at[tc.made], Operation{Op: OpRemove, Name: "a", Reason: "old"})
+			if _, err := ApplyPlan(at[tc.applied], p); err != nil {
+				t.Fatalf("ApplyPlan: %v", err)
+			}
+			if _, err := os.Lstat(filepath.Join(real, "a.md")); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("a.md was not removed: %v", err)
+			}
+			if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+				t.Errorf("the root link was replaced: %v", err)
+			}
+		})
+	}
+
+	t.Run("another store", func(t *testing.T) {
+		_, real := linkedRoot(t, "a", "b")
+		dir := filepath.Dir(real)
+		seed(t, filepath.Join(dir, "other"), corpus("a", "b")...)
+		t.Chdir(dir)
+		for _, made := range []string{"canonical", "store"} {
+			p := testPlan(t, made, Operation{Op: OpRemove, Name: "a", Reason: "old"})
+			for _, other := range []string{"other", filepath.Join(dir, "other")} {
+				before := tree(t, filepath.Join(dir, "other"))
+				if _, err := ApplyPlan(other, p); !errors.Is(err, ErrRootMismatch) {
+					t.Errorf("made through %s, applied to %s: err = %v, want ErrRootMismatch", made, other, err)
+				}
+				sameTree(t, before, tree(t, filepath.Join(dir, "other")))
+			}
+		}
+	})
+
+	t.Run("missing root", func(t *testing.T) {
+		dir := t.TempDir()
+		t.Chdir(dir)
+		p := testPlan(t, "absent")
+		for _, root := range []string{"absent", filepath.Join(dir, "absent")} {
+			if err := p.Check(root); err != nil {
+				t.Errorf("Check(%s) = %v, want nil", root, err)
+			}
+		}
+		if err := p.Check("elsewhere"); !errors.Is(err, ErrRootMismatch) {
+			t.Errorf("another missing root: err = %v, want ErrRootMismatch", err)
+		}
+	})
+}
+
 func keys(m map[string]string) []string {
 	var out []string
 	for k := range m {

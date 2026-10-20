@@ -507,6 +507,74 @@ func TestCuratePlanThroughALinkedRoot(t *testing.T) {
 	}
 }
 
+// A canonical_root spelled relative to the working directory saves, previews
+// and applies a plan like its absolute spelling: through the root link or the
+// real path, either applying a plan saved through the other. Another store,
+// relative or not, is refused with nothing written.
+func TestCuratePlanThroughARelativeRoot(t *testing.T) {
+	for _, tc := range []struct{ saved, applied string }{
+		{"canonical-link", "canonical"},
+		{"canonical", "canonical-link"},
+		{"abs:canonical-link", "canonical"},
+		{"canonical", "abs:canonical-link"},
+		{"canonical-link", "abs:canonical"},
+		{"abs:canonical", "canonical-link"},
+	} {
+		t.Run(tc.saved+" then "+tc.applied, func(t *testing.T) {
+			f := newPlanFixture(t, "a", "b")
+			link := filepath.Join(f.dir, "canonical-link")
+			if err := os.Symlink("canonical", link); err != nil {
+				t.Fatal(err)
+			}
+			cfg := func(name, root string) string {
+				if r, ok := strings.CutPrefix(root, "abs:"); ok {
+					root = filepath.Join(f.dir, r)
+				}
+				p := filepath.Join(f.dir, name+".yaml")
+				writeFile(t, p, "canonical_root: "+root+"\n")
+				return p
+			}
+			savedCfg, appliedCfg := cfg("saved", tc.saved), cfg("applied", tc.applied)
+			t.Chdir(f.dir)
+			code, resp := runCurate(t, curateEnv(savedCfg, false, fakeClaudeRunner(fenced(`{"op":"remove","name":"a","reason":"old"}`))), "--save-plan", f.plan)
+			if code != exitOK {
+				t.Fatalf("save-plan: exit = %d, want %d: %v", code, exitOK, resp)
+			}
+			if code, resp := runCurate(t, curateEnv(appliedCfg, false, noAgent(t)), "--plan", f.plan); code != exitOK {
+				t.Fatalf("preview: exit = %d, want %d: %v", code, exitOK, resp)
+			}
+			if code, resp := runCurate(t, curateEnv(appliedCfg, true, noAgent(t)), "--plan", f.plan); code != exitOK {
+				t.Fatalf("apply: exit = %d, want %d: %v", code, exitOK, resp)
+			}
+			if exists(filepath.Join(f.canon, "a.md")) {
+				t.Error("a.md was not removed")
+			}
+			if info, err := os.Lstat(link); err != nil || info.Mode()&fs.ModeSymlink == 0 {
+				t.Errorf("the root link was replaced: %v", err)
+			}
+		})
+	}
+
+	t.Run("another store", func(t *testing.T) {
+		f := newPlanFixture(t, "a", "b")
+		other := filepath.Join(f.dir, "other")
+		seedCanon(t, other, "a", "b")
+		writeFile(t, f.cfg, "canonical_root: canonical\n")
+		t.Chdir(f.dir)
+		f.save(t, fenced(`{"op":"remove","name":"a","reason":"old"}`))
+		for _, root := range []string{"other", other} {
+			otherCfg := filepath.Join(f.dir, "other.yaml")
+			writeFile(t, otherCfg, "canonical_root: "+root+"\n")
+			before := storeTree(t, other)
+			code, resp := runCurate(t, curateEnv(otherCfg, true, noAgent(t)), "--plan", f.plan)
+			if code != exitUsage || errCode(resp) != "plan_root_mismatch" {
+				t.Errorf("apply to %s: exit = %d, error = %v; want %d plan_root_mismatch", root, code, resp["error"], exitUsage)
+			}
+			sameStore(t, before, storeTree(t, other))
+		}
+	})
+}
+
 // newDirLinkFixture is a plan fixture whose store also holds shelf, a symlink
 // to a directory outside it that holds a valid memory, hidden.
 func newDirLinkFixture(t *testing.T, names ...string) (f planFixture, shelf string) {
