@@ -87,7 +87,7 @@ var (
 	harnessArg  = &argSpec{positionals: 1}
 	shareArgs   = &argSpec{positionals: 1, values: []string{"--to", "--applies-cwd"}, bools: []string{"--any-cwd"}}
 	importArgs  = &argSpec{positionals: 1, values: []string{"--refresh", "--keep"}, bools: []string{"--all", "--shared"}}
-	curateArgs  = &argSpec{values: []string{"--harness", "--model", "--effort", "--timeout"}}
+	curateArgs  = &argSpec{values: []string{"--harness", "--model", "--effort", "--timeout", "--save-plan", "--plan"}}
 	detachArgs  = &argSpec{positionals: anyPositionals}
 	migrateArgs = &argSpec{positionals: 1, bools: []string{"--shared"}}
 	forgetArgs  = &argSpec{positionals: anyPositionals, values: []string{"--reason", "--successor"}, bools: []string{"--restore"}}
@@ -111,7 +111,7 @@ func commands() []command {
 		{"diff", "Show the cross-state difference for each render target.", noArgs, cmdDiff},
 		{"show", "Dump a harness's engram-rendered memories.", harnessArg, cmdShow},
 		{"review", "Health report: flags near-duplicate memory names, emitted as agent next_steps.", noArgs, cmdReview},
-		{"curate", "Run a headless agent over the corpus; it proposes add/merge/remove/rescope, engram applies (dry-run; --apply).", curateArgs, cmdCurate},
+		{"curate", "Run a headless agent over the corpus; it proposes add/merge/remove/rescope, engram applies (dry-run; --apply; --save-plan <file> keeps the reviewed plan, --plan <file> --apply applies it without the agent).", curateArgs, cmdCurate},
 		{"hook", "Print harness lifecycle wiring for session-boundary sync.", harnessArg, cmdHook},
 		{"config", "Show config + per-harness readiness (is each harness set up to read what engram writes?).", noArgs, cmdConfig},
 		{"schema", "Emit engram's JSON schemas (self-describing).", noArgs, cmdSchema},
@@ -269,6 +269,14 @@ func cmdSchema(e *env, _ string, _ []string) int {
 				"merge":   "{op, sources[>=2], memory, reason} — sources replaced by memory; a source reusing memory.name is kept",
 				"remove":  "{op, name, reason} — name must exist",
 				"rescope": "{op, name, to_scope, reason} — to_scope is 'global' or 'project:<repo>'",
+			},
+		},
+		"curate_plan": map[string]any{
+			"note": "the file `engram curate --save-plan <file>` writes and `engram curate --plan <file> [--apply]` reads; strict JSON: unknown fields, repeated keys and trailing data are refused",
+			"fields": []string{
+				"kind:\"engram-curate-plan\"", "version:1", "canonical_root:string(absolute)",
+				"corpus:{files:{<path relative to canonical_root>:\"sha256:<hex>\"}}",
+				"proposer:{harness,model?,effort?}?", "operations:curate_operation[]",
 			},
 		},
 	}

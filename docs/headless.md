@@ -77,10 +77,41 @@ validates and applies them.
 
 ```
 engram curate --json                 # dry-run: agent proposes, engram shows the validated plan
-engram curate --apply --json         # commit the plan (fail-closed if any op is invalid)
+engram curate --apply --json         # ask the agent again and commit its plan (fail-closed if any op is invalid)
 engram curate --harness codex --json # run the codex agent instead of claude
 engram curate --model claude-opus-5 --effort high --json   # override the model/effort
 ```
+
+### Reviewed plans
+
+A plain `--apply` runs the agent again, and the agent is not deterministic, so
+the batch it commits can differ from the one a dry run showed. To commit exactly
+what was reviewed, save the dry run's plan and apply the file:
+
+```
+engram curate --save-plan curate-plan.json --json   # agent proposes; engram validates and saves the plan
+engram curate --plan curate-plan.json --json        # optional: re-check it against canonical now (no agent)
+engram curate --plan curate-plan.json --apply --json  # apply exactly the saved plan (no agent)
+```
+
+Review the saved plan's operations (`data.operations` in the first envelope, or
+the file itself) between the two steps. Each memory is shown as apply will
+write it: an `update`, or a `merge` reusing a source's name, carries the stored
+provenance engram keeps, not whatever the agent wrote. `data.plan.sha256` is
+the digest of the plan file's bytes in each step, so a log shows that the plan
+applied is the plan reviewed.
+
+The plan is bound to canonical as it was when the agent read it: the root, and
+the bytes of every file under it. Any change before apply (a `remember`, an
+`import`, a `forget`, a hand edit, even one that changes no parsed field) makes
+the plan stale: `--apply` refuses it with `stale_plan` (exit `3`), lists the
+changed paths in `data.drift`, and writes nothing. Run `--save-plan` again and
+review the new plan. The check runs again under the canonical lock immediately
+before the batch writes, so a write landing between the re-check and the apply
+is caught too. A plan edited by hand is either refused as malformed
+(`invalid_plan`, exit `2`) or, when an operation no longer validates, as
+`invalid_proposal` (exit `3`). `--save-plan` never overwrites a file and
+refuses a path inside the canonical root. See `docs/cli.md` for every code.
 
 Flow, and where each layer's authority begins and ends:
 
@@ -92,8 +123,9 @@ Flow, and where each layer's authority begins and ends:
    `remove` / `rescope`, each with a `reason`. It is handed the corpus as text
    and needs no tools; it never touches the filesystem.
 3. **engram (deterministic):** validates every operation against the corpus and
-   the schema. Dry-run emits the per-op verdicts as `data.operations`; `--apply`
-   executes the batch through `store` under the canonical write-path.
+   the schema. Dry-run emits the per-op verdicts as `data.operations` (and
+   `--save-plan` keeps them as a plan file); `--apply` executes the batch
+   through `store` under the canonical write-path.
 
 **Fail closed.** If any proposed operation is invalid (unknown op, target that
 does not exist, a memory that fails the schema, a rename smuggled through

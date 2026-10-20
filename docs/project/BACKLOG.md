@@ -108,11 +108,6 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
   not `created`/`modified`, to keep render output deterministic and idempotent.
   A "preserve created, bump modified on change" policy would restore timestamps
   without breaking idempotency.
-- **`curate --apply` re-invokes the agent rather than applying a reviewed plan.**
-  The proposer is non-deterministic, so the plan committed by `--apply` can differ
-  from the one the operator inspected in the dry-run. A `--plan <file>` (emit the
-  validated plan from the dry-run, apply exactly that) would close the
-  preview→apply gap the other write commands already guarantee.
 
 ## Surface not yet built
 

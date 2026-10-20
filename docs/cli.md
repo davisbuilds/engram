@@ -111,7 +111,10 @@ engram [global flags] <command> [args]
                  flow in one command; curate stays a separate, explicit step.
     curate       Run a headless agent over the corpus; it proposes
                  add/merge/remove/rescope, engram validates and applies
-                 (dry-run; --apply to write). The one command that runs an agent.
+                 (dry-run; --apply to write; --save-plan <file> keeps the
+                 dry run's plan for review, --plan <file> --apply applies
+                 exactly that plan without running the agent). The one
+                 command that runs an agent.
     forget       Retire canonical memories: tombstone them so import never
                  re-creates them, and remove their engram-owned renders
                  (dry-run; --apply to write; --restore undoes).
@@ -453,7 +456,52 @@ explicit rather than ambient.
   whatever the agent gives, so the next import sees canonical as ahead of its
   native, not in conflict. A `remove`, and each source a `merge` replaces, is
   tombstoned (as `forget` does, with the operation's reason), so a later import
-  does not bring it back.
+  does not bring it back. Merge sources must be distinct, and every target and
+  source must be a valid memory name.
+  The agent is not deterministic, so a plain `--apply` asks it again and can
+  commit a different batch from the one a dry run showed. **Saved plans** close
+  that gap. `--save-plan <file>` (dry-run only) writes the dry run's validated
+  batch to a new file, with each memory exactly as apply would write it (an
+  `update`, or a `merge` reusing a source's name, shows the stored provenance it
+  keeps). `--plan <file>` re-checks that file against canonical as it is now,
+  running no agent, and `--plan <file> --apply` applies exactly that batch.
+  `data.plan` reports the file's `path` and the `sha256` of its bytes in both
+  steps, so the applied plan can be matched to the reviewed one. A plan is
+  bound to the store it was made against: the canonical root, and a digest of
+  every file under it as a curate batch's rollback sees it (memories,
+  tombstones and any other file; Git's metadata, the lock and write temporaries
+  excepted). Raw bytes are compared, and a symlinked memory is compared by its
+  link and its target's content, so an edit that changes no parsed field (a
+  comment, an unknown key) still makes the plan stale: applying over it would
+  discard the edit. `--apply` checks the binding and validates again under the
+  canonical lock, immediately before the first write, and writes through the
+  same atomic, rolled-back batch as a plain `--apply`. The agent runs before
+  any lock is taken.
+  `--save-plan` checks its path before the agent runs: an existing file is
+  `plan_exists` (exit `2`; a plan never replaces a file), and a missing
+  directory, a path that names no file, or a path that is the canonical root or
+  inside it (by file identity, so a symlink into it, a `..` out of one, or
+  the location of a root not created yet counts) is `plan_path` (exit `2`). A
+  store with any file that does not parse is refused with `corpus_parse` (exit
+  `1`), and one that changed while it was read with `corpus_changed` (exit `1`,
+  retryable). A proposal
+  with an invalid operation saves no plan (exit `3`, as a dry run), nor does a
+  store that changed while the agent ran (`stale_plan`, exit `3`). The plan is
+  written owner-only (`0600`), since it carries memory bodies. Reading a plan,
+  a file that is not exactly a plan engram writes is `invalid_plan` (exit `2`):
+  invalid JSON, an unknown field at any depth, a key repeated in one object
+  (including a case variant), data after the plan object, a kind other than
+  `engram-curate-plan`, a version other than `1`, or a missing `operations` or
+  `corpus` binding. A plan for another canonical root is `plan_root_mismatch`
+  (exit `2`). A store that changed since the plan was saved is `stale_plan`
+  (exit `3`), with `data.drift` listing each added, removed or changed path,
+  relative to the root, and nothing written; save and review a new plan. A plan
+  whose operations no longer validate (edited by hand), or that gives a memory
+  provenance other than the stored provenance apply keeps, is
+  `invalid_proposal` (exit `3`). `--plan` cannot be combined with `--harness`,
+  `--model`, `--effort`, `--timeout` or `--save-plan`, nor `--save-plan` with
+  `--apply`, and neither flag may repeat (exit `2`, `usage`). `schema` describes
+  the plan format under `curate_plan`.
   Model/effort are `--model` / `--effort` (flags win over the per-harness config
   default: claude → `claude-sonnet-5`/`high`, codex → `gpt-5.6-terra`/`high`);
   `--harness` picks which agent runs (default `claude-code`). An agent run is
@@ -504,6 +552,10 @@ engram show claude-code --json
 
 # Health leads the agent can act on:
 engram review --json | jq '.next_steps[]'
+
+# Curate with a reviewed plan: propose and save, review, apply exactly that:
+engram curate --save-plan curate-plan.json --json | jq '.data.operations'
+engram curate --plan curate-plan.json --apply --json
 
 # Discover the surface without scraping help text:
 engram schema --json
