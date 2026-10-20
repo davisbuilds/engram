@@ -666,6 +666,78 @@ func TestCuratePlanRefusesAChangedDirectoryLink(t *testing.T) {
 	}
 }
 
+// linkHistory makes the fixture's .forgotten a symlink to a directory outside
+// the store that already holds a tombstone for b, and returns that directory.
+func linkHistory(t *testing.T, f planFixture) string {
+	t.Helper()
+	hist := filepath.Join(f.dir, "history")
+	writeFile(t, filepath.Join(hist, "b.yaml"), "name: b\nforgotten_at: \"2026-01-01T00:00:00Z\"\npath: b.md\nmemory: earlier\n")
+	if err := os.Symlink(hist, filepath.Join(f.canon, ".forgotten")); err != nil {
+		t.Fatal(err)
+	}
+	return hist
+}
+
+// A store whose .forgotten is a symlink is refused with linked_history before
+// anything is written: --save-plan and --apply before the agent runs, and a
+// saved plan, here one bound to the link alone (as a plan saved before this
+// refusal was), in its preview and under the lock, even after the history
+// behind the link changed. Neither canonical nor the history moves.
+func TestCurateRefusesLinkedHistory(t *testing.T) {
+	refused := func(t *testing.T, code int, resp map[string]any) {
+		t.Helper()
+		if code != exitError || errCode(resp) != "linked_history" {
+			t.Errorf("exit = %d, error = %v; want %d linked_history", code, resp["error"], exitError)
+		}
+	}
+	t.Run("before the agent runs", func(t *testing.T) {
+		f := newPlanFixture(t, "a", "b")
+		hist := linkHistory(t, f)
+		before, behind := storeTree(t, f.canon), storeTree(t, hist)
+		code, resp := runCurate(t, curateEnv(f.cfg, false, noAgent(t)), "--save-plan", f.plan)
+		refused(t, code, resp)
+		if exists(f.plan) {
+			t.Error("a plan was saved for a store with linked history")
+		}
+		code, resp = runCurate(t, curateEnv(f.cfg, true, noAgent(t)))
+		refused(t, code, resp)
+		sameStore(t, before, storeTree(t, f.canon))
+		sameStore(t, behind, storeTree(t, hist))
+	})
+	t.Run("a plan bound to the link", func(t *testing.T) {
+		f := newPlanFixture(t, "a", "b")
+		f.save(t, fenced(`{"op":"remove","name":"b","reason":"old"}`))
+		hist := linkHistory(t, f)
+		m := f.readPlan(t)
+		sum := sha256.Sum256([]byte("dirlink\x00" + hist))
+		m["corpus"].(map[string]any)["files"].(map[string]any)[".forgotten"] = "sha256:" + hex.EncodeToString(sum[:])
+		f.writePlan(t, m)
+		writeFile(t, filepath.Join(hist, "b.yaml"), "name: b\nforgotten_at: \"2026-01-01T00:00:00Z\"\npath: b.md\nmemory: edited behind the link\n")
+		before, behind := storeTree(t, f.canon), storeTree(t, hist)
+		code, resp := runCurate(t, curateEnv(f.cfg, false, noAgent(t)), "--plan", f.plan)
+		refused(t, code, resp)
+		code, resp = f.apply(t)
+		refused(t, code, resp)
+		sameStore(t, before, storeTree(t, f.canon))
+		sameStore(t, behind, storeTree(t, hist))
+	})
+	t.Run("linked under the lock", func(t *testing.T) {
+		f := newPlanFixture(t, "a", "b")
+		f.save(t, fenced(`{"op":"remove","name":"b","reason":"old"}`))
+		var hist string
+		e := curateEnv(f.cfg, true, noAgent(t))
+		e.beforeApplyLock = func() { hist = linkHistory(t, f) }
+		code, resp := runCurate(t, e, "--plan", f.plan)
+		refused(t, code, resp)
+		if !exists(filepath.Join(f.canon, "b.md")) {
+			t.Error("b.md was removed through linked history")
+		}
+		if b, _ := os.ReadFile(filepath.Join(hist, "b.yaml")); !strings.Contains(string(b), "earlier") {
+			t.Errorf("the history behind the link changed: %q", b)
+		}
+	})
+}
+
 // --save-plan never overwrites a file, never writes into the canonical store
 // (where the plan would change the corpus it is bound to), and is checked
 // before the agent runs, so a bad path costs no model call.

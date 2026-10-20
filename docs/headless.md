@@ -144,7 +144,10 @@ does not exist, a memory that fails the schema, a rename smuggled through
 `next_steps`. engram never partially applies a proposal it could not fully
 validate. A write that fails partway through a valid batch rolls back the batch,
 leaving canonical as it was; only a rollback that fails too leaves it partly
-applied, reported as `apply_partial`.
+applied, reported as `apply_partial`. A store whose `.forgotten` tombstone
+directory is a symlink is refused (`linked_history`, exit `1`) before any agent
+runs or anything is written, since rollback would restore the link but not
+the tombstones written behind it.
 
 **Curated edits stay curated.** An `update` or `merge` keeps the stored
 memory's provenance, including import's merge base, so a later import reports

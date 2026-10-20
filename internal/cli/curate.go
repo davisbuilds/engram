@@ -197,7 +197,8 @@ func (e *env) emitApplied(name string, data map[string]any, warns []string, appl
 // unchanged) from one that could not be (apply_partial: data.unrestored lists
 // each file that still differs from before the batch), and both from a batch
 // refused the canonical lock before it read anything (locked, as for every
-// canonical writer).
+// canonical writer) or refused under it, before any write, because the store's
+// tombstone directory is a symlink (linked_history).
 func applyErrorCode(err error) string {
 	var partial *curate.PartialApplyError
 	switch {
@@ -205,6 +206,8 @@ func applyErrorCode(err error) string {
 		return "apply_partial"
 	case errors.Is(err, lock.ErrLocked):
 		return "locked"
+	case errors.Is(err, curate.ErrLinkedHistory):
+		return "linked_history"
 	}
 	return "apply"
 }

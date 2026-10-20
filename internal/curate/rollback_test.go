@@ -249,6 +249,115 @@ func TestApplyRollsBackBeneathALinkedRoot(t *testing.T) {
 	}
 }
 
+// historyLinkStore returns a store holding names whose .forgotten is a symlink
+// to hist, a directory outside it already holding a tombstone for b.
+func historyLinkStore(t *testing.T, names ...string) (root, hist string) {
+	t.Helper()
+	root = t.TempDir()
+	seed(t, root, corpus(names...)...)
+	hist = t.TempDir()
+	writeTestFile(t, filepath.Join(hist, "b.yaml"), "name: b\nforgotten_at: \"2026-01-01T00:00:00Z\"\npath: b.md\nmemory: earlier\n")
+	if err := os.Symlink(hist, filepath.Join(root, ".forgotten")); err != nil {
+		t.Fatal(err)
+	}
+	return root, hist
+}
+
+// Rollback restores a .forgotten symlink, not the history it points at, so a
+// batch that tombstoned through it and then failed would report a rollback
+// while the records outside the store stayed changed. Apply refuses the store
+// before it writes anything: canonical, the link and the history behind it are
+// left exactly as they were.
+func TestApplyRefusesLinkedHistory(t *testing.T) {
+	root, hist := historyLinkStore(t, "a", "b", "c")
+	if err := os.Mkdir(filepath.Join(root, "x.md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	before, behind := tree(t, root), tree(t, hist)
+	ops := []Operation{
+		{Op: OpUpdate, Name: "a", Memory: edited("a", "new\n")},
+		{Op: OpRemove, Name: "b", Reason: "old"},
+		{Op: OpAdd, Memory: mem("x")},
+	}
+	_, err := Apply(root, ops)
+	if !errors.Is(err, ErrLinkedHistory) {
+		t.Errorf("err = %v, want ErrLinkedHistory", err)
+	}
+	if err != nil && strings.Contains(err.Error(), "rolled back") {
+		t.Errorf("err = %v claims a rollback", err)
+	}
+	sameTree(t, before, tree(t, root))
+	sameTree(t, behind, tree(t, hist))
+	if got, err := os.Readlink(filepath.Join(root, ".forgotten")); err != nil || got != hist {
+		t.Errorf(".forgotten is not the original link (readlink = %q, %v)", got, err)
+	}
+}
+
+// A .forgotten link is refused whatever it points at: a directory, a file, or
+// nothing. Discovery and the batch would each read or write through it.
+func TestApplyRefusesAnyHistoryLink(t *testing.T) {
+	for name, target := range map[string]func(t *testing.T) string{
+		"directory": func(t *testing.T) string { return t.TempDir() },
+		"file": func(t *testing.T) string {
+			p := filepath.Join(t.TempDir(), "history")
+			writeTestFile(t, p, "not a directory\n")
+			return p
+		},
+		"dangling": func(t *testing.T) string { return filepath.Join(t.TempDir(), "gone") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			seed(t, root, corpus("a", "b")...)
+			if err := os.Symlink(target(t), filepath.Join(root, ".forgotten")); err != nil {
+				t.Fatal(err)
+			}
+			before := tree(t, root)
+			if _, err := Apply(root, []Operation{{Op: OpRemove, Name: "b", Reason: "old"}}); !errors.Is(err, ErrLinkedHistory) {
+				t.Errorf("Apply: err = %v, want ErrLinkedHistory", err)
+			}
+			if _, err := Fingerprint(root); !errors.Is(err, ErrLinkedHistory) {
+				t.Errorf("Fingerprint: err = %v, want ErrLinkedHistory", err)
+			}
+			sameTree(t, before, tree(t, root))
+		})
+	}
+}
+
+// A tombstone that is itself a symlink to a file stays supported: forgetting
+// its name again moves the link aside as the earlier record, and a failed batch
+// puts the link back without touching the file it points at.
+func TestApplyRollbackRestoresALinkedTombstone(t *testing.T) {
+	root := t.TempDir()
+	seed(t, root, corpus("a", "b")...)
+	target := filepath.Join(t.TempDir(), "b.yaml")
+	writeTestFile(t, target, "name: b\nforgotten_at: \"2026-01-01T00:00:00Z\"\npath: b.md\nmemory: earlier\n")
+	link := filepath.Join(root, ".forgotten", "b.yaml")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "x.md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	before := tree(t, root)
+	ops := []Operation{{Op: OpRemove, Name: "b", Reason: "old"}, {Op: OpAdd, Memory: mem("x")}}
+	if _, err := Apply(root, ops); err == nil || !strings.Contains(err.Error(), "rolled back") {
+		t.Fatalf("err = %v, want a rolled-back failure", err)
+	}
+	sameTree(t, before, tree(t, root))
+	if got, err := os.Readlink(link); err != nil || got != target {
+		t.Errorf("b.yaml is not the original link (readlink = %q, %v)", got, err)
+	}
+	if _, err := os.Lstat(filepath.Join(root, ".forgotten", "b.1.yaml")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the archived record was left behind: %v", err)
+	}
+	if b, _ := os.ReadFile(target); !strings.Contains(string(b), "earlier") {
+		t.Errorf("the linked tombstone's target changed: %q", b)
+	}
+}
+
 // The snapshot covers canonical's own files, not Git's or the lock's: a restore
 // leaves them as they are.
 func TestRestoreLeavesGitAndRuntimeFilesAlone(t *testing.T) {

@@ -2,6 +2,8 @@ package curate
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -281,6 +283,47 @@ func TestApplyPlanThroughARelativeRoot(t *testing.T) {
 			t.Errorf("another missing root: err = %v, want ErrRootMismatch", err)
 		}
 	})
+}
+
+// A store whose .forgotten links elsewhere cannot be bound: the link alone
+// would be bound while forget writes the history behind it, so a change there
+// would leave a plan current. A plan bound to the link alone (as one saved
+// before this refusal was) is refused by Check and, under the lock, by
+// ApplyPlan, even after the history behind the link changed, and nothing is
+// written on either side of the link.
+func TestPlanRefusesLinkedHistory(t *testing.T) {
+	root, hist := historyLinkStore(t, "a", "b")
+	if _, err := Fingerprint(root); !errors.Is(err, ErrLinkedHistory) {
+		t.Errorf("Fingerprint: err = %v, want ErrLinkedHistory", err)
+	}
+	if _, err := Fingerprint(linkedRootTo(t, root)); !errors.Is(err, ErrLinkedHistory) {
+		t.Errorf("Fingerprint through a root link: err = %v, want ErrLinkedHistory", err)
+	}
+
+	sum := sha256.Sum256([]byte("dirlink\x00" + hist))
+	binding := Binding{Files: map[string]string{".forgotten": "sha256:" + hex.EncodeToString(sum[:])}}
+	for _, name := range []string{"a.md", "b.md"} {
+		data, err := os.ReadFile(filepath.Join(root, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(append([]byte("file\x00"), data...))
+		binding.Files[name] = "sha256:" + hex.EncodeToString(sum[:])
+	}
+	p, err := NewPlan(root, binding, nil, []Operation{{Op: OpRemove, Name: "b", Reason: "old"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(hist, "b.yaml"), "name: b\nforgotten_at: \"2026-01-01T00:00:00Z\"\npath: b.md\nmemory: edited behind the link\n")
+	before, behind := tree(t, root), tree(t, hist)
+	if err := p.Check(root); !errors.Is(err, ErrLinkedHistory) {
+		t.Errorf("Check: err = %v, want ErrLinkedHistory", err)
+	}
+	if _, err := ApplyPlan(root, p); !errors.Is(err, ErrLinkedHistory) {
+		t.Errorf("ApplyPlan: err = %v, want ErrLinkedHistory", err)
+	}
+	sameTree(t, before, tree(t, root))
+	sameTree(t, behind, tree(t, hist))
 }
 
 func keys(m map[string]string) []string {

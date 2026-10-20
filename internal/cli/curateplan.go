@@ -52,7 +52,7 @@ func cmdCuratePlan(e *env, name, path string) int {
 			e.emit(name, false, data, nil, &RespError{Code: "plan_root_mismatch", Message: err.Error()}, nil)
 			return exitUsage
 		}
-		e.emit(name, false, data, nil, &RespError{Code: "fingerprint", Message: err.Error()}, nil)
+		e.emit(name, false, data, nil, fingerprintError(err), nil)
 		return exitError
 	}
 	mems, perrs, derr := discover.Discover(root)
@@ -100,7 +100,7 @@ func (e *env) savePlan(name, out, root string, binding curate.Binding, proposer 
 ) int {
 	now, err := curate.Fingerprint(root)
 	if err != nil {
-		e.emit(name, false, data, warns, &RespError{Code: "fingerprint", Message: err.Error()}, nil)
+		e.emit(name, false, data, warns, fingerprintError(err), nil)
 		return exitError
 	}
 	if drift := binding.Drift(now); len(drift) > 0 {
@@ -250,7 +250,8 @@ type corpusCapture struct {
 // binding a saved plan carries. Under --apply or --save-plan the whole read
 // holds the canonical lock shared, so no engram writer changes the store
 // between the binding and the corpus (or changes it and changes it back); a
-// writer holding the lock refuses the capture before any agent runs. The lock
+// writer holding the lock, or a store whose tombstone directory is a symlink
+// (which apply would refuse), refuses the capture before any agent runs. The lock
 // is released before it returns, so the agent runs with no lock held, and
 // apply checks the store again under the exclusive lock before it writes. A
 // root the lock found missing is captured as the empty store it was, not read:
@@ -269,11 +270,14 @@ func (e *env) captureCorpus(root string, bind bool) (corpusCapture, []string, *R
 			c.binding = curate.Binding{Files: map[string]string{}}
 			return c, nil, nil
 		}
+		if err := curate.CheckHistory(root); err != nil {
+			return c, nil, fingerprintError(err)
+		}
 	}
 	if bind {
 		var err error
 		if c.binding, err = curate.Fingerprint(root); err != nil {
-			return c, nil, &RespError{Code: "fingerprint", Message: err.Error()}
+			return c, nil, fingerprintError(err)
 		}
 	}
 	e.at(hookFingerprint)
@@ -303,12 +307,22 @@ func checkPlannable(root string, binding curate.Binding, perrs []discover.ParseE
 	}
 	now, err := curate.Fingerprint(root)
 	if err != nil {
-		return &RespError{Code: "fingerprint", Message: err.Error()}
+		return fingerprintError(err)
 	}
 	if drift := binding.Drift(now); len(drift) > 0 {
 		return &RespError{Code: "corpus_changed", Message: fmt.Sprintf("canonical changed while it was read (%d path(s)); retry", len(drift))}
 	}
 	return nil
+}
+
+// fingerprintError reports a store curate could not read or bind: a symlinked
+// tombstone directory, which curate refuses, as linked_history, and any other
+// failure as fingerprint.
+func fingerprintError(err error) *RespError {
+	if errors.Is(err, curate.ErrLinkedHistory) {
+		return &RespError{Code: "linked_history", Message: err.Error()}
+	}
+	return &RespError{Code: "fingerprint", Message: err.Error()}
 }
 
 func corpusParseError(n int) *RespError {

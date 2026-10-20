@@ -48,7 +48,9 @@ type Plan struct {
 // (a comment, a key the schema drops) still counts: applying over it would
 // discard it. A symlink is bound by its target and, when that is a file, the
 // file's bytes; a symlink to a directory by its target alone, since neither
-// discovery nor rollback looks inside.
+// discovery nor rollback looks inside. The tombstone directory is the exception:
+// a batch writes inside it, so a store where it is a symlink is not bound at
+// all (ErrLinkedHistory).
 type Binding struct {
 	Files map[string]string `json:"files"`
 }
@@ -83,7 +85,8 @@ var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 // Fingerprint binds the store at root as it is now. A missing root, or a root
 // link that dangles, is an empty store, as discovery treats it. A file that
-// cannot be read fails the fingerprint rather than being left out of it.
+// cannot be read fails the fingerprint rather than being left out of it, and so
+// does a tombstone directory that is a symlink (ErrLinkedHistory).
 func Fingerprint(root string) (Binding, error) {
 	b := Binding{Files: map[string]string{}}
 	if _, err := os.Stat(root); errors.Is(err, fs.ErrNotExist) {

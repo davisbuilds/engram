@@ -312,6 +312,11 @@ func apply(root string, ops []Operation, plan *Plan) ([]Applied, error) {
 	}
 	defer release()
 
+	// Tombstones written through a linked .forgotten would land where neither
+	// the plan's binding nor the rollback snapshot looks.
+	if err := CheckHistory(root); err != nil {
+		return nil, err
+	}
 	validate := Validate
 	if plan != nil {
 		if err := plan.Check(root); err != nil {

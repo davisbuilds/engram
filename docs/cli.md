@@ -488,7 +488,17 @@ explicit rather than ambient.
   native, not in conflict. A `remove`, and each source a `merge` replaces, is
   tombstoned (as `forget` does, with the operation's reason), so a later import
   does not bring it back. Merge sources must be distinct, and every target and
-  source must be a valid memory name.
+  source must be a valid memory name. The tombstone directory,
+  `<canonical_root>/.forgotten`, is reserved: curate writes tombstones only into
+  a real directory there (created if absent). If it is a symlink, whether to a
+  directory, a file, or nothing, a binding and a rollback would see only the
+  link while tombstones were written behind it. So `--apply` and `--save-plan`
+  (before any agent runs) and `--plan` (in its check, and again under the
+  canonical lock before the first write) refuse the store with
+  `linked_history` (exit `1`), writing nothing; replace the link with the
+  directory it points to. A root that is itself a symlink, a tombstone file
+  that is a symlink, and other symlinked directories beneath the root are not
+  affected. A plain dry run writes nothing and is not refused.
   The agent is not deterministic, so a plain `--apply` asks it again and can
   commit a different batch from the one a dry run showed. **Saved plans** close
   that gap. `--save-plan <file>` (dry-run only) writes the dry run's validated
