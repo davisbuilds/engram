@@ -111,7 +111,10 @@ engram [global flags] <command> [args]
                  flow in one command; curate stays a separate, explicit step.
     curate       Run a headless agent over the corpus; it proposes
                  add/merge/remove/rescope, engram validates and applies
-                 (dry-run; --apply to write). The one command that runs an agent.
+                 (dry-run; --apply to write; --save-plan <file> keeps the
+                 dry run's plan for review, --plan <file> --apply applies
+                 exactly that plan without running the agent). The one
+                 command that runs an agent.
     forget       Retire canonical memories: tombstone them so import never
                  re-creates them, and remove their engram-owned renders
                  (dry-run; --apply to write; --restore undoes).
@@ -182,9 +185,20 @@ explicit rather than ambient.
   strip provenance. Every
   canonical writer
   (`remember`, `share`, `import --apply`, `curate --apply`, `forget --apply`,
-  `detach --apply`) takes the shared
-  exclusive canonical-root lock, so no two writers interleave; a held lock is a
-  retryable error (exit `1`, `error.code = "locked"`), not a silent second write.
+  `detach --apply`, `reconcile --apply`, `migrate --shared --apply`) takes the
+  canonical-root lock exclusively, so no two writers interleave. Every command
+  that writes renders from canonical (`sync --apply`, `migrate --apply`) takes
+  it shared, from its read of canonical through its last render write; a
+  writer that also renders (`reconcile --apply`, `import --shared --apply`,
+  `forget --apply`, `migrate --shared --apply`) holds its exclusive lock through
+  its renders. So a removal (`forget`, a `curate` `remove` or `merge`) lands
+  wholly before a render apply's read, or is refused until its last render is
+  written: no render apply re-creates the render of a memory removed after it
+  read canonical. Readers share the lock with each other; the canonical lock
+  is always taken before any render directory's. A held lock, either way, is a
+  retryable error (exit `1`, `error.code = "locked"`) and the refused command
+  writes nothing, never a silent second write. A dry run takes no lock and
+  writes nothing, not even the lock file.
   An `applies_to.cwd` glob must be `**` or an absolute, clean path, since it is
   matched against an absolute, cleaned cwd. `remember` and `share` spell input
   that way: a leading `~` is expanded to the home directory (as for the global
@@ -199,8 +213,12 @@ explicit rather than ambient.
   `from_scope`/`to_scope` and `from_applies_cwd`/`to_applies_cwd`.
 - **`sync`** — computes render `Action`s (`CREATE` / `UPDATE` / `STALE` /
   `CONFLICT`) for the relevant memories against the current cwd/agent/host and,
-  with `--apply`, executes them under an exclusive lock (idempotent; a second
-  concurrent `--apply` blocks or exits non-zero). Without `--apply`: reports and
+  with `--apply`, executes them under each target's exclusive lock (idempotent;
+  a second concurrent `--apply` on a target fails rather than interleaving),
+  rendering every target from one read of canonical made holding the canonical
+  lock shared until the last target is written. A canonical writer holding the
+  lock refuses `sync --apply` (exit `1`, `locked`) before it writes anything;
+  a missing canonical root is not created. Without `--apply`: reports and
   writes nothing. When it writes entries into a Claude `MEMORY.md`, it keeps a
   one-line self-documenting header at the top explaining what the per-line `<!--
   engram name=… -->` markers mean and where those memories are authored, so an
@@ -329,7 +347,9 @@ explicit rather than ambient.
   preservation `sync` applies on every render, so a migrated file stays idempotent
   and its harness-native metadata survives. `migrate` is the
   **only** command permitted to modify or delete an unmarked file, and only under
-  `--apply`; dry-run classifies every candidate (`adopt` / `diverged` /
+  `--apply`, which adopts from a read of canonical made holding the canonical
+  lock shared until the last adoption (an adopted file is a render of
+  canonical); dry-run classifies every candidate (`adopt` / `diverged` /
   `ambiguous` / `skip`) and writes nothing. It emits a `curate` `next_step` for
   diverged files, whose reconciliation is a judgment call engram does not make
   deterministically. Claude Code only — Codex keeps one consolidated `MEMORY.md`
@@ -343,7 +363,8 @@ explicit rather than ambient.
   the shared render already exists: the file and its unmarked index line are
   removed under the slug's lock, and the canonical memory is then detached, since
   the shared render is now where it lives and where an edit to it is imported
-  from. An original that differs is `DIVERGED` and left byte-for-byte (reconcile
+  from. `--apply` takes the canonical lock before any other and holds it from
+  its read of canonical through the detach, so a refused lock removes nothing. An original that differs is `DIVERGED` and left byte-for-byte (reconcile
   imports its edit first); one that is missing, engram-owned, or whose shared
   render is not written yet is `SKIP`. Dry-run by default.
 - **Claude's shared memory.** Claude Code loads memory per project slug, so a
@@ -384,7 +405,8 @@ explicit rather than ambient.
   held ones: a dry-run lists them; `--apply` takes every fast-forwardable edit,
   `--refresh <name>` takes a conflicting edit anyway, and `--keep <name>` keeps
   canonical and discards the edit, even one canonical could fast-forward to
-  (row outcome `kept`); it then re-syncs the shared dir, so taken
+  (row outcome `kept`); it then re-syncs the shared dir from canonical as the
+  saves left it, still holding the canonical lock, so taken
   edits are restamped and discarded ones overwritten (or removed, for a memory
   no longer shared). A `--refresh` or `--keep` name with no edited render is a
   usage error (`not_edited`). Only `description`, `type` and `body` come from an
@@ -393,7 +415,9 @@ explicit rather than ambient.
   flow — `import` every enabled harness into canonical, `review` for leads, then
   propagate canonical back into the harnesses — in one invocation. Dry-run by
   default; `--apply` writes (all imports save under one canonical lock, then each
-  harness is synced). Two policies make it safe and useful: it **never runs
+  harness is synced from canonical as it is then, still under that lock: the
+  memories the imports wrote and any change another writer made since the
+  dry-run simulation, with `STALE` removal held if a file no longer parses). Two policies make it safe and useful: it **never runs
   curate** (near-duplicate/overlap findings are emitted as `next_steps`, judgment
   left explicit), and propagation **never echoes a memory onto its source** — a
   memory imported from Codex is not rendered back into Codex (one store), and a
@@ -408,7 +432,8 @@ explicit rather than ambient.
 - **`forget <name>...`** — retires canonical memories deterministically. Every
   name must exist, or the batch stops before any write (exit `2`,
   `unknown_memory`). Under `--apply`, each memory is tombstoned, then its file
-  removed, under the canonical lock; then every **engram-owned** render of the
+  removed, under the canonical lock; then, still holding it, every
+  **engram-owned** render of the
   name is removed from each Claude project slug and Claude's shared memory dir
   (file and marked index line) and from the shared Codex notes directory, each
   under its own lock; when that leaves nothing shared, the engram-owned rules
@@ -440,9 +465,18 @@ explicit rather than ambient.
   *proposed operations only* (`add` / `update` / `merge` / `remove` / `rescope`
   with reasons) — it never touches a file. engram validates every proposed
   operation against the corpus and the schema; a dry-run reports the plan, and
-  `--apply` executes it through the same `store` write-path, holding the shared
+  `--apply` executes it through the same `store` write-path, holding the
   exclusive canonical-root lock so the multi-file batch is atomic against a
-  concurrent apply. **Fail closed**: if any operation in the batch is invalid,
+  concurrent apply (a held lock is `locked`, exit `1`, with nothing written).
+  Under `--apply` or `--save-plan`, the corpus the agent is shown is read
+  holding the canonical lock shared, which is released before the agent runs:
+  a writer holding the lock refuses the run (`locked`, exit `1`) before any
+  agent runs, and the agent itself runs with no lock held. A missing canonical
+  root is not created, and with no lock to hold it is not read either: the
+  agent is shown the empty store that was found, never a root created since,
+  and a plan saved from it is bound to that empty store. A plain dry run
+  takes no lock. Its lead offers the saved-plan workflow: the dry run keeps no
+  plan, so `--save-plan` asks the agent for a new proposal to save and review. **Fail closed**: if any operation in the batch is invalid,
   `--apply` applies nothing (exit `3`). A batch that fails while it is being
   written (an unwritable path, say) is rolled back, so canonical is left as it
   was, and reports `apply` (exit `1`) with an empty `data.applied`; if the
@@ -453,7 +487,68 @@ explicit rather than ambient.
   whatever the agent gives, so the next import sees canonical as ahead of its
   native, not in conflict. A `remove`, and each source a `merge` replaces, is
   tombstoned (as `forget` does, with the operation's reason), so a later import
-  does not bring it back.
+  does not bring it back. Merge sources must be distinct, and every target and
+  source must be a valid memory name. The tombstone directory,
+  `<canonical_root>/.forgotten`, is reserved: curate writes tombstones only into
+  a real directory there (created if absent). If it is a symlink, whether to a
+  directory, a file, or nothing, a binding and a rollback would see only the
+  link while tombstones were written behind it. So `--apply` and `--save-plan`
+  (before any agent runs) and `--plan` (in its check, and again under the
+  canonical lock before the first write) refuse the store with
+  `linked_history` (exit `1`), writing nothing; replace the link with the
+  directory it points to. A root that is itself a symlink, a tombstone file
+  that is a symlink, and other symlinked directories beneath the root are not
+  affected. A plain dry run writes nothing and is not refused.
+  The agent is not deterministic, so a plain `--apply` asks it again and can
+  commit a different batch from the one a dry run showed. **Saved plans** close
+  that gap. `--save-plan <file>` (dry-run only) writes the dry run's validated
+  batch to a new file, with each memory exactly as apply would write it (an
+  `update`, or a `merge` reusing a source's name, shows the stored provenance it
+  keeps). `--plan <file>` re-checks that file against canonical as it is now,
+  running no agent, and `--plan <file> --apply` applies exactly that batch.
+  `data.plan` reports the file's `path` and the `sha256` of its bytes in both
+  steps, so the applied plan can be matched to the reviewed one. A plan is
+  bound to the store it was made against: the canonical root, and a digest of
+  every file under it as a curate batch's rollback sees it (memories,
+  tombstones and any other file; Git's metadata, the lock and write temporaries
+  excepted). Raw bytes are compared, and a symlinked memory is compared by its
+  link and its target's content; a symlink to a directory, which discovery
+  does not descend into, is compared by its link alone. So an edit that
+  changes no parsed field (a comment, an unknown key) still makes the plan
+  stale: applying over it would discard the edit. `--apply` checks the binding
+  and validates again under the canonical lock, immediately before the first
+  write, and writes through the
+  same atomic, rolled-back batch as a plain `--apply`. `--save-plan` takes the
+  binding and reads the corpus under one shared lock, so no engram writer can
+  change the store between them, or change it and change it back (a missing
+  root is bound as the empty store, unread); the agent runs after that lock is
+  released, with no lock held.
+  `--save-plan` checks its path before the agent runs: an existing file is
+  `plan_exists` (exit `2`; a plan never replaces a file), and a missing
+  directory, a path that names no file, or a path that is the canonical root or
+  inside it (by file identity, so a symlink into it, a `..` out of one, or
+  the location of a root not created yet counts) is `plan_path` (exit `2`). A
+  store with any file that does not parse is refused with `corpus_parse` (exit
+  `1`), and one that changed while it was read (an edit made outside engram,
+  which the lock does not exclude) with `corpus_changed` (exit `1`,
+  retryable). A proposal
+  with an invalid operation saves no plan (exit `3`, as a dry run), nor does a
+  store that changed while the agent ran (`stale_plan`, exit `3`). The plan is
+  written owner-only (`0600`), since it carries memory bodies. Reading a plan,
+  a file that is not exactly a plan engram writes is `invalid_plan` (exit `2`):
+  invalid JSON, an unknown field at any depth, a key repeated in one object
+  (including a case variant), data after the plan object, a kind other than
+  `engram-curate-plan`, a version other than `1`, or a missing `operations` or
+  `corpus` binding. A plan for another canonical root is `plan_root_mismatch`
+  (exit `2`). A store that changed since the plan was saved is `stale_plan`
+  (exit `3`), with `data.drift` listing each added, removed or changed path,
+  relative to the root, and nothing written; save and review a new plan. A plan
+  whose operations no longer validate (edited by hand), or that gives a memory
+  provenance other than the stored provenance apply keeps, is
+  `invalid_proposal` (exit `3`). `--plan` cannot be combined with `--harness`,
+  `--model`, `--effort`, `--timeout` or `--save-plan`, nor `--save-plan` with
+  `--apply`, and neither flag may repeat (exit `2`, `usage`). `schema` describes
+  the plan format under `curate_plan`.
   Model/effort are `--model` / `--effort` (flags win over the per-harness config
   default: claude → `claude-sonnet-5`/`high`, codex → `gpt-5.6-terra`/`high`);
   `--harness` picks which agent runs (default `claude-code`). An agent run is
@@ -464,6 +559,8 @@ explicit rather than ambient.
   and engram is the sole *mutator*.
 - **`hook print`** — emits the JSON snippet wiring `engram sync --apply --quiet`
   to Claude Code SessionStart/Stop. Codex capture is agent-wrapped (documented).
+  A hooked sync that runs while a canonical writer holds the lock is refused
+  (`locked`, exit `1`) and writes nothing; the next session boundary syncs again.
 
 ## Configuration
 
@@ -504,6 +601,10 @@ engram show claude-code --json
 
 # Health leads the agent can act on:
 engram review --json | jq '.next_steps[]'
+
+# Curate with a reviewed plan: propose and save, review, apply exactly that:
+engram curate --save-plan curate-plan.json --json | jq '.data.operations'
+engram curate --plan curate-plan.json --apply --json
 
 # Discover the surface without scraping help text:
 engram schema --json

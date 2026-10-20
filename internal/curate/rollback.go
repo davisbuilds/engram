@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/davisbuilds/engram/internal/discover"
 	"github.com/davisbuilds/engram/internal/lock"
 )
 
@@ -44,6 +45,29 @@ func (e *PartialApplyError) Error() string {
 
 func (e *PartialApplyError) Unwrap() error { return e.Err }
 
+// ErrLinkedHistory reports a canonical root whose tombstone directory is a
+// symlink. A batch tombstones through that directory, but a binding and a
+// rollback see only the link, so a change behind it would neither stale a plan
+// nor be undone; curate refuses the store instead of following the link.
+var ErrLinkedHistory = errors.New("the canonical tombstone directory is a symlink; curate keeps tombstones only in a directory inside the canonical root (replace the link with the directory it points to)")
+
+// CheckHistory refuses a store whose tombstone directory is a symlink, whatever
+// it points at (a directory, a file, or nothing). A missing root or tombstone
+// directory is fine: forget creates the directory inside the root.
+func CheckHistory(root string) error {
+	p := filepath.Join(root, discover.ForgottenDir)
+	info, err := os.Lstat(p)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil
+	case err != nil:
+		return err
+	case info.Mode()&fs.ModeSymlink != 0:
+		return fmt.Errorf("%w: %s", ErrLinkedHistory, p)
+	}
+	return nil
+}
+
 // tracked reports whether a file belongs to the store: the apply lock and
 // engram's write temporaries do not (walkTracked skips Git's metadata).
 func tracked(d fs.DirEntry) bool {
@@ -55,15 +79,21 @@ func tracked(d fs.DirEntry) bool {
 	return name != lock.Name && !temp
 }
 
-// walkTracked calls fn for each tracked file under root, skipping .git.
+// walkTracked calls fn for each tracked file under root, skipping .git. A root
+// that links to a directory is walked through the link, as discovery walks it.
+// A tombstone directory that is a symlink fails the walk (ErrLinkedHistory), so
+// nothing that binds or snapshots the store records the link alone.
 func walkTracked(root string, fn func(rel, path string, d fs.DirEntry) error) error {
-	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	return discover.WalkRoot(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		rel, rerr := filepath.Rel(root, path)
 		if rerr != nil {
 			return rerr
+		}
+		if rel == discover.ForgottenDir && d.Type()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("%w: %s", ErrLinkedHistory, path)
 		}
 		if d.IsDir() {
 			if rel == ".git" {

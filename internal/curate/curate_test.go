@@ -396,3 +396,55 @@ func TestApplyKeepsStoredProvenanceOnUpdateAndMerge(t *testing.T) {
 		}
 	}
 }
+
+// A merge lists distinct sources: repeating one would pass the two-source rule
+// while merging a single memory (a rename under another name). A target or
+// source that is not a memory name is refused as such, not looked up.
+func TestValidateRejectsDuplicateAndUnsafeNames(t *testing.T) {
+	c := corpus("a", "b")
+	cases := []struct {
+		name, want string
+		op         Operation
+	}{
+		{"duplicate source", "more than once", Operation{Op: OpMerge, Sources: []string{"a", "a"}, Memory: mem("m")}},
+		{"unsafe source", "not a valid memory name", Operation{Op: OpMerge, Sources: []string{"a", "../b"}, Memory: mem("m")}},
+		{"unsafe remove", "not a valid memory name", Operation{Op: OpRemove, Name: "../a"}},
+		{"unsafe update", "not a valid memory name", Operation{Op: OpUpdate, Name: "a/../a", Memory: mem("a")}},
+		{"unsafe rescope", "not a valid memory name", Operation{Op: OpRescope, Name: "/a", ToScope: "global"}},
+	}
+	for _, tc := range cases {
+		r := Validate([]Operation{tc.op}, c)[0]
+		if r.Valid || !strings.Contains(r.Error, tc.want) {
+			t.Errorf("%s: valid = %v, error = %q; want invalid mentioning %q", tc.name, r.Valid, r.Error, tc.want)
+		}
+	}
+}
+
+// Validate reports each operation as apply will perform it: a memory that
+// replaces a stored one carries the stored provenance (as keepProvenance writes
+// it), including one an earlier operation in the batch created; a new memory
+// keeps its own.
+func TestValidateReportsTheProvenanceApplyWrites(t *testing.T) {
+	stored := schema.Provenance{Origin: "import:codex", ImportHash: "sha256:base"}
+	a := mem("a")
+	a.Provenance = stored
+	agent := schema.Provenance{Author: "agent"}
+	upd, add, again := mem("a"), mem("n"), mem("n")
+	upd.Provenance, add.Provenance, again.Provenance = agent, agent, schema.Provenance{}
+	again.Body = "again\n"
+	ops := []Operation{
+		{Op: OpUpdate, Name: "a", Memory: upd},
+		{Op: OpAdd, Memory: add},
+		{Op: OpUpdate, Name: "n", Memory: again},
+	}
+	results := Validate(ops, []*schema.CanonicalMemory{a})
+	want := []schema.Provenance{stored, agent, agent}
+	for i, r := range results {
+		if !r.Valid || r.Op.Memory.Provenance != want[i] {
+			t.Errorf("op %d: valid = %v, provenance = %+v; want %+v", i, r.Valid, r.Op.Memory.Provenance, want[i])
+		}
+	}
+	if upd.Provenance != agent {
+		t.Error("Validate modified the caller's memory")
+	}
+}

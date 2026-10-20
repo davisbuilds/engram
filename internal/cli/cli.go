@@ -67,9 +67,36 @@ type env struct {
 	// for a fake in tests so the curate loop is exercised without spawning a
 	// paid model.
 	runnerFor func(timeout time.Duration) agentexec.Runner
-	// beforeApplyLock, when set, runs just before reconcile --apply takes the
-	// canonical lock; tests use it to land a concurrent write in that window.
+	// beforeApplyLock, when set, runs just before an apply takes the canonical
+	// lock; tests use it to land a concurrent write in that window.
 	beforeApplyLock func()
+	// canonHook, when set, runs at a named point (hookSnapshot and the rest)
+	// inside a command that acts on what it read from canonical; tests use it
+	// to attempt a concurrent write there.
+	canonHook func(point string)
+}
+
+// Points at which env.canonHook runs.
+const (
+	// hookSnapshot: the canonical state a render apply, or a curate capture,
+	// works from has been read, and nothing has been written from it yet.
+	hookSnapshot = "snapshot"
+	// hookCaptureLock: a curate capture has tried its shared lock (which a
+	// missing root leaves untaken) and not yet read canonical.
+	hookCaptureLock = "capture-lock"
+	// hookFingerprint: a curate capture has fingerprinted canonical but not
+	// yet read the corpus it shows the agent.
+	hookFingerprint = "fingerprint"
+	// hookPurge: forget has tombstoned its memories but not yet removed their
+	// renders.
+	hookPurge = "purge"
+)
+
+// at runs the canonHook for point, if one is set.
+func (e *env) at(point string) {
+	if e.canonHook != nil {
+		e.canonHook(point)
+	}
 }
 
 // command is one entry in engram's subcommand table.
@@ -87,7 +114,7 @@ var (
 	harnessArg  = &argSpec{positionals: 1}
 	shareArgs   = &argSpec{positionals: 1, values: []string{"--to", "--applies-cwd"}, bools: []string{"--any-cwd"}}
 	importArgs  = &argSpec{positionals: 1, values: []string{"--refresh", "--keep"}, bools: []string{"--all", "--shared"}}
-	curateArgs  = &argSpec{values: []string{"--harness", "--model", "--effort", "--timeout"}}
+	curateArgs  = &argSpec{values: []string{"--harness", "--model", "--effort", "--timeout", "--save-plan", "--plan"}}
 	detachArgs  = &argSpec{positionals: anyPositionals}
 	migrateArgs = &argSpec{positionals: 1, bools: []string{"--shared"}}
 	forgetArgs  = &argSpec{positionals: anyPositionals, values: []string{"--reason", "--successor"}, bools: []string{"--restore"}}
@@ -111,7 +138,7 @@ func commands() []command {
 		{"diff", "Show the cross-state difference for each render target.", noArgs, cmdDiff},
 		{"show", "Dump a harness's engram-rendered memories.", harnessArg, cmdShow},
 		{"review", "Health report: flags near-duplicate memory names, emitted as agent next_steps.", noArgs, cmdReview},
-		{"curate", "Run a headless agent over the corpus; it proposes add/merge/remove/rescope, engram applies (dry-run; --apply).", curateArgs, cmdCurate},
+		{"curate", "Run a headless agent over the corpus; it proposes add/merge/remove/rescope, engram applies (dry-run; --apply; --save-plan <file> keeps the reviewed plan, --plan <file> --apply applies it without the agent).", curateArgs, cmdCurate},
 		{"hook", "Print harness lifecycle wiring for session-boundary sync.", harnessArg, cmdHook},
 		{"config", "Show config + per-harness readiness (is each harness set up to read what engram writes?).", noArgs, cmdConfig},
 		{"schema", "Emit engram's JSON schemas (self-describing).", noArgs, cmdSchema},
@@ -269,6 +296,14 @@ func cmdSchema(e *env, _ string, _ []string) int {
 				"merge":   "{op, sources[>=2], memory, reason} — sources replaced by memory; a source reusing memory.name is kept",
 				"remove":  "{op, name, reason} — name must exist",
 				"rescope": "{op, name, to_scope, reason} — to_scope is 'global' or 'project:<repo>'",
+			},
+		},
+		"curate_plan": map[string]any{
+			"note": "the file `engram curate --save-plan <file>` writes and `engram curate --plan <file> [--apply]` reads; strict JSON: unknown fields, repeated keys and trailing data are refused",
+			"fields": []string{
+				"kind:\"engram-curate-plan\"", "version:1", "canonical_root:string(absolute)",
+				"corpus:{files:{<path relative to canonical_root>:\"sha256:<hex>\"}}",
+				"proposer:{harness,model?,effort?}?", "operations:curate_operation[]",
 			},
 		},
 	}

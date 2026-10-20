@@ -163,15 +163,18 @@ func (s *session) forget(e *env, name string, names []string, note tombstone.Not
 		return exitOK
 	}
 
+	// The canonical lock is taken before any render dir's and held through the
+	// purge, so no render apply runs between the tombstones and the purge, and
+	// a refused lock leaves canonical and every render as they were.
 	release, lerr := canonLock(root)
 	if lerr != nil {
 		e.emit(name, false, data, warns, lerr, nil)
 		return exitError
 	}
+	defer release()
 	// Re-check under the lock, so the batch forgets whole or not at all.
 	for _, m := range mems {
 		if _, _, found, lerr := store.Load(root, m.Name); lerr != nil || !found {
-			release()
 			e.emit(name, false, data, warns, &RespError{Code: "changed", Message: m.Name + " changed since it was read; nothing was forgotten"}, nil)
 			return exitError
 		}
@@ -180,14 +183,13 @@ func (s *session) forget(e *env, name string, names []string, note tombstone.Not
 	for i, m := range mems {
 		ts, ferr := tombstone.Forget(root, m.Name, note, now)
 		if ferr != nil {
-			release()
 			e.emit(name, false, data, warns, &RespError{Code: "forget", Message: ferr.Error()}, nil)
 			return exitError
 		}
 		items[i]["forgotten_at"] = ts.ForgottenAt
 	}
-	release()
 
+	e.at(hookPurge)
 	res, perr := purge.Apply()
 	data["renders"] = orEmpty(res.Applied)
 	if perr != nil {

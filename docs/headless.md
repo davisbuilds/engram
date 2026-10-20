@@ -77,23 +77,66 @@ validates and applies them.
 
 ```
 engram curate --json                 # dry-run: agent proposes, engram shows the validated plan
-engram curate --apply --json         # commit the plan (fail-closed if any op is invalid)
+engram curate --apply --json         # ask the agent for a new proposal and commit it unreviewed (fail-closed if any op is invalid)
 engram curate --harness codex --json # run the codex agent instead of claude
 engram curate --model claude-opus-5 --effort high --json   # override the model/effort
 ```
+
+### Reviewed plans
+
+A plain `--apply` runs the agent again, and the agent is not deterministic, so
+the batch it commits can differ from the one a dry run showed (a plain dry run
+keeps no plan, which is why its lead points here). To commit exactly what you
+review, make the dry run with `--save-plan`, review the plan it saves, and apply
+that file:
+
+```
+engram curate --save-plan curate-plan.json --json   # agent proposes; engram validates and saves the plan
+engram curate --plan curate-plan.json --json        # optional: re-check it against canonical now (no agent)
+engram curate --plan curate-plan.json --apply --json  # apply exactly the saved plan (no agent)
+```
+
+Review the saved plan's operations (`data.operations` in the first envelope, or
+the file itself) between the two steps. Each memory is shown as apply will
+write it: an `update`, or a `merge` reusing a source's name, carries the stored
+provenance engram keeps, not whatever the agent wrote. `data.plan.sha256` is
+the digest of the plan file's bytes in each step, so a log can match the bytes
+applied to the bytes saved or reviewed. It is not a signature and records no
+approval: it identifies a file, whoever wrote or edited it.
+
+The plan is bound to canonical as engram read it for the agent: the root, and
+the bytes of every file under it. That read holds the canonical lock shared, so
+no engram writer changes the store between the binding and the corpus the agent
+is shown; the lock is released before the agent runs, which it does with no
+lock held. A missing root has no lock to hold, so it is bound and shown as the
+empty store it was, not read again. Any change before apply (a `remember`, an
+`import`, a `forget`, a hand edit, even one that changes no parsed field) makes
+the plan stale: `--apply` refuses it with `stale_plan` (exit `3`), lists the
+changed paths in `data.drift`, and writes nothing. Run `--save-plan` again and
+review the new plan. The check runs again under the canonical lock immediately
+before the batch writes, so a write landing between the re-check and the apply
+is caught too. A plan edited by hand is revalidated like any other: it is
+refused if it is malformed (`invalid_plan`, exit `2`) or if an operation no
+longer validates (`invalid_proposal`, exit `3`), and otherwise applied as
+edited. `--save-plan` never overwrites a file and
+refuses a path inside the canonical root. See `docs/cli.md` for every code.
 
 Flow, and where each layer's authority begins and ends:
 
 1. **engram (deterministic):** gathers every canonical memory + `review`
    findings into a corpus and builds the prompt. The prompt reaches the agent on
    stdin, not as an argument, so the store's size is not capped by the OS
-   argument limit.
+   argument limit. Under `--apply` or `--save-plan` this read holds the
+   canonical lock shared, so a writer holding the lock refuses the run
+   (`locked`, exit `1`) before any agent runs; the lock is released before
+   step 2. A missing root is neither created nor read: the corpus is empty.
 2. **agent (judgment):** returns JSON `operations` — `add` / `update` / `merge` /
    `remove` / `rescope`, each with a `reason`. It is handed the corpus as text
    and needs no tools; it never touches the filesystem.
 3. **engram (deterministic):** validates every operation against the corpus and
-   the schema. Dry-run emits the per-op verdicts as `data.operations`; `--apply`
-   executes the batch through `store` under the canonical write-path.
+   the schema. Dry-run emits the per-op verdicts as `data.operations` (and
+   `--save-plan` keeps them as a plan file); `--apply` executes the batch
+   through `store` under the canonical write-path.
 
 **Fail closed.** If any proposed operation is invalid (unknown op, target that
 does not exist, a memory that fails the schema, a rename smuggled through
@@ -101,7 +144,10 @@ does not exist, a memory that fails the schema, a rename smuggled through
 `next_steps`. engram never partially applies a proposal it could not fully
 validate. A write that fails partway through a valid batch rolls back the batch,
 leaving canonical as it was; only a rollback that fails too leaves it partly
-applied, reported as `apply_partial`.
+applied, reported as `apply_partial`. A store whose `.forgotten` tombstone
+directory is a symlink is refused (`linked_history`, exit `1`) before any agent
+runs or anything is written, since rollback would restore the link but not
+the tombstones written behind it.
 
 **Curated edits stay curated.** An `update` or `merge` keeps the stored
 memory's provenance, including import's merge base, so a later import reports

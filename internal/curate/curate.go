@@ -128,6 +128,10 @@ func ParseProposal(text string) (Proposal, error) {
 // checked, so an intra-batch conflict (e.g. two adds of the same new name, or an
 // update of a name an earlier op removed) is caught rather than both passing
 // against the unchanged initial state. It mutates nothing on disk.
+//
+// A valid result's Op is the operation as Apply performs it: a memory that
+// replaces a stored one carries the stored provenance, which Apply keeps (see
+// keepProvenance), so a reviewer sees the memory that would be written.
 func Validate(ops []Operation, corpus []*schema.CanonicalMemory) []OpResult {
 	working := map[string]*schema.CanonicalMemory{}
 	for _, m := range corpus {
@@ -140,11 +144,29 @@ func Validate(ops []Operation, corpus []*schema.CanonicalMemory) []OpResult {
 			r.Valid = false
 			r.Error = err.Error()
 		} else {
-			applyToWorkingSet(op, working)
+			r.Op = resolve(op, working)
+			applyToWorkingSet(r.Op, working)
 		}
 		results = append(results, r)
 	}
 	return results
+}
+
+// resolve returns op as Apply performs it against the working set: a memory
+// whose name the working set holds takes that memory's provenance, as
+// keepProvenance does on disk. The caller's memory is not modified.
+func resolve(op Operation, working map[string]*schema.CanonicalMemory) Operation {
+	if op.Memory == nil {
+		return op
+	}
+	stored, ok := working[op.Memory.Name]
+	if !ok {
+		return op
+	}
+	m := *op.Memory
+	m.Provenance = stored.Provenance
+	op.Memory = &m
+	return op
 }
 
 // applyToWorkingSet advances the simulated corpus by one validated operation so
@@ -167,6 +189,11 @@ func applyToWorkingSet(op Operation, working map[string]*schema.CanonicalMemory)
 }
 
 func validateOne(op Operation, existing map[string]*schema.CanonicalMemory) error {
+	// A name an operation targets must be a memory name before it is looked up:
+	// a path-shaped one is refused for what it is.
+	if op.Name != "" && !schema.ValidName(op.Name) {
+		return fmt.Errorf("%s target %q is not a valid memory name", op.Op, op.Name)
+	}
 	switch op.Op {
 	case OpAdd:
 		if op.Memory == nil {
@@ -197,7 +224,17 @@ func validateOne(op Operation, existing map[string]*schema.CanonicalMemory) erro
 		if len(op.Sources) < 2 {
 			return fmt.Errorf("merge requires at least two sources")
 		}
+		seen := map[string]bool{}
 		for _, s := range op.Sources {
+			if !schema.ValidName(s) {
+				return fmt.Errorf("merge source %q is not a valid memory name", s)
+			}
+			// A repeated source would pass the two-source rule while merging
+			// one memory, a rename under another name.
+			if seen[s] {
+				return fmt.Errorf("merge lists source %q more than once", s)
+			}
+			seen[s] = true
 			if _, ok := existing[s]; !ok {
 				return fmt.Errorf("merge source %q does not exist", s)
 			}
@@ -246,13 +283,26 @@ type Applied struct {
 	Removed []string `json:"removed,omitempty"`
 }
 
-// Apply executes a batch against the canonical root. It acquires the shared lock
-// first, then re-discovers and re-validates against the *current* canonical
+// Apply executes a batch against the canonical root. It acquires the exclusive
+// canonical lock first, then re-discovers and re-validates against the *current* canonical
 // state — not the snapshot the agent was shown, which another writer may have
 // changed while the (slow) agent ran. The batch applies whole or not at all
 // (fail closed): if the proposal no longer validates against current canonical,
 // nothing is written. It returns what each operation did, in order.
 func Apply(root string, ops []Operation) ([]Applied, error) {
+	return apply(root, ops, nil)
+}
+
+// ApplyPlan applies a saved plan through the same batch as Apply. Under the
+// canonical lock, before anything else is read, it checks the plan's binding:
+// the store must be the one the plan names and hold, byte for byte, the files
+// it was made against (a *StaleError if not). Its operations must then validate
+// exactly as saved (ValidatePlan), so the batch written is the batch reviewed.
+func ApplyPlan(root string, p *Plan) ([]Applied, error) {
+	return apply(root, p.Operations, p)
+}
+
+func apply(root string, ops []Operation, plan *Plan) ([]Applied, error) {
 	// Hold the canonical-root lock across discovery, validation, and the whole
 	// multi-file mutation so no other writer can change canonical between the
 	// check and the writes, and the merge/remove sequence never half-applies.
@@ -262,6 +312,18 @@ func Apply(root string, ops []Operation) ([]Applied, error) {
 	}
 	defer release()
 
+	// Tombstones written through a linked .forgotten would land where neither
+	// the plan's binding nor the rollback snapshot looks.
+	if err := CheckHistory(root); err != nil {
+		return nil, err
+	}
+	validate := Validate
+	if plan != nil {
+		if err := plan.Check(root); err != nil {
+			return nil, err
+		}
+		validate = ValidatePlan
+	}
 	corpus, perrs, derr := discover.Discover(root)
 	if derr != nil {
 		return nil, fmt.Errorf("re-discover canonical under lock: %w", derr)
@@ -272,7 +334,7 @@ func Apply(root string, ops []Operation) ([]Applied, error) {
 	if len(perrs) > 0 {
 		return nil, fmt.Errorf("refusing to apply: %d canonical file(s) do not parse; fix them before curating", len(perrs))
 	}
-	results := Validate(ops, corpus)
+	results := validate(ops, corpus)
 	if !AllValid(results) {
 		return nil, fmt.Errorf("refusing to apply: proposal no longer validates against current canonical (%d of %d invalid)", countInvalid(results), len(results))
 	}

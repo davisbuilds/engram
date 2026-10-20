@@ -6,7 +6,7 @@ import (
 	"github.com/davisbuilds/engram/internal/agentexec"
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/curate"
-	"github.com/davisbuilds/engram/internal/discover"
+	"github.com/davisbuilds/engram/internal/lock"
 	"github.com/davisbuilds/engram/internal/review"
 )
 
@@ -15,12 +15,23 @@ import (
 // engram validates and — under --apply — applies them (deterministic). The agent
 // never touches a file; engram is the sole mutator, and a batch with any invalid
 // operation is refused whole (fail closed).
+//
+// --save-plan keeps a dry run's validated batch in a file for review, and
+// --plan applies such a file later without running an agent (see
+// cmdCuratePlan), so what is committed is exactly what was reviewed.
 func cmdCurate(e *env, name string, args []string) int {
 	pa, rerr := parseArgs(args, *curateArgs)
+	if rerr == nil {
+		rerr = checkPlanFlags(e, pa)
+	}
 	if rerr != nil {
 		e.emit(name, false, nil, nil, rerr, nil)
 		return exitUsage
 	}
+	if planIn := pa.last("--plan"); planIn != "" {
+		return cmdCuratePlan(e, name, planIn)
+	}
+	planOut := pa.last("--save-plan")
 	harness := config.HarnessClaude
 	if h := pa.last("--harness"); h != "" {
 		harness = h
@@ -36,12 +47,20 @@ func cmdCurate(e *env, name string, args []string) int {
 		e.emit(name, false, nil, nil, &RespError{Code: "config_load", Message: err.Error()}, nil)
 		return exitError
 	}
-	mems, perrs, derr := discover.Discover(cfg.CanonicalRoot)
-	if derr != nil {
-		e.emit(name, false, nil, warnParseErrors(perrs), &RespError{Code: "discover", Message: derr.Error()}, nil)
+	// A plan is bound to the store the agent is shown, so --save-plan checks
+	// its output path and binds the store before the (slow) agent runs.
+	if planOut != "" {
+		if _, rerr := checkPlanOut(planOut, cfg.CanonicalRoot); rerr != nil {
+			e.emit(name, false, nil, nil, rerr, nil)
+			return exitUsage
+		}
+	}
+	captured, warns, rerr := e.captureCorpus(cfg.CanonicalRoot, planOut != "")
+	if rerr != nil {
+		e.emit(name, false, nil, warns, rerr, nil)
 		return exitError
 	}
-	warns := warnParseErrors(perrs)
+	mems, binding := captured.mems, captured.binding
 
 	// Resolve the model/effort: config default, overridden per-run by flags.
 	choice := cfg.CurateModel(harness)
@@ -119,13 +138,23 @@ func cmdCurate(e *env, name string, args []string) int {
 	if !e.apply {
 		if !curate.AllValid(results) {
 			warns = append(warns, "some proposed operations are invalid; --apply would refuse the whole batch")
+			if planOut != "" {
+				warns = append(warns, "no plan was saved")
+			}
 			e.emit(name, false, data, warns, nil, curateNextSteps(results))
 			return exitConflicts
 		}
+		if planOut != "" {
+			proposer := &curate.Proposer{Harness: harness, Model: choice.Model, Effort: choice.Effort}
+			return e.savePlan(name, planOut, cfg.CanonicalRoot, binding, proposer, results, data, warns)
+		}
 		if len(results) > 0 {
+			// This run kept no plan, and the agent is not deterministic: no
+			// later command applies exactly these operations.
 			e.emit(name, true, data, warns, nil, []NextStep{{
-				Reason:  "the proposed operations validated cleanly",
-				Command: "re-run engram curate --harness " + harness + " --apply to commit them",
+				Reason: "the proposed operations validated cleanly, but this dry run kept no plan and another run can propose differently; " +
+					"to apply a batch after reviewing it, save a new proposal as a plan, review the plan, then apply that file (no agent runs)",
+				Command: "engram curate --harness " + harness + " --save-plan <plan file>, review it, then engram curate --plan <plan file> --apply",
 			}})
 			return exitOK
 		}
@@ -141,27 +170,44 @@ func cmdCurate(e *env, name string, args []string) int {
 		return exitConflicts
 	}
 	applied, aerr := curate.Apply(cfg.CanonicalRoot, proposal.Operations)
-	if aerr != nil {
-		data["applied"] = orEmpty(applied)
-		var partial *curate.PartialApplyError
-		if errors.As(aerr, &partial) {
-			data["unrestored"] = orEmpty(partial.Unrestored)
-		}
-		e.emit(name, false, data, warns, &RespError{Code: applyErrorCode(aerr), Message: aerr.Error()}, nil)
-		return exitError
-	}
+	return e.emitApplied(name, data, warns, applied, aerr)
+}
+
+// emitApplied reports a curate batch's outcome, from an agent's proposal or a
+// saved plan alike.
+func (e *env) emitApplied(name string, data map[string]any, warns []string, applied []curate.Applied, aerr error) int {
 	data["applied"] = orEmpty(applied)
-	e.emit(name, true, data, warns, nil, nil)
-	return exitOK
+	if aerr == nil {
+		e.emit(name, true, data, warns, nil, nil)
+		return exitOK
+	}
+	var stale *curate.StaleError
+	if errors.As(aerr, &stale) {
+		return e.emitStale(name, data, warns, stale)
+	}
+	var partial *curate.PartialApplyError
+	if errors.As(aerr, &partial) {
+		data["unrestored"] = orEmpty(partial.Unrestored)
+	}
+	e.emit(name, false, data, warns, &RespError{Code: applyErrorCode(aerr), Message: aerr.Error()}, nil)
+	return exitError
 }
 
 // applyErrorCode tells a failed batch that was rolled back (apply: canonical is
 // unchanged) from one that could not be (apply_partial: data.unrestored lists
-// each file that still differs from before the batch).
+// each file that still differs from before the batch), and both from a batch
+// refused the canonical lock before it read anything (locked, as for every
+// canonical writer) or refused under it, before any write, because the store's
+// tombstone directory is a symlink (linked_history).
 func applyErrorCode(err error) string {
 	var partial *curate.PartialApplyError
-	if errors.As(err, &partial) {
+	switch {
+	case errors.As(err, &partial):
 		return "apply_partial"
+	case errors.Is(err, lock.ErrLocked):
+		return "locked"
+	case errors.Is(err, curate.ErrLinkedHistory):
+		return "linked_history"
 	}
 	return "apply"
 }

@@ -67,6 +67,46 @@ func TestDiscoverMissingRootIsEmpty(t *testing.T) {
 	}
 }
 
+// A root that is itself a symlink to a directory is that directory's store:
+// its memories are discovered under the root's own spelling, a memory file that
+// is a link is still read through it, and a directory linked beneath the root
+// is still not walked. A dangling root link is a missing root.
+func TestDiscoverReadsALinkedRoot(t *testing.T) {
+	dir := t.TempDir()
+	store := filepath.Join(dir, "store")
+	writeMem(t, filepath.Join(store, "a.md"), "a-mem")
+	writeMem(t, filepath.Join(dir, "outside", "l.md"), "l-mem")
+	writeMem(t, filepath.Join(dir, "elsewhere", "x.md"), "x-mem")
+	for link, target := range map[string]string{
+		filepath.Join(store, "l.md"):   filepath.Join(dir, "outside", "l.md"),
+		filepath.Join(store, "sub"):    filepath.Join(dir, "elsewhere"),
+		filepath.Join(dir, "root"):     store,
+		filepath.Join(dir, "dangling"): filepath.Join(dir, "gone"),
+	} {
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root := filepath.Join(dir, "root")
+	located, perrs, err := Locate(root)
+	if err != nil || len(perrs) != 0 {
+		t.Fatalf("Locate: %v, parse errors %v", err, perrs)
+	}
+	got := map[string]string{}
+	for _, l := range located {
+		got[l.Memory.Name] = l.Path
+	}
+	want := map[string]string{"a-mem": filepath.Join(root, "a.md"), "l-mem": filepath.Join(root, "l.md")}
+	if len(got) != len(want) || got["a-mem"] != want["a-mem"] || got["l-mem"] != want["l-mem"] {
+		t.Errorf("located = %v, want %v", got, want)
+	}
+
+	mems, perrs, err := Discover(filepath.Join(dir, "dangling"))
+	if err != nil || len(mems) != 0 || len(perrs) != 0 {
+		t.Errorf("dangling root = %d mems, %d errs, err %v; want an empty store", len(mems), len(perrs), err)
+	}
+}
+
 // A file that parses but violates the schema (here an empty project repo, which
 // scope matching would read as "every cwd") is reported, never used.
 func TestDiscoverRejectsSchemaInvalidMemory(t *testing.T) {

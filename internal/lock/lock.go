@@ -1,6 +1,9 @@
-// Package lock provides engram's exclusive apply lock via advisory file locking
-// (flock). Any writer that mutates a directory of memories (a harness render
-// target, or the canonical root) takes this lock so no two applies interleave.
+// Package lock provides engram's apply lock via advisory file locking (flock).
+// Any writer that mutates a directory of memories (a harness render target, or
+// the canonical root) takes this lock exclusively so no two applies interleave.
+// A reader that must see the directory unchanged across several reads (a
+// render apply from its canonical snapshot to its last write) takes it shared,
+// which excludes writers but not other readers.
 //
 // The lock is an flock held on an open file descriptor, so the kernel releases
 // it automatically when the holding process exits — including on a crash. That
@@ -23,10 +26,20 @@ import (
 // Name is the lock filename created inside the guarded directory.
 const Name = ".engram.lock"
 
+// ErrLocked matches (errors.Is) the error of an acquire refused because
+// another holder has the lock.
+var ErrLocked = errors.New("lock is held")
+
+// heldError is a refused acquire: its own message, matching ErrLocked.
+type heldError struct{ msg string }
+
+func (e heldError) Error() string      { return e.msg }
+func (heldError) Is(target error) bool { return target == ErrLocked }
+
 // Acquire takes the exclusive lock in dir and returns a release func that frees
 // it (call it, typically via defer, when the mutation completes). A second live
-// holder — in this or any other process — fails immediately rather than blocking
-// or interleaving.
+// holder — exclusive or shared, in this or any other process — fails it
+// immediately rather than blocking or interleaving.
 func Acquire(dir string) (func(), error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
@@ -39,12 +52,39 @@ func Acquire(dir string) (func(), error) {
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		_ = f.Close()
 		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return nil, fmt.Errorf("another engram apply holds the lock at %s", path)
+			return nil, heldError{"another engram apply holds the lock at " + path}
 		}
 		return nil, fmt.Errorf("lock %s: %w", path, err)
 	}
+	return unlocker(f), nil
+}
+
+// AcquireShared takes the lock in dir shared, for a reader that must see dir
+// unchanged from its first read to its last: any number of readers hold it at
+// once, and no exclusive holder (a writer) can while one does. Like Acquire it
+// fails immediately, never waiting, when a writer holds the lock. Unlike
+// Acquire it never creates dir: a missing dir fails with an error satisfying
+// errors.Is(err, fs.ErrNotExist), since a reader must not turn "absent" into
+// "empty".
+func AcquireShared(dir string) (func(), error) {
+	path := filepath.Join(dir, Name)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDONLY, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
+		_ = f.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, heldError{"an engram write holds the lock at " + path}
+		}
+		return nil, fmt.Errorf("lock %s: %w", path, err)
+	}
+	return unlocker(f), nil
+}
+
+func unlocker(f *os.File) func() {
 	return func() {
 		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 		_ = f.Close()
-	}, nil
+	}
 }

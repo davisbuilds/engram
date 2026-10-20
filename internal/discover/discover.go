@@ -41,7 +41,7 @@ func Locate(root string) ([]Located, []ParseError, error) {
 		located []Located
 		perrs   []ParseError
 	)
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err := WalkRoot(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -78,6 +78,37 @@ func Locate(root string) ([]Located, []ParseError, error) {
 	}
 	located, dups := withholdDuplicates(located)
 	return located, append(perrs, dups...), nil
+}
+
+// WalkRoot is filepath.WalkDir over a canonical root, except that a root which
+// is a symlink to a directory is walked through the link, where WalkDir would
+// visit the link alone. Paths keep root's spelling, so a caller that writes or
+// removes what it finds does so through the link and never replaces it.
+// Symlinks beneath the root are visited as links, as WalkDir visits them. A
+// dangling root link reaches fn as a missing root does.
+func WalkRoot(root string, fn fs.WalkDirFunc) error {
+	if info, err := os.Lstat(root); err != nil || info.Mode()&fs.ModeSymlink == 0 {
+		return filepath.WalkDir(root, fn)
+	}
+	if info, err := os.Stat(root); err != nil {
+		return fn(root, nil, err)
+	} else if !info.IsDir() {
+		return filepath.WalkDir(root, fn)
+	}
+	real, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return fn(root, nil, err)
+	}
+	return filepath.WalkDir(real, func(path string, d fs.DirEntry, err error) error {
+		rel, rerr := filepath.Rel(real, path)
+		if rerr != nil {
+			return rerr
+		}
+		if rel == "." {
+			return fn(root, d, err)
+		}
+		return fn(filepath.Join(root, rel), d, err)
+	})
 }
 
 // withholdDuplicates removes every memory whose name another file also claims,
