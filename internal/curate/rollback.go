@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/davisbuilds/engram/internal/discover"
 	"github.com/davisbuilds/engram/internal/lock"
 )
 
@@ -55,9 +56,10 @@ func tracked(d fs.DirEntry) bool {
 	return name != lock.Name && !temp
 }
 
-// walkTracked calls fn for each tracked file under root, skipping .git.
+// walkTracked calls fn for each tracked file under root, skipping .git. A root
+// that links to a directory is walked through the link, as discovery walks it.
 func walkTracked(root string, fn func(rel, path string, d fs.DirEntry) error) error {
-	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	return discover.WalkRoot(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}

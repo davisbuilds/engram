@@ -79,12 +79,12 @@ func (e *StaleError) Error() string {
 
 var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
-// Fingerprint binds the store at root as it is now. A missing root is an empty
-// store, as discovery treats it. A file that cannot be read fails the
-// fingerprint rather than being left out of it.
+// Fingerprint binds the store at root as it is now. A missing root, or a root
+// link that dangles, is an empty store, as discovery treats it. A file that
+// cannot be read fails the fingerprint rather than being left out of it.
 func Fingerprint(root string) (Binding, error) {
 	b := Binding{Files: map[string]string{}}
-	if _, err := os.Lstat(root); errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(root); errors.Is(err, fs.ErrNotExist) {
 		return b, nil
 	}
 	err := walkTracked(root, func(rel, p string, d fs.DirEntry) error {

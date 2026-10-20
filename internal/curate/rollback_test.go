@@ -191,6 +191,35 @@ func TestApplyRollbackRestoresASymlinkedMemory(t *testing.T) {
 	}
 }
 
+// A batch applied through a root that is a symlink to the store rolls back
+// beneath the link: the store's files, a memory linked beneath it included, are
+// restored, and the root stays the same link.
+func TestApplyRollsBackBeneathALinkedRoot(t *testing.T) {
+	link, real := linkedRoot(t, "a", "b", "c")
+	target := filepath.Join(t.TempDir(), "l.md")
+	writeTestFile(t, target, "---\nname: l\ndescription: d\ntype: lesson\nscope: global\n---\nb\n")
+	if err := os.Symlink(target, filepath.Join(real, "l.md")); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(real, ".forgotten"), "in the way\n")
+	before := tree(t, real)
+	ops := []Operation{
+		{Op: OpUpdate, Name: "a", Memory: edited("a", "new\n")},
+		{Op: OpUpdate, Name: "l", Memory: edited("l", "new\n")},
+		{Op: OpMerge, Sources: []string{"b", "c"}, Memory: mem("bc")},
+	}
+	if _, err := Apply(link, ops); err == nil || !strings.Contains(err.Error(), "rolled back") {
+		t.Fatalf("err = %v, want a rolled-back failure", err)
+	}
+	sameTree(t, before, tree(t, real))
+	if got, err := os.Readlink(filepath.Join(real, "l.md")); err != nil || got != target {
+		t.Errorf("l.md is not the original symlink (readlink = %q, %v)", got, err)
+	}
+	if got, err := os.Readlink(link); err != nil || got != real {
+		t.Errorf("the root is not the original link (readlink = %q, %v)", got, err)
+	}
+}
+
 // The snapshot covers canonical's own files, not Git's or the lock's: a restore
 // leaves them as they are.
 func TestRestoreLeavesGitAndRuntimeFilesAlone(t *testing.T) {

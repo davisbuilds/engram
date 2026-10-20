@@ -57,6 +57,87 @@ func TestFingerprintBindsTheStoreFiles(t *testing.T) {
 	}
 }
 
+// linkedRoot returns a canonical root that is a symlink to a store holding
+// names, and the store's real path.
+func linkedRoot(t *testing.T, names ...string) (link, real string) {
+	t.Helper()
+	dir := t.TempDir()
+	real = filepath.Join(dir, "store")
+	seed(t, real, corpus(names...)...)
+	link = filepath.Join(dir, "canonical")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	return link, real
+}
+
+// A root that is a symlink to a directory binds the directory's files, the
+// same binding its real path gives, with a memory linked beneath it still bound
+// as a link. A dangling root link is a missing root: an empty store.
+func TestFingerprintFollowsALinkedRoot(t *testing.T) {
+	link, real := linkedRoot(t, "a")
+	target := filepath.Join(t.TempDir(), "l.md")
+	writeTestFile(t, target, "---\nname: l\ndescription: d\ntype: lesson\nscope: global\n---\nb\n")
+	if err := os.Symlink(target, filepath.Join(real, "l.md")); err != nil {
+		t.Fatal(err)
+	}
+	viaLink := fingerprint(t, link)
+	if got := strings.Join(keys(viaLink.Files), ","); got != "a.md,l.md" {
+		t.Fatalf("bound files = %s, want a.md,l.md", got)
+	}
+	if d := viaLink.Drift(fingerprint(t, real)); len(d) != 0 {
+		t.Errorf("the link and the real path bind differently: drift %v", d)
+	}
+	writeTestFile(t, target, "---\nname: l\ndescription: d\ntype: lesson\nscope: global\n---\nedited behind the link\n")
+	if d := strings.Join(viaLink.Drift(fingerprint(t, link)), ","); d != "l.md" {
+		t.Errorf("drift = %s, want l.md", d)
+	}
+
+	dangling := filepath.Join(t.TempDir(), "canonical")
+	if err := os.Symlink(filepath.Join(filepath.Dir(dangling), "gone"), dangling); err != nil {
+		t.Fatal(err)
+	}
+	if b := fingerprint(t, dangling); len(b.Files) != 0 {
+		t.Errorf("dangling root = %v, want an empty binding", b.Files)
+	}
+}
+
+// A plan binds the store, not the spelling of its root: one made through a
+// root link applies through the real path and the other way round, and a change
+// made through either spelling makes it stale.
+func TestApplyPlanThroughALinkedRoot(t *testing.T) {
+	for _, tc := range []struct{ name, made, applied string }{
+		{"made through the link", "link", "real"},
+		{"applied through the link", "real", "link"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			link, real := linkedRoot(t, "a", "b")
+			at := map[string]string{"link": link, "real": real}
+			p := testPlan(t, at[tc.made], Operation{Op: OpRemove, Name: "a", Reason: "old"})
+			if _, err := ApplyPlan(at[tc.applied], p); err != nil {
+				t.Fatalf("ApplyPlan: %v", err)
+			}
+			if _, err := os.Lstat(filepath.Join(real, "a.md")); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("a.md was not removed: %v", err)
+			}
+			if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+				t.Errorf("the root link was replaced: %v", err)
+			}
+		})
+	}
+
+	link, real := linkedRoot(t, "a", "b")
+	p := testPlan(t, link, Operation{Op: OpRemove, Name: "a", Reason: "old"})
+	writeTestFile(t, filepath.Join(real, "b.md"), "---\nname: b\ndescription: d\ntype: lesson\nscope: global\n---\nedited\n")
+	before := tree(t, real)
+	_, err := ApplyPlan(link, p)
+	var stale *StaleError
+	if !errors.As(err, &stale) || strings.Join(stale.Drift, ",") != "b.md" {
+		t.Fatalf("err = %v, want a StaleError naming b.md", err)
+	}
+	sameTree(t, before, tree(t, real))
+}
+
 func keys(m map[string]string) []string {
 	var out []string
 	for k := range m {

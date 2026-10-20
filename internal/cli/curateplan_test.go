@@ -446,6 +446,61 @@ func TestCuratePlanPreviewChecksWithoutWriting(t *testing.T) {
 	}
 }
 
+// A canonical_root that is a symlink to the store saves, previews and applies a
+// plan like the store's real path, either spelling applying a plan saved through
+// the other, and a change behind the link makes it stale. The root stays a link.
+func TestCuratePlanThroughALinkedRoot(t *testing.T) {
+	f := newPlanFixture(t, "a", "b")
+	link := filepath.Join(f.dir, "canonical-link")
+	if err := os.Symlink(f.canon, link); err != nil {
+		t.Fatal(err)
+	}
+	realCfg := filepath.Join(f.dir, "real.yaml")
+	writeFile(t, realCfg, "canonical_root: "+f.canon+"\n")
+	writeFile(t, f.cfg, "canonical_root: "+link+"\n")
+	update := `{"op":"update","name":"a","memory":{"name":"a","description":"d","type":"lesson","scope":"global","body":"reviewed\n"},"reason":"r"}`
+	f.save(t, fenced(update))
+	for _, cfg := range []string{f.cfg, realCfg} {
+		code, resp := runCurate(t, curateEnv(cfg, false, noAgent(t)), "--plan", f.plan)
+		if code != exitOK {
+			t.Fatalf("preview with %s: exit = %d, want %d: %v", filepath.Base(cfg), code, exitOK, resp)
+		}
+	}
+
+	before := storeTree(t, f.canon)
+	writeFile(t, filepath.Join(f.canon, "b.md"), "---\nname: b\ndescription: d\ntype: lesson\nscope: global\n---\nedited\n")
+	code, resp := f.apply(t)
+	if code != exitConflicts || errCode(resp) != "stale_plan" {
+		t.Fatalf("stale apply: exit = %d, error = %v; want %d stale_plan", code, resp["error"], exitConflicts)
+	}
+	writeFile(t, filepath.Join(f.canon, "b.md"), before["b.md"])
+
+	code, resp = runCurate(t, curateEnv(realCfg, true, noAgent(t)), "--plan", f.plan)
+	if code != exitOK {
+		t.Fatalf("apply through the real path: exit = %d, want %d: %v", code, exitOK, resp)
+	}
+	if b, _ := os.ReadFile(filepath.Join(f.canon, "a.md")); !strings.Contains(string(b), "reviewed") {
+		t.Errorf("a.md was not updated:\n%s", b)
+	}
+
+	if err := os.Remove(f.plan); err != nil {
+		t.Fatal(err)
+	}
+	code, resp = runCurate(t, curateEnv(realCfg, false, fakeClaudeRunner(fenced(`{"op":"remove","name":"b","reason":"old"}`))), "--save-plan", f.plan)
+	if code != exitOK {
+		t.Fatalf("save-plan through the real path: exit = %d, want %d: %v", code, exitOK, resp)
+	}
+	if code, resp := f.apply(t); code != exitOK {
+		t.Fatalf("apply through the link: exit = %d, want %d: %v", code, exitOK, resp)
+	}
+	if exists(filepath.Join(f.canon, "b.md")) {
+		t.Error("b.md was not removed")
+	}
+	if info, err := os.Lstat(link); err != nil || info.Mode()&fs.ModeSymlink == 0 {
+		t.Errorf("the root link was replaced: %v", err)
+	}
+}
+
 // --save-plan never overwrites a file, never writes into the canonical store
 // (where the plan would change the corpus it is bound to), and is checked
 // before the agent runs, so a bad path costs no model call.
