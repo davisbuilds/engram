@@ -16,7 +16,8 @@ are runtime state, not memory, and should not be versioned:
 .engram-*.tmp
 ```
 
-`.engram.lock` is the advisory apply lock every mutating command takes, and
+`.engram.lock` is the advisory apply lock every mutating command takes
+(exclusively to change canonical, shared to render from it), and
 `.engram-*.tmp` are the temporaries behind engram's atomic writes. Do version
 `.forgotten/`: its tombstones are what keep a retired memory from being imported
 again, so a checkout without them resurrects it.

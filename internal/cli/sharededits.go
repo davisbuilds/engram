@@ -195,8 +195,9 @@ func countOutcome(plans []sharedEditPlan, outcome string) int {
 // cmdImportShared imports edits made in place to Claude's shared renders: an
 // edit whose canonical has not moved since the render is taken, --refresh takes
 // a conflicting one anyway, and --keep discards one, keeping canonical. Under
-// --apply it saves what it takes, then re-syncs the shared dir, so taken edits
-// are restamped and kept ones are overwritten with canonical.
+// --apply it saves what it takes, then re-syncs the shared dir, both under one
+// canonical lock, so taken edits are restamped and kept ones are overwritten
+// with canonical.
 func cmdImportShared(e *env, name string, s *session, refresh, keep map[string]bool) int {
 	h := s.cfg.Harnesses[config.HarnessClaude]
 	if !h.Enabled() {
@@ -235,26 +236,32 @@ func cmdImportShared(e *env, name string, s *session, refresh, keep map[string]b
 		if e.beforeApplyLock != nil {
 			e.beforeApplyLock()
 		}
-		release, lerr := canonLock(s.cfg.CanonicalRoot)
+		root := s.cfg.CanonicalRoot
+		absent := rootAbsent(root) // before the lock creates it
+		release, lerr := canonLock(root)
 		if lerr != nil {
 			e.emit(name, false, data, warns, lerr, nil)
 			return exitError
 		}
-		serr := applySharedEdits(s.cfg.CanonicalRoot, plans, refresh)
-		release()
-		if serr != nil {
+		// Held through the re-sync, so it renders canonical as the saves left
+		// it, with no writer landing between that read and the render.
+		defer release()
+		if serr := applySharedEdits(root, plans, refresh); serr != nil {
 			e.emit(name, false, data, warns, &RespError{Code: "save", Message: serr.Error()}, nil)
 			return exitError
 		}
-		now, perrs, derr := discover.Discover(s.cfg.CanonicalRoot)
-		if derr != nil {
-			e.emit(name, false, data, warns, &RespError{Code: "discover", Message: derr.Error()}, nil)
+		now, rerr := readCanon(root, false)
+		if rerr != nil {
+			e.emit(name, false, data, append(warns, now.warns...), rerr, nil)
 			return exitError
 		}
-		keepStale, hwarns := staleHold(s.cfg.CanonicalRoot, perrs)
-		warns = append(warns, hwarns...)
-		_, tg := s.claudeSplit(h, now, s.agentFor("claude"), keepStale)
+		if absent {
+			now.holdAbsent(root)
+		}
+		warns = now.warns
+		_, tg := s.claudeSplit(h, now.mems, s.agentFor("claude"), now.keepStale)
 		tg.Discard = keep
+		e.at(hookSnapshot)
 		res, aerr := tg.Apply()
 		if aerr != nil {
 			e.emit(name, false, data, warns, &RespError{Code: "sync", Message: aerr.Error()}, nil)
@@ -277,31 +284,4 @@ func cmdImportShared(e *env, name string, s *session, refresh, keep map[string]b
 	}
 	e.emit(name, exit == exitOK, data, warns, nil, sharedEditNextSteps(held))
 	return exit
-}
-
-// fromCanonical replaces each memory with an edited shared render by its
-// current canonical form, so propagation renders exactly what canonical holds
-// after the apply, whether or not a fast-forward survived its recheck.
-func fromCanonical(mems, present []*schema.CanonicalMemory, plans []sharedEditPlan) []*schema.CanonicalMemory {
-	touched := map[string]bool{}
-	for _, p := range plans {
-		touched[p.edit.Name] = true
-	}
-	if len(touched) == 0 {
-		return mems
-	}
-	now := map[string]*schema.CanonicalMemory{}
-	for _, m := range present {
-		if touched[m.Name] {
-			now[m.Name] = m
-		}
-	}
-	out := make([]*schema.CanonicalMemory, 0, len(mems))
-	for _, m := range mems {
-		if c, ok := now[m.Name]; ok {
-			m = c
-		}
-		out = append(out, m)
-	}
-	return out
 }

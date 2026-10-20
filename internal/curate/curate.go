@@ -283,8 +283,8 @@ type Applied struct {
 	Removed []string `json:"removed,omitempty"`
 }
 
-// Apply executes a batch against the canonical root. It acquires the shared lock
-// first, then re-discovers and re-validates against the *current* canonical
+// Apply executes a batch against the canonical root. It acquires the exclusive
+// canonical lock first, then re-discovers and re-validates against the *current* canonical
 // state — not the snapshot the agent was shown, which another writer may have
 // changed while the (slow) agent ran. The batch applies whole or not at all
 // (fail closed): if the proposal no longer validates against current canonical,

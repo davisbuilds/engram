@@ -42,14 +42,18 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		e.emit(name, false, nil, warns, ierr, nil)
 		return exitError
 	}
-	mems, perrs, derr := discover.Discover(s.cfg.CanonicalRoot)
-	if derr != nil {
-		e.emit(name, false, nil, warns, &RespError{Code: "discover", Message: derr.Error()}, nil)
+	root := s.cfg.CanonicalRoot
+	pre, rerr := readCanon(root, rootAbsent(root))
+	if rerr != nil {
+		e.emit(name, false, nil, append(warns, pre.warns...), rerr, nil)
 		return exitError
 	}
-	warns = append(warns, warnParseErrors(perrs)...)
-	keepStale, hwarns := staleHold(s.cfg.CanonicalRoot, perrs)
-	warns = append(warns, hwarns...)
+	mems, perrs, keepStale := pre.mems, pre.perrs, pre.keepStale
+	// The canonical warnings sit at warns[canonAt:canonEnd]; under --apply
+	// they are replaced by the warnings of the read propagation renders from.
+	canonAt := len(warns)
+	warns = append(warns, pre.warns...)
+	canonEnd := len(warns)
 
 	// Simulate the imports against current canonical (same rule as store.Save:
 	// new name -> created, identical -> unchanged, differing name-collision ->
@@ -103,21 +107,25 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		}
 	}
 
-	// 2. Under --apply, persist the imports to canonical (same outcomes as simulated).
+	// 2. Under --apply, persist the imports to canonical (same outcomes as
+	// simulated), then propagate, all under one exclusive lock.
 	if e.apply {
 		if e.beforeApplyLock != nil {
 			e.beforeApplyLock()
 		}
-		release, lerr := canonLock(s.cfg.CanonicalRoot)
+		absent := rootAbsent(root) // before the lock creates it
+		release, lerr := canonLock(root)
 		if lerr != nil {
 			e.emit(name, false, nil, warns, lerr, nil)
 			return exitError
 		}
+		// Held through propagation: no writer lands between the read below and
+		// the last render written from it.
+		defer release()
 		// Re-read the tombstones under the lock: a forget that landed since the
 		// simulation must still keep its memory out.
-		tombs, terr = tombstone.Load(s.cfg.CanonicalRoot)
+		tombs, terr = tombstone.Load(root)
 		if terr != nil {
-			release()
 			e.emit(name, false, nil, warns, &RespError{Code: "tombstones", Message: terr.Error()}, nil)
 			return exitError
 		}
@@ -126,37 +134,36 @@ func cmdReconcile(e *env, name string, _ []string) int {
 				if tombs.Blocks(m) || m.Validate() != nil {
 					continue // forgotten, or already counted as invalid in the simulation
 				}
-				if _, _, serr := store.Save(s.cfg.CanonicalRoot, m, false); serr != nil {
-					release()
+				if _, _, serr := store.Save(root, m, false); serr != nil {
 					e.emit(name, false, nil, warns, &RespError{Code: "save", Message: serr.Error()}, nil)
 					return exitError
 				}
 			}
 		}
-		if serr := applySharedEdits(s.cfg.CanonicalRoot, sharedPlans, nil); serr != nil {
-			release()
+		if serr := applySharedEdits(root, sharedPlans, nil); serr != nil {
 			e.emit(name, false, nil, warns, &RespError{Code: "save", Message: serr.Error()}, nil)
 			return exitError
 		}
-		// Propagate only what canonical holds now: a memory removed since the
-		// simulation (a concurrent forget) must not be rendered back.
-		present, _, derr := discover.Discover(s.cfg.CanonicalRoot)
-		if derr != nil {
-			release()
-			e.emit(name, false, nil, warns, &RespError{Code: "discover", Message: derr.Error()}, nil)
+		// Propagate canonical as it is now, not the simulated set: what the
+		// imports wrote, a skipped shared-edit fast-forward, and whatever
+		// another writer changed since the simulation (a removal, a content or
+		// scope edit, a file that no longer parses, which holds removals).
+		now, rerr := readCanon(root, false)
+		if rerr != nil {
+			e.emit(name, false, nil, warns, rerr, nil)
 			return exitError
 		}
-		merged = keepPresent(merged, present)
-		// A shared edit's fast-forward may have been skipped under the lock (its
-		// canonical moved since the simulation): propagate what canonical holds.
-		merged = fromCanonical(merged, present, sharedPlans)
-		release()
+		if absent {
+			now.holdAbsent(root)
+		}
+		merged, keepStale = now.mems, now.keepStale
+		warns = append(append(warns[:canonAt:canonAt], now.warns...), warns[canonEnd:]...)
 		if sharedEntry >= 0 {
 			importEntries[sharedEntry]["results"] = sharedEditRows(sharedPlans)
 		}
 	}
-	// 3. Review + propagate against the merged set (as simulated; apply also drops
-	// anything removed concurrently).
+	// 3. Review + propagate against the merged set (as simulated; under
+	// --apply, canonical as written).
 	findings := review.Analyze(merged)
 	reviewItems := make([]map[string]any, 0, len(findings))
 	var next []NextStep
@@ -180,6 +187,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 
 	targets, twarns := s.enricherTargets(merged, keepStale)
 	warns = append(warns, twarns...)
+	e.at(hookSnapshot)
 	syncEntries := make([]map[string]any, 0, len(targets))
 	for _, tg := range targets {
 		entry := map[string]any{"harness": tg.Harness()}
@@ -325,22 +333,6 @@ func refreshedEntry(name string, stored, cand *schema.CanonicalMemory) map[strin
 		"name": name, "outcome": string(store.Updated),
 		"differs": strings.Join(store.Diff(stored, cand), ","),
 	}
-}
-
-// keepPresent drops from merged every memory whose name canonical no longer
-// holds.
-func keepPresent(merged, present []*schema.CanonicalMemory) []*schema.CanonicalMemory {
-	names := make(map[string]bool, len(present))
-	for _, m := range present {
-		names[m.Name] = true
-	}
-	out := merged[:0:0]
-	for _, m := range merged {
-		if names[m.Name] {
-			out = append(out, m)
-		}
-	}
-	return out
 }
 
 // forgottenRow is the result row for an import candidate a tombstone keeps out:

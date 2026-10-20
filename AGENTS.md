@@ -47,7 +47,20 @@ is the intelligence. See `README.md` for the user-facing overview.
 - **All canonical mutation serializes** under one exclusive apply lock
   (`internal/lock`, an advisory `flock` the kernel releases automatically on
   process exit or crash) — `remember`, `share`, `import --apply`,
-  `curate --apply`, `forget --apply`, and `detach --apply` all take it.
+  `curate --apply`, `forget --apply`, `detach --apply`, `reconcile --apply` and
+  `migrate --shared --apply` all take it.
+- **Renders come from one locked read of canonical.** A render apply
+  (`sync --apply`, `migrate --apply`) holds the canonical lock *shared* from its
+  read of canonical through its last render write; a writer that also renders
+  (`reconcile`, `import --shared`, `forget`, `migrate --shared`) holds its
+  exclusive lock through its renders and renders from a read made under it. So
+  a removal lands before the read or is refused, and is never undone by a
+  render made from an older read. The canonical lock is taken before any render
+  directory's; every lock fails fast (`locked`, nothing written), never waits;
+  dry runs take none. A reader never creates a missing canonical root (it must
+  stay "missing", which holds `STALE` removals, not become "empty"). `curate`
+  reads its corpus under the shared lock and releases it before the agent runs;
+  a missing root, which leaves nothing locked, is captured empty, never read.
 - **Claude renders split in two.** Shared memories (global, no cwd narrowing)
   render once into `<claude home>/engram/memory/`, loaded everywhere through an
   engram-owned `<claude home>/rules/engram-memory.md`; project slugs hold only

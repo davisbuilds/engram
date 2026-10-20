@@ -63,13 +63,17 @@ func cmdMigrate(e *env, name string, args []string) int {
 		return cmdMigrateShared(e, name, s, h.Home)
 	}
 
-	mems, perrs, err := discover.Discover(s.cfg.CanonicalRoot)
-	if err != nil {
-		e.emit(name, false, nil, nil, &RespError{Code: "discover", Message: err.Error()}, nil)
+	// An adopted original becomes engram's render of canonical, so --apply
+	// adopts from a read made, like sync's, holding the canonical lock shared
+	// until the last adoption.
+	v, release, rerr := e.readCanonFor(s.cfg.CanonicalRoot)
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
 		return exitError
 	}
-	warns := warnParseErrors(perrs)
-	rel := scope.RelevantFor(mems, s.claudeRoot, s.agentFor("claude"), s.host)
+	defer release()
+	warns := warnParseErrors(v.perrs)
+	rel := scope.RelevantFor(v.mems, s.claudeRoot, s.agentFor("claude"), s.host)
 	tgt := sync.ClaudeMigrateTarget{MemoryDir: claudeMemoryDir(h.Home, s.claudeRoot), Desired: rel}
 
 	base := map[string]any{"harness": harness, "apply": e.apply, "cwd": s.cwd}
@@ -86,6 +90,7 @@ func cmdMigrate(e *env, name string, args []string) int {
 		return exitOK
 	}
 
+	e.at(hookSnapshot)
 	res, aerr := tgt.Apply()
 	if aerr != nil {
 		e.emit(name, false, base, warns, &RespError{Code: "migrate", Message: aerr.Error()}, nil)
@@ -144,6 +149,18 @@ func plural(n int, noun string) string {
 // (and where an edit to it is imported from). Diverged originals are reported
 // and left byte-for-byte; reconcile imports their edits first.
 func cmdMigrateShared(e *env, name string, s *session, claudeHome string) int {
+	if e.apply {
+		// The detach writes canonical, so --apply takes the canonical lock
+		// before any render dir's lock and holds it from the read through the
+		// detach: a refused lock removes no original, and each original is
+		// judged against the canonical memory it detaches.
+		release, lerr := canonLock(s.cfg.CanonicalRoot)
+		if lerr != nil {
+			e.emit(name, false, nil, nil, lerr, nil)
+			return exitError
+		}
+		defer release()
+	}
 	mems, perrs, err := discover.Discover(s.cfg.CanonicalRoot)
 	if err != nil {
 		e.emit(name, false, nil, nil, &RespError{Code: "discover", Message: err.Error()}, nil)
@@ -181,6 +198,7 @@ func cmdMigrateShared(e *env, name string, s *session, claudeHome string) int {
 		e.emit(name, true, base, append(warns, sharedMigrateWarnings(actions)...), nil, next)
 		return exitOK
 	}
+	e.at(hookSnapshot)
 	res, aerr := adopt.Apply()
 	base["result"] = res
 	if aerr != nil {
@@ -189,12 +207,6 @@ func cmdMigrateShared(e *env, name string, s *session, claudeHome string) int {
 	}
 	// The originals are gone: detach each adopted memory so it is neither kept
 	// out of Claude as Claude-imported nor reported as an orphan.
-	release, lerr := canonLock(s.cfg.CanonicalRoot)
-	if lerr != nil {
-		e.emit(name, false, base, warns, lerr, nil)
-		return exitError
-	}
-	defer release()
 	for _, a := range res.Adopted {
 		m, _, found, lerr := store.Load(s.cfg.CanonicalRoot, a.Name)
 		if lerr != nil {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/davisbuilds/engram/internal/agentexec"
 	"github.com/davisbuilds/engram/internal/curate"
+	"github.com/davisbuilds/engram/internal/lock"
 )
 
 // fakeClaudeRunner returns a claude `--output-format json` envelope whose result
@@ -108,6 +109,41 @@ func TestCurateDryRunDoesNotMutate(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(canon, "victim.md")); err != nil {
 		t.Errorf("dry run must not delete victim.md: %v", err)
+	}
+}
+
+// A plain dry run keeps no plan, and a plain --apply asks the agent again, so
+// the dry run's lead points at the saved-plan workflow, says the plan it saves
+// is a new proposal, and never claims an --apply would commit the operations
+// shown. It takes no lock either: not even the lock file is written.
+func TestCurateDryRunLeadsToANewSavedPlan(t *testing.T) {
+	dir := t.TempDir()
+	canon := filepath.Join(dir, "canonical")
+	seedCanon(t, canon, "victim")
+	cfg := filepath.Join(dir, "c.yaml")
+	writeFile(t, cfg, "canonical_root: "+canon+"\n")
+	proposal := "```json\n" + `{"operations":[{"op":"remove","name":"victim","reason":"x"}]}` + "\n```"
+	code, resp := runCurate(t, curateEnv(cfg, false, fakeClaudeRunner(proposal)), "--harness", "claude-code")
+	if code != exitOK {
+		t.Fatalf("dry-run exit = %d: %v", code, resp["error"])
+	}
+	next, _ := resp["next_steps"].([]any)
+	if len(next) != 1 {
+		t.Fatalf("next_steps = %v, want one lead", next)
+	}
+	lead, _ := next[0].(map[string]any)
+	reason, _ := lead["reason"].(string)
+	command, _ := lead["command"].(string)
+	for _, want := range []string{"engram curate --harness claude-code --save-plan", "engram curate --plan", "--apply"} {
+		if !strings.Contains(command, want) {
+			t.Errorf("lead command %q lacks %q", command, want)
+		}
+	}
+	if !strings.Contains(reason, "new proposal") || strings.Contains(command+reason, "commit them") {
+		t.Errorf("lead must name the saved plan as a new proposal and not promise these operations: %v", lead)
+	}
+	if exists(filepath.Join(canon, lock.Name)) {
+		t.Error("a curate dry run wrote the lock file")
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/curate"
 	"github.com/davisbuilds/engram/internal/discover"
+	"github.com/davisbuilds/engram/internal/schema"
 )
 
 // cmdCuratePlan checks a saved plan against the store as it is now and, under
@@ -238,9 +239,64 @@ func planExistsError(out string) *RespError {
 	return &RespError{Code: "plan_exists", Message: out + " already exists; a plan never replaces a file"}
 }
 
+// corpusCapture is what curate shows its agent: the corpus and, for
+// --save-plan, the binding of the store it was read from.
+type corpusCapture struct {
+	mems    []*schema.CanonicalMemory
+	binding curate.Binding
+}
+
+// captureCorpus reads the corpus curate shows its agent and, with bind, the
+// binding a saved plan carries. Under --apply or --save-plan the whole read
+// holds the canonical lock shared, so no engram writer changes the store
+// between the binding and the corpus (or changes it and changes it back); a
+// writer holding the lock refuses the capture before any agent runs. The lock
+// is released before it returns, so the agent runs with no lock held, and
+// apply checks the store again under the exclusive lock before it writes. A
+// root the lock found missing is captured as the empty store it was, not read:
+// nothing is locked, so a root created since would be read unlocked. A plain
+// dry run takes no lock, since it writes nothing.
+func (e *env) captureCorpus(root string, bind bool) (corpusCapture, []string, *RespError) {
+	var c corpusCapture
+	if e.apply || bind {
+		release, missing, rerr := canonReadLock(root)
+		if rerr != nil {
+			return c, nil, rerr
+		}
+		defer release()
+		e.at(hookCaptureLock)
+		if missing {
+			c.binding = curate.Binding{Files: map[string]string{}}
+			return c, nil, nil
+		}
+	}
+	if bind {
+		var err error
+		if c.binding, err = curate.Fingerprint(root); err != nil {
+			return c, nil, &RespError{Code: "fingerprint", Message: err.Error()}
+		}
+	}
+	e.at(hookFingerprint)
+	mems, perrs, err := discover.Discover(root)
+	warns := warnParseErrors(perrs)
+	if err != nil {
+		return c, warns, &RespError{Code: "discover", Message: err.Error()}
+	}
+	c.mems = mems
+	e.at(hookSnapshot)
+	if bind {
+		if rerr := checkPlannable(root, c.binding, perrs); rerr != nil {
+			return c, warns, rerr
+		}
+	}
+	return c, warns, nil
+}
+
 // checkPlannable refuses to plan over a store that does not fully parse (apply
 // would refuse it) or that changed while it was read (the corpus the agent is
-// shown would not be the store the plan is bound to).
+// shown would not be the store the plan is bound to). The capture's shared
+// lock keeps engram's writers out, so such a change is an edit made outside
+// engram; one that leaves the bytes as they were cannot be told apart.
 func checkPlannable(root string, binding curate.Binding, perrs []discover.ParseError) *RespError {
 	if len(perrs) > 0 {
 		return corpusParseError(len(perrs))

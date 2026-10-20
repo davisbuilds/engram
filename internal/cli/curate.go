@@ -6,7 +6,7 @@ import (
 	"github.com/davisbuilds/engram/internal/agentexec"
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/curate"
-	"github.com/davisbuilds/engram/internal/discover"
+	"github.com/davisbuilds/engram/internal/lock"
 	"github.com/davisbuilds/engram/internal/review"
 )
 
@@ -48,30 +48,19 @@ func cmdCurate(e *env, name string, args []string) int {
 		return exitError
 	}
 	// A plan is bound to the store the agent is shown, so --save-plan checks
-	// its output path and fingerprints the store before the (slow) agent runs.
-	var binding curate.Binding
+	// its output path and binds the store before the (slow) agent runs.
 	if planOut != "" {
 		if _, rerr := checkPlanOut(planOut, cfg.CanonicalRoot); rerr != nil {
 			e.emit(name, false, nil, nil, rerr, nil)
 			return exitUsage
 		}
-		if binding, err = curate.Fingerprint(cfg.CanonicalRoot); err != nil {
-			e.emit(name, false, nil, nil, &RespError{Code: "fingerprint", Message: err.Error()}, nil)
-			return exitError
-		}
 	}
-	mems, perrs, derr := discover.Discover(cfg.CanonicalRoot)
-	if derr != nil {
-		e.emit(name, false, nil, warnParseErrors(perrs), &RespError{Code: "discover", Message: derr.Error()}, nil)
+	captured, warns, rerr := e.captureCorpus(cfg.CanonicalRoot, planOut != "")
+	if rerr != nil {
+		e.emit(name, false, nil, warns, rerr, nil)
 		return exitError
 	}
-	warns := warnParseErrors(perrs)
-	if planOut != "" {
-		if rerr := checkPlannable(cfg.CanonicalRoot, binding, perrs); rerr != nil {
-			e.emit(name, false, nil, warns, rerr, nil)
-			return exitError
-		}
-	}
+	mems, binding := captured.mems, captured.binding
 
 	// Resolve the model/effort: config default, overridden per-run by flags.
 	choice := cfg.CurateModel(harness)
@@ -160,9 +149,12 @@ func cmdCurate(e *env, name string, args []string) int {
 			return e.savePlan(name, planOut, cfg.CanonicalRoot, binding, proposer, results, data, warns)
 		}
 		if len(results) > 0 {
+			// This run kept no plan, and the agent is not deterministic: no
+			// later command applies exactly these operations.
 			e.emit(name, true, data, warns, nil, []NextStep{{
-				Reason:  "the proposed operations validated cleanly",
-				Command: "re-run engram curate --harness " + harness + " --apply to commit them",
+				Reason: "the proposed operations validated cleanly, but this dry run kept no plan and another run can propose differently; " +
+					"to apply a batch after reviewing it, save a new proposal as a plan, review the plan, then apply that file (no agent runs)",
+				Command: "engram curate --harness " + harness + " --save-plan <plan file>, review it, then engram curate --plan <plan file> --apply",
 			}})
 			return exitOK
 		}
@@ -203,11 +195,16 @@ func (e *env) emitApplied(name string, data map[string]any, warns []string, appl
 
 // applyErrorCode tells a failed batch that was rolled back (apply: canonical is
 // unchanged) from one that could not be (apply_partial: data.unrestored lists
-// each file that still differs from before the batch).
+// each file that still differs from before the batch), and both from a batch
+// refused the canonical lock before it read anything (locked, as for every
+// canonical writer).
 func applyErrorCode(err error) string {
 	var partial *curate.PartialApplyError
-	if errors.As(err, &partial) {
+	switch {
+	case errors.As(err, &partial):
 		return "apply_partial"
+	case errors.Is(err, lock.ErrLocked):
+		return "locked"
 	}
 	return "apply"
 }

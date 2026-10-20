@@ -67,9 +67,36 @@ type env struct {
 	// for a fake in tests so the curate loop is exercised without spawning a
 	// paid model.
 	runnerFor func(timeout time.Duration) agentexec.Runner
-	// beforeApplyLock, when set, runs just before reconcile --apply takes the
-	// canonical lock; tests use it to land a concurrent write in that window.
+	// beforeApplyLock, when set, runs just before an apply takes the canonical
+	// lock; tests use it to land a concurrent write in that window.
 	beforeApplyLock func()
+	// canonHook, when set, runs at a named point (hookSnapshot and the rest)
+	// inside a command that acts on what it read from canonical; tests use it
+	// to attempt a concurrent write there.
+	canonHook func(point string)
+}
+
+// Points at which env.canonHook runs.
+const (
+	// hookSnapshot: the canonical state a render apply, or a curate capture,
+	// works from has been read, and nothing has been written from it yet.
+	hookSnapshot = "snapshot"
+	// hookCaptureLock: a curate capture has tried its shared lock (which a
+	// missing root leaves untaken) and not yet read canonical.
+	hookCaptureLock = "capture-lock"
+	// hookFingerprint: a curate capture has fingerprinted canonical but not
+	// yet read the corpus it shows the agent.
+	hookFingerprint = "fingerprint"
+	// hookPurge: forget has tombstoned its memories but not yet removed their
+	// renders.
+	hookPurge = "purge"
+)
+
+// at runs the canonHook for point, if one is set.
+func (e *env) at(point string) {
+	if e.canonHook != nil {
+		e.canonHook(point)
+	}
 }
 
 // command is one entry in engram's subcommand table.

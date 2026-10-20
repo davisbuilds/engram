@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -33,6 +34,92 @@ func canonLock(root string) (func(), *RespError) {
 		return nil, &RespError{Code: "locked", Message: err.Error()}
 	}
 	return release, nil
+}
+
+// canonReadLock takes the canonical-root lock shared, for a command that
+// writes renders (or a plan) from what it reads of canonical: writers are
+// refused until it releases, other readers are not, so every render it writes
+// comes from one read that no removal can land inside. A writer holding the
+// lock refuses it with the same retryable "locked" error. A missing root is
+// not created (it would then read as empty, which prunes, rather than missing,
+// which holds): missing reports it, with nothing locked.
+func canonReadLock(root string) (release func(), missing bool, rerr *RespError) {
+	release, err := lock.AcquireShared(root)
+	if errors.Is(err, fs.ErrNotExist) {
+		return func() {}, true, nil
+	}
+	if err != nil {
+		return nil, false, &RespError{Code: "locked", Message: err.Error()}
+	}
+	return release, false, nil
+}
+
+// rootAbsent reports whether the canonical root does not exist.
+func rootAbsent(root string) bool {
+	_, err := os.Stat(root)
+	return errors.Is(err, fs.ErrNotExist)
+}
+
+// canonView is one read of canonical: its memories, the files withheld from
+// them, and whether STALE removals are held because the read may omit a live
+// memory. warns carries the parse and hold warnings.
+type canonView struct {
+	mems      []*schema.CanonicalMemory
+	perrs     []discover.ParseError
+	keepStale bool
+	warns     []string
+}
+
+// readCanon reads canonical at root. An absent root is not read: there is
+// nothing to read, and a root created since would be read outside the lock
+// that found it absent. Its removals are held (see staleHold).
+func readCanon(root string, absent bool) (canonView, *RespError) {
+	var v canonView
+	if !absent {
+		mems, perrs, err := discover.Discover(root)
+		if err != nil {
+			return canonView{warns: warnParseErrors(perrs)}, &RespError{Code: "discover", Message: err.Error()}
+		}
+		v.mems, v.perrs = mems, perrs
+	}
+	v.warns = warnParseErrors(v.perrs)
+	var hwarns []string
+	v.keepStale, hwarns = staleHold(root, absent, v.perrs)
+	v.warns = append(v.warns, hwarns...)
+	return v, nil
+}
+
+// holdAbsent holds v's removals for a root that was absent before an exclusive
+// lock created it: it is new and empty, not a store whose renders can go.
+func (v *canonView) holdAbsent(root string) {
+	if v.keepStale {
+		return
+	}
+	var hwarns []string
+	v.keepStale, hwarns = staleHold(root, true, nil)
+	v.warns = append(v.warns, hwarns...)
+}
+
+// readCanonFor reads canonical for a command that renders from it. Under
+// --apply the read is made holding the canonical lock shared, and release
+// frees it: call it after the command's last render write, so no writer lands
+// between the read and any write made from it. A dry run takes no lock, since
+// it writes nothing (not even the lock file).
+func (e *env) readCanonFor(root string) (v canonView, release func(), rerr *RespError) {
+	release, absent := func() {}, rootAbsent(root)
+	if e.apply {
+		if e.beforeApplyLock != nil {
+			e.beforeApplyLock()
+		}
+		if release, absent, rerr = canonReadLock(root); rerr != nil {
+			return canonView{}, nil, rerr
+		}
+	}
+	if v, rerr = readCanon(root, absent); rerr != nil {
+		release()
+		return v, nil, rerr
+	}
+	return v, release, nil
 }
 
 // session resolves the cwd/host context and loads config once, shared by the
@@ -108,16 +195,23 @@ func (s *session) skippedNote(harnessName string) string {
 	return harnessName + " disabled; skipped"
 }
 
-// targets builds a reconcilable target for every enabled harness, filtering the
-// discovered memories per harness (the agent axis differs by harness).
+// targets reads canonical, unlocked, and builds the targets for a command
+// that only plans (audit, diff).
 func (s *session) targets() ([]sync.Target, []string, *RespError) {
-	mems, perrs, err := discover.Discover(s.cfg.CanonicalRoot)
-	if err != nil {
-		return nil, nil, &RespError{Code: "discover", Message: err.Error()}
+	v, rerr := readCanon(s.cfg.CanonicalRoot, rootAbsent(s.cfg.CanonicalRoot))
+	if rerr != nil {
+		return nil, v.warns, rerr
 	}
-	warns := warnParseErrors(perrs)
-	keepStale, hwarns := staleHold(s.cfg.CanonicalRoot, perrs)
-	warns = append(warns, hwarns...)
+	targets, warns := s.targetsFrom(v)
+	return targets, warns, nil
+}
+
+// targetsFrom builds a reconcilable target for every enabled harness from one
+// read of canonical, filtering its memories per harness (the agent axis
+// differs by harness).
+func (s *session) targetsFrom(v canonView) ([]sync.Target, []string) {
+	mems, keepStale := v.mems, v.keepStale
+	warns := append([]string(nil), v.warns...)
 
 	var targets []sync.Target
 	if h := s.cfg.Harnesses[config.HarnessClaude]; h.Enabled() {
@@ -140,7 +234,7 @@ func (s *session) targets() ([]sync.Target, []string, *RespError) {
 	} else {
 		warns = append(warns, s.skippedNote(config.HarnessCodex))
 	}
-	return targets, warns, nil
+	return targets, warns
 }
 
 // codexInView reports, for an owned Codex note, whether it belongs to the session
@@ -164,15 +258,22 @@ func cmdSync(e *env, name string, _ []string) int {
 		e.emit(name, false, nil, nil, rerr, nil)
 		return exitError
 	}
-	targets, warns, rerr := s.targets()
+	// Under --apply every render is written from this one read, all of it
+	// holding the canonical lock shared, so a forget or curate removal either
+	// lands before the read or is refused until the last render is written:
+	// none can have its render re-created from an older read.
+	v, release, rerr := e.readCanonFor(s.cfg.CanonicalRoot)
 	if rerr != nil {
-		e.emit(name, false, nil, warns, rerr, nil)
+		e.emit(name, false, nil, v.warns, rerr, nil)
 		return exitError
 	}
+	defer release()
+	targets, warns := s.targetsFrom(v)
 	if len(targets) == 0 {
 		e.emit(name, false, nil, warns, &RespError{Code: "no_harness", Message: "no enabled harness to sync"}, nil)
 		return exitUsage
 	}
+	e.at(hookSnapshot)
 
 	exit := exitOK
 	var next []NextStep
@@ -566,11 +667,12 @@ func conflictNextSteps(actions []sync.Action) []NextStep {
 }
 
 // staleHold reports whether STALE removals must be held back this run. A missing
-// canonical root or an unparseable canonical file means the desired set may omit
-// memories that still exist, so pruning their renders would delete live lessons.
-func staleHold(root string, perrs []discover.ParseError) (bool, []string) {
+// canonical root (absent) or an unparseable canonical file means the desired set
+// may omit memories that still exist, so pruning their renders would delete live
+// lessons.
+func staleHold(root string, absent bool, perrs []discover.ParseError) (bool, []string) {
 	reason := ""
-	if _, err := os.Stat(root); errors.Is(err, os.ErrNotExist) {
+	if absent {
 		reason = "canonical root " + root + " does not exist"
 	} else if len(perrs) > 0 {
 		reason = fmt.Sprintf("%d canonical file(s) failed to parse or validate", len(perrs))
