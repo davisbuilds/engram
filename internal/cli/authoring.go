@@ -257,7 +257,7 @@ func cmdImport(e *env, name string, args []string) int {
 	base := map[string]any{
 		"harness": harness, "apply": e.apply,
 		"skipped": orEmpty(res.Skipped), "dropped": orEmpty(res.Dropped),
-		"would_import": len(res.Memories),
+		"collisions": orEmpty(res.Collisions), "would_import": len(res.Memories),
 	}
 	var warns []string
 	if res.StaleWarning {
@@ -266,6 +266,9 @@ func cmdImport(e *env, name string, args []string) int {
 	}
 	if len(res.Dropped) > 0 {
 		warns = append(warns, fmt.Sprintf("%d source(s) could not be imported and were dropped; see data.dropped", len(res.Dropped)))
+	}
+	if len(res.Collisions) > 0 {
+		warns = append(warns, fmt.Sprintf("%d name(s) are claimed by more than one source in this import; see data.collisions", len(res.Collisions)))
 	}
 
 	// Orphan detection needs the whole native source: Codex always has it, Claude

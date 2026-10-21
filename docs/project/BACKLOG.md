@@ -63,10 +63,6 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
   match including provenance, so an authoritative scope-only rename is refused
   when the stored memory carries one more provenance field than the candidate.
   Compare with provenance neutralized, as `Plan` does.
-- **The importer does not flag within-batch name collisions.** Two natives that
-  normalize to one name both land in `Result.Memories`; the dry-run now predicts
-  the second as a conflict, but the importer should report the collision itself
-  (in `Dropped` or its own bucket) with both sources named.
 
 ## Import quality
 

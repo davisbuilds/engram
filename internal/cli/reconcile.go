@@ -84,6 +84,9 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		if len(imp.result.Dropped) > 0 {
 			warns = append(warns, imp.harness+": some sources could not be imported and were dropped; see data.import[].dropped")
 		}
+		if len(imp.result.Collisions) > 0 {
+			warns = append(warns, imp.harness+": some names are claimed by more than one source; see data.import[].collisions")
+		}
 	}
 
 	// Edits made in place to Claude's shared renders are an import source of
@@ -99,7 +102,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		importEntries = append(importEntries, map[string]any{
 			"harness": sync.SharedHarness, "would_import": countOutcome(sharedPlans, editUpdated),
 			"results": sharedEditRows(sharedPlans), "orphaned": []map[string]any{},
-			"skipped": []string{}, "dropped": []importer.Dropped{},
+			"skipped": []string{}, "dropped": []importer.Dropped{}, "collisions": []importer.Collision{},
 		})
 		merged = withSharedEdits(merged, sharedPlans)
 		if countOutcome(sharedPlans, editConflict)+countOutcome(sharedPlans, editInvalid) > 0 {
@@ -291,6 +294,7 @@ func mergeImports(existing []*schema.CanonicalMemory, imports []importGather, wi
 			"harness": imp.harness, "would_import": len(imp.result.Memories),
 			"results": outcomes,
 			"skipped": orEmpty(imp.result.Skipped), "dropped": orEmpty(imp.result.Dropped),
+			"collisions": orEmpty(imp.result.Collisions),
 		})
 	}
 	merged = make([]*schema.CanonicalMemory, 0, len(order))
