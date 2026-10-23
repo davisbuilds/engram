@@ -17,9 +17,11 @@ the (local) design spec.
    is. `--json` / `--plain` force the choice.
 3. **Documented exit codes are the fast path.** An agent branches on the exit
    code before parsing a byte. Codes are a stable contract.
-4. **Dry-run by default; writes are explicit.** State-changing commands preview
-   (compute + report `Action`s) and write nothing until `--apply`. This gives
-   the agent a preview→apply loop and makes every write intentional.
+4. **Preview bulk changes; writes are explicit.** Sync, import, reconcile,
+   migrate, forget, detach, and curate preview by default and change memories
+   only with `--apply`. `remember` and `share` are immediate write primitives.
+   A dry-run `curate` still invokes an agent; `--save-plan` writes a proposal
+   file without applying it to canonical.
 5. **Never block on a prompt.** No command waits on interactive input. Safety
    comes from the explicit `--apply` gate and from separate write commands, not
    from confirmation prompts an agent cannot answer.
@@ -149,7 +151,7 @@ Verb-first throughout (matches the authoring vocabulary: *remember*, *share*,
 | `--json` | force structured output (auto when stdout is not a TTY) |
 | `--plain` | force stable line-based human output |
 | `-q, --quiet` | suppress non-essential stdout (for hooks) |
-| `--config <path>` | config file (else `$ENGRAM_CONFIG`, else XDG default) |
+| `--config <path>` | config file (else XDG default; a missing file uses built-in defaults) |
 | `--cwd <path>` | operate as if invoked from this directory — sets the scope/slug target; `~` is expanded, a relative path is resolved against the process cwd, and the path is cleaned, so `dir/` and `dir` map to one slug. As in Claude Code, the Claude project slug (and which memories belong in it) follows the main repository's root when the path is inside one, so a subdirectory or a linked worktree targets the repository's slug |
 | `--agent <claude\|codex>` | caller harness for scope filtering (else inferred) |
 | `--host <label>` | override the host label (else `hostname -s` mapped via config) |
@@ -571,11 +573,15 @@ explicit rather than ambient.
 
 ## Configuration
 
-- Resolution precedence (high→low): flags > `ENGRAM_*` env > project config >
-  user config. User config default: `$XDG_CONFIG_HOME/engram/config.yaml`
-  (fallback `~/.config/engram/config.yaml`).
-- Config declares: canonical roots per tier; tier subscriptions; each harness's
-  home dir + enable toggle; and **host labels** — a mapping from `hostname -s`
+- `--config <path>` selects one YAML file; otherwise engram reads
+  `$XDG_CONFIG_HOME/engram/config.yaml` (fallback
+  `~/.config/engram/config.yaml`). Missing fields receive built-in defaults,
+  except for the explicit harness allowlist below. A missing config file also
+  uses defaults. There are no `ENGRAM_*` environment overrides or automatic
+  project-config merging. YAML paths are literal; use absolute paths rather
+  than `~` or environment variables. See [setup examples](operating.md#configuration-and-readiness).
+- Config declares one `canonical_root`, each harness's home dir + enable toggle,
+  curation defaults, and **host labels** — a mapping from `hostname -s`
   values to the host identifiers used in `applies_to.hosts`. Host names are
   therefore never compiled into engram; a fresh install knows nothing about any
   specific machine until its config says so.
