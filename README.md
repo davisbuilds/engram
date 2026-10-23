@@ -48,7 +48,7 @@ your agents' memory, use the [disposable walkthrough](docs/operating.md#try-it-w
 
 ## Install from source
 
-You need **Git, Make, and Go 1.27.2 or later**, on macOS or Linux with a local
+You need **Git, Make, and Go 1.27.3 or later**, on macOS or Linux with a local
 filesystem. Windows is not supported by the current Unix file-locking code.
 Use a Claude Code or Codex installation with native memory support to consume
 the results. Engram's releases currently publish tags and notes, without
