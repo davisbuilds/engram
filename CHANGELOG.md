@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/davisbuilds/engram/compare/v0.4.1...v0.5.0) (2026-10-23)
+
+
+### Features
+
+* apply reviewed curation plans and serialize render snapshots ([#48](https://github.com/davisbuilds/engram/issues/48)) ([cce9a93](https://github.com/davisbuilds/engram/commit/cce9a934a3dc856579aab7355eef0c48a0a5ad2a))
+
+
+### Bug Fixes
+
+* **build:** require the Go 1.27.3 CA security patch ([#54](https://github.com/davisbuilds/engram/issues/54)) ([0ef5d23](https://github.com/davisbuilds/engram/commit/0ef5d236cb8adff447c40930e4945b606488a15b))
+* report within-batch import name collisions ([#50](https://github.com/davisbuilds/engram/issues/50)) ([8d0a686](https://github.com/davisbuilds/engram/commit/8d0a6869298c5e3d974cbd75e57c6ed8cbe5bff5))
+
 ## [0.4.1](https://github.com/davisbuilds/engram/compare/v0.4.0...v0.4.1) (2026-10-08)
 
 
