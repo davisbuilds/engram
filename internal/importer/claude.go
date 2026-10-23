@@ -116,9 +116,13 @@ func ImportClaude(memoryDir, cwd string) (Result, error) {
 			Provenance:  schema.Provenance{Origin: "import:claude-code", Source: fname, ImportSource: importSource(memoryDir, fname)},
 		}))
 	}
-	res.Memories = clearAmbiguous(res.Memories)
+	clearAmbiguous(&res, claudeSource)
 	return res, nil
 }
+
+// claudeSource names a Claude candidate by its import source (slug/file), which
+// stays distinct across the slugs a full-tree sweep merges.
+func claudeSource(m *schema.CanonicalMemory) string { return m.Provenance.ImportSource }
 
 // deriveTitle pulls a human description from a memory that has none: the text of
 // the first markdown heading, else the first non-empty line, else the filename.
@@ -176,7 +180,8 @@ func ImportClaudeAll(claudeHome string) (Result, error) {
 		res.Skipped = append(res.Skipped, sub.Skipped...)
 		res.Dropped = append(res.Dropped, sub.Dropped...)
 	}
-	res.Memories = clearAmbiguous(res.Memories)
+	// Judged over the merged batch, which supersedes each slug's own report.
+	clearAmbiguous(&res, claudeSource)
 	return res, nil
 }
 

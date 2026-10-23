@@ -314,6 +314,13 @@ explicit rather than ambient.
   `data.dropped` (with a reason) — a file with no frontmatter is recovered from
   its filename and first heading, and one whose frontmatter will not parse is
   reported in `data.dropped` and warned about, never dropped unreported.
+  **Name collisions are reported, never resolved.** When two or more sources in
+  one batch normalize to the same name, every one stays a candidate in
+  `data.memories` (none is renamed, dropped or merged), and `data.collisions`
+  lists each shared `name` with its `sources` (a Claude file as `<slug>/<file>`,
+  a Codex Task Group by title) in batch order, sorted by name, with a warning.
+  Apply saves them in that order, so a later one meets what an earlier one wrote
+  (usually a `conflict`). An `--all` sweep judges collisions across every slug.
   **`--all` (Claude) sweeps every project slug**, not just the cwd's: each slug is
   reconstructed to its real path (resolving the lossy `-`-for-`/` encoding against
   the filesystem) so scope is derived per project; an orphaned slug whose project
@@ -427,7 +434,7 @@ explicit rather than ambient.
   projects' slugs, so a lesson written in one Claude project reaches the rest
   without conflicting on or overwriting native memory. (Plain `sync` still renders everything, for a fresh
   machine where a harness has no native originals.) Each `data.import[]` entry
-  carries the same `forgotten` rows and `orphaned` list as `import`. Exit follows the same codes as
+  carries the same `forgotten` rows, `orphaned` list and `collisions` as `import`. Exit follows the same codes as
   `sync`: `3` if any propagation `CONFLICT` remains.
 - **`forget <name>...`** — retires canonical memories deterministically. Every
   name must exist, or the batch stops before any write (exit `2`,

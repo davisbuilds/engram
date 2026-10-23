@@ -53,6 +53,10 @@ func ImportCodex(memoryFile string) (Result, error) {
 			Provenance:  schema.Provenance{Origin: "import:codex"},
 		}))
 	}
-	res.Memories = clearAmbiguous(res.Memories)
+	clearAmbiguous(&res, codexSource)
 	return res, nil
 }
+
+// codexSource names a Codex candidate by its Task Group title, which import
+// keeps verbatim as the description.
+func codexSource(m *schema.CanonicalMemory) string { return m.Description }

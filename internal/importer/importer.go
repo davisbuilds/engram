@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/davisbuilds/engram/internal/gitroot"
@@ -24,6 +25,10 @@ type Result struct {
 	Memories []*schema.CanonicalMemory
 	Skipped  []string
 	Dropped  []Dropped
+	// Collisions names each normalized name that more than one candidate in
+	// Memories maps to, with every source. It is a diagnostic over Memories, not a
+	// fourth bucket: each colliding source is still a candidate there.
+	Collisions []Collision
 	// StaleWarning is set when the Codex MEMORY.md being imported is older than
 	// 30 days, i.e. the consolidator may be stalled and the source may lag reality.
 	StaleWarning bool
@@ -51,18 +56,27 @@ func importSource(memoryDir, fname string) string {
 
 // clearAmbiguous drops the import hash from every candidate whose name another
 // candidate in the batch shares: two natives for one canonical memory are two
-// lineages, and neither may move its merge base.
-func clearAmbiguous(ms []*schema.CanonicalMemory) []*schema.CanonicalMemory {
-	count := map[string]int{}
-	for _, m := range ms {
-		count[m.Name]++
+// lineages, and neither may move its merge base. It also records each shared
+// name in res.Collisions with every source, as source names it, in batch order,
+// the names sorted. All the candidates stay in res.Memories: renaming, dropping
+// or merging one is a judgment left to the operator.
+func clearAmbiguous(res *Result, source func(*schema.CanonicalMemory) string) {
+	sources := map[string][]string{}
+	for _, m := range res.Memories {
+		sources[m.Name] = append(sources[m.Name], source(m))
 	}
-	for _, m := range ms {
-		if count[m.Name] > 1 {
+	res.Collisions = nil
+	for _, m := range res.Memories {
+		if len(sources[m.Name]) > 1 {
 			m.Provenance.ImportHash = ""
 		}
 	}
-	return ms
+	for name, srcs := range sources {
+		if len(srcs) > 1 {
+			res.Collisions = append(res.Collisions, Collision{Name: name, Sources: srcs})
+		}
+	}
+	sort.Slice(res.Collisions, func(i, j int) bool { return res.Collisions[i].Name < res.Collisions[j].Name })
 }
 
 // Dropped records a native source (a Claude file name, or a Codex Task Group
@@ -70,6 +84,15 @@ func clearAmbiguous(ms []*schema.CanonicalMemory) []*schema.CanonicalMemory {
 type Dropped struct {
 	Source string `json:"source"`
 	Reason string `json:"reason"`
+}
+
+// Collision records a normalized name that two or more native sources in one
+// import batch map to. A Claude source is its import source (slug/file), a Codex
+// source its Task Group title. Apply saves the candidates in batch order, so a
+// later one meets what an earlier one wrote.
+type Collision struct {
+	Name    string   `json:"name"`
+	Sources []string `json:"sources"`
 }
 
 // cwdIsLiveDir reports whether path names an existing directory on this machine —
