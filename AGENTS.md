@@ -15,8 +15,8 @@ is the intelligence. See `README.md` for the user-facing overview.
 - `docs/releases.md` — release PRs, version policy, build provenance, and activation.
 - `docs/headless.md` — how a headless agent drives engram: `next_steps` leads and
   the `curate` proposer/applier loop.
-- `docs/operating.md` — versioning the canonical store in Git and running engram
-  on more than one machine (one writer, render-only consumers).
+- `docs/operating.md` — configuration, isolated onboarding, adoption and scope,
+  versioning the store in Git, and multiple machines (one writer, render-only consumers).
 - `docs/project/BACKLOG.md` — future-only friction points and deferred follow-ups noted
   during implementation.
 - `CONTRIBUTING.md` — public contribution scope, review expectations, and release intent.
@@ -69,6 +69,19 @@ is the intelligence. See `README.md` for the user-facing overview.
 - **Scope model:** tiers `global` / `project:<repo>`, plus `applies_to` narrowing
   axes (cwd globs, agents, hosts). The host axis fails closed for an unmapped
   machine, and host labels are config-declared, never compiled in.
+
+## Source layout
+
+| Path | Responsibility |
+| --- | --- |
+| `cmd/engram` | Binary entrypoint |
+| `internal/cli` | Command dispatch and the JSON response envelope |
+| `internal/schema`, `internal/store`, `internal/discover` | Memory validation, atomic canonical writes, and corpus discovery |
+| `internal/render`, `internal/sync` | Pure harness renderers and filesystem application/ownership |
+| `internal/importer` | Native harness memory imports |
+| `internal/review`, `internal/curate`, `internal/agentexec` | Deterministic findings, validated curation batches, and headless agent execution |
+| `internal/lock`, `internal/scope`, `internal/config` | Apply serialization, relevance filters, and resolved configuration |
+| `internal/harness` | Harness memory readiness checks |
 
 ## Build & Test
 
