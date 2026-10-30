@@ -3,7 +3,7 @@ date: 2026-10-30
 author: Codex
 topic: memory-observability
 stage: spec
-status: in-progress
+status: complete
 source: maintainer discussion
 risk_profile: routine
 readiness: ready
@@ -20,14 +20,14 @@ These ambiguities increase curation effort and can encourage premature retiremen
 
 ## Contract
 
-This spec records six improvements. The first delivery implements safer orphan
-leads and unified read-only inventory, verified by `go test ./internal/cli` and
-`go test ./...`. Remaining capabilities are follow-ups, not prerequisites for
-this delivery. The second delivery adds focused content comparison. The third
-adds static delivery evidence with explicit consumption limits. All three slices
-are read-only and do not invoke a model. The fourth adds discovery and supplied
-proposal validation/saved plans; these also run no model and apply only through
-the existing explicit saved-plan workflow.
+This spec records six capabilities implemented across five slices. The first
+implements safer orphan leads and unified inventory, the second focused content
+comparison, and the third static delivery evidence with explicit consumption
+limits. The fourth adds discovery and supplied proposal validation/saved plans;
+application uses the existing explicit saved-plan workflow. The fifth adds
+optional stored-volume, freshness and reference evidence. Inspection modes are
+read-only and invoke no model. Verification uses synthetic fixtures, the full
+race suite, lint and compiled CLI probes.
 
 | Capability | Observable outcome | Delivery |
 | --- | --- | --- |
@@ -36,7 +36,7 @@ the existing explicit saved-plan workflow.
 | Content comparison | `diff --native <harness> --name <name>` exposes normalized bodies, source paths, merge-base evidence and field differences. | Second slice (implemented) |
 | Delivery versus consumption | Configuration readiness, stored renders, load eligibility and observed consumption remain distinct; unavailable consumption evidence is unknown. | Third slice (implemented) |
 | Capability discovery and supplied proposals | Installed command flags/capabilities are discoverable; an outer agent can submit operations for deterministic validation and plan binding without another model invocation. | Fourth slice (implemented) |
-| Volume and freshness | Per-scope bytes/words, duplicate render volume, source timestamps and unresolved references support curation without turning age or size into automatic retirement. | Follow-up |
+| Volume and freshness | Per-scope bytes/words, duplicate render volume, source timestamps and unresolved references support curation without turning age or size into automatic retirement. | Fifth slice (implemented) |
 
 ## Success Criteria
 
@@ -139,6 +139,31 @@ the existing explicit saved-plan workflow.
   saving writes a plan and may create a shared-read lock file, without changing
   memories. Verify with `go test ./internal/cli -run 'TestDiscovery|TestSuppliedProposal'`.
 
+### Fifth Slice: Stored Volume And Freshness
+
+- `status --stats [--all-projects]` adds exact stored file bytes and
+  Unicode-whitespace word counts, with no bodies or token estimates. Count raw
+  readable files (including malformed sources) separately from validated entries.
+  Report per-source and per-location volume, and declared canonical scope totals
+  with separate parsed body sizes. Keep mixed-scope Codex storage intact and
+  unresolved Claude contexts unknown. Verify with `go test ./internal/cli -run TestStats`.
+- Filesystem modification timestamps and optional declared provenance dates are
+  labeled separately; neither means last use. Report repeated-name render volume
+  separately from full-file SHA-256 duplicate copies. No age, size or duplicate
+  count automatically recommends retirement or establishes semantic replacement.
+- Reference probes cover canonical related names, simple local Claude index
+  bullet links and Codex rollout-summary basename citations, skipping code and
+  unsupported path forms. Report detector names, unique checked counts and
+  missing/not-file/error/unknown states. Incomplete canonical cannot prove a
+  related name missing. No recursive traversal, network access or rollout reads.
+- Statistics are opt-in, read-only even with `--apply`, and best-effort across
+  separate filesystem reads. Measurement/probe failures add diagnostics,
+  `complete: false`, partial output and exit 1; missing targets alone remain
+  exit 0. JSON/plain show the same evidence. Discovery advertises the flag and
+  capability. Test known-positive controls, exact bytes/words, scope/location
+  boundaries, divergent same-name copies, duplicate volume, source dates, missing
+  versus empty stores, incomplete corpora, probe errors and non-mutation.
+
 ## Evaluation
 
 Use synthetic temporary harness homes and canonical stores. Exercise both
@@ -154,8 +179,8 @@ read-only inventory is an operational cross-check, not a consumption test.
 
 Included now: safer leads, candidate-match evidence, unified inventory, focused
 native/canonical comparison, static delivery evidence, discovery, supplied
-proposals with reviewed plans, public CLI documentation and regression coverage.
-Follow-ups retain the boundaries in the capability table. No model-based deduplication, automatic deletion, new
+proposals with reviewed plans, volume/freshness and bounded reference evidence,
+public CLI documentation and regression coverage. No model-based deduplication, automatic deletion, new
 memory ownership, installation upgrades, scheduling or remote transport.
 
 ## Assumptions And Constraints
@@ -168,6 +193,6 @@ best-effort filesystem observation, not a cross-harness atomic snapshot.
 
 ## Open Questions
 
-None for the first four slices. Exact interfaces for observed session consumption
-and size/freshness reports remain open; those choices cannot
-change these read-only inspection and evidence-labeling contracts.
+None for this spec. Actual session-consumption evidence, tokenizer-specific
+estimates and broader reference grammars are separate possible follow-ups; the
+current detectors and evidence limits are explicit in the CLI contract.

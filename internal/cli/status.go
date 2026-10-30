@@ -335,7 +335,11 @@ func cmdStatus(e *env, name string, args []string) int {
 		e.emit(name, false, nil, nil, rerr, nil)
 		return exitError
 	}
-	mems, perrs, err := discover.Discover(s.cfg.CanonicalRoot)
+	located, perrs, err := discover.Locate(s.cfg.CanonicalRoot)
+	mems := make([]*schema.CanonicalMemory, 0, len(located))
+	for _, l := range located {
+		mems = append(mems, l.Memory)
+	}
 	canonicalState := "present"
 	canonicalComplete := true
 	if rootAbsent(s.cfg.CanonicalRoot) {
@@ -413,9 +417,15 @@ func cmdStatus(e *env, name string, args []string) int {
 		"canonical": map[string]any{"root": s.cfg.CanonicalRoot, "state": canonicalState, "count": len(mems), "complete": canonicalComplete, "diagnostics": canonDiag},
 		"harnesses": []*harnessInventory{claude, codex},
 	}
+	var stats *inventoryStats
+	if pa.bools["--stats"] {
+		stats = collectStats(s.cfg.CanonicalRoot, located, perrs, canonicalComplete, []*harnessInventory{claude, codex}, dirs)
+		data["stats"] = stats
+		data["complete"] = complete && stats.Complete
+	}
 	var failure *RespError
 	code := exitOK
-	if len(canonDiag) > 0 || !claude.Complete || !codex.Complete {
+	if len(canonDiag) > 0 || !claude.Complete || !codex.Complete || (stats != nil && len(stats.Diagnostics) > 0) {
 		code = exitError
 		failure = &RespError{Code: "inventory_incomplete", Message: "some sources could not be inventoried; counts are partial (see diagnostics)"}
 	}
@@ -472,6 +482,9 @@ func inventoryText(data map[string]any, harnesses []*harnessInventory, diagnosti
 		for _, d := range h.Diagnostics {
 			fmt.Fprintf(&out, "  Diagnostic: %q: %s\n", d.Path, d.Message)
 		}
+	}
+	if stats, ok := data["stats"].(*inventoryStats); ok {
+		out.WriteString(statsText(stats))
 	}
 	return out.String()
 }

@@ -134,6 +134,8 @@ Inspect native entries, managed renders and canonical coverage without writing:
 
 ```bash
 ./bin/engram status --all-projects --json
+# Add stored bytes/words, timestamps, duplicate copies and reference checks:
+./bin/engram status --all-projects --stats --json
 ```
 
 Inspect one native/canonical pair, including its bodies and merge-base evidence:
