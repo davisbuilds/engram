@@ -412,8 +412,49 @@ func cmdStatus(e *env, name string, args []string) int {
 		code = exitError
 		failure = &RespError{Code: "inventory_incomplete", Message: "some sources could not be inventoried; counts are partial (see diagnostics)"}
 	}
-	e.emit(name, code == exitOK, data, nil, failure, nil)
+	if e.jsonMode {
+		e.emit(name, code == exitOK, data, nil, failure, nil)
+	} else {
+		if !e.quiet {
+			fmt.Print(inventoryText(data, []*harnessInventory{claude, codex}, canonDiag))
+		}
+		if failure != nil {
+			e.emit(name, false, nil, nil, failure, nil)
+		}
+	}
 	return code
+}
+
+// inventoryText deliberately walks values: fmt's generic map printer would
+// expose addresses for both harness pointers and nested location pointers.
+// Print partial evidence before the separate stderr diagnostic on failure.
+func inventoryText(data map[string]any, harnesses []*harnessInventory, diagnostics []inventoryDiagnostic) string {
+	var out strings.Builder
+	canonical := data["canonical"].(map[string]any)
+	fmt.Fprintf(&out, "Inventory: complete=%v all_projects=%v cwd=%q host=%q\n", data["complete"], data["all_projects"], data["cwd"], data["host"])
+	fmt.Fprintf(&out, "Canonical: count=%v state=%v complete=%v root=%q\n", canonical["count"], canonical["state"], canonical["complete"], canonical["root"])
+	for _, d := range diagnostics {
+		fmt.Fprintf(&out, "  Diagnostic: %q: %s\n", d.Path, d.Message)
+	}
+	for _, h := range harnesses {
+		fmt.Fprintf(&out, "\n%s: enabled=%t complete=%t scope_complete=%t\n", h.Harness, h.Enabled, h.Complete, h.ScopeComplete)
+		c := h.Counts
+		fmt.Fprintf(&out, "  native_entries=%d (%s) native_names=%d rendered_entries=%d rendered_names=%d overlapping_names=%d distinct_names=%d\n", c.NativeEntries, h.NativeUnit, c.NativeNames, c.RenderedEntries, c.RenderedNames, c.OverlappingNames, c.DistinctNames)
+		fmt.Fprintf(&out, "  Scope cwds: %q; unresolved slugs: %q\n", h.ScopeCwds, h.UnresolvedSlugs)
+		for _, loc := range h.Locations {
+			fmt.Fprintf(&out, "  Scan: %s %s %q (skipped=%d unmanaged=%d)\n", loc.Kind, loc.State, loc.Path, loc.Skipped, loc.Unmanaged)
+		}
+		for _, m := range h.Memories {
+			fmt.Fprintf(&out, "  %s: native=%q rendered=%q\n", m.Name, m.NativeSources, m.RenderedPaths)
+		}
+		for _, a := range h.CanonicalAbsent {
+			fmt.Fprintf(&out, "  Absent: %s (%s)\n", a.Name, a.Reason)
+		}
+		for _, d := range h.Diagnostics {
+			fmt.Fprintf(&out, "  Diagnostic: %q: %s\n", d.Path, d.Message)
+		}
+	}
+	return out.String()
 }
 
 func appendUnique(items []string, item string) []string {

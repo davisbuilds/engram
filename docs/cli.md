@@ -475,7 +475,11 @@ explicit rather than ambient.
   and managed renders. Unlike `show`, includes native entries and joins physical
   files/Task Groups by the importers' normalized canonical names. Default scans
   the current Claude project slug and shared directory, plus Codex's consolidated
-  source and Engram notes directory. `--all-projects` adds every existing Claude
+  source and Engram notes directory. Terminal output (or `--plain`) shows counts,
+  scan paths, sources, absence reasons and diagnostics as readable text. Partial
+  evidence still goes to stdout on failure, with the error on stderr; `--quiet`
+  suppresses inventory text. `--json` retains the normal response envelope.
+  `--all-projects` adds every existing Claude
   project slug; it does not discover repositories, render, invoke an agent,
   contact remote hosts or write even with `--apply`.
 

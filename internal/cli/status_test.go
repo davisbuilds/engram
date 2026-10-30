@@ -289,3 +289,40 @@ func TestStatusAllProjectsReportsCrossSlugCollisions(t *testing.T) {
 	}
 	assertInventoryCounts(t, statusHarness(t, env, "claude-code"), map[string]float64{"native_entries": 2, "native_names": 1, "distinct_names": 1})
 }
+
+func TestStatusPlainShowsValuesAndPartialEvidence(t *testing.T) {
+	canon, codex, args := orphanFixture(t)
+	for _, broken := range []bool{false, true} {
+		if broken {
+			writeFile(t, filepath.Join(codex, "memories", "MEMORY.md"), "unrecognized native format\n")
+		}
+		code := 0
+		out := captureStdout(t, func() { code = Run(append([]string{"status", "--plain"}, args...)) })
+		wantCode := exitOK
+		if broken {
+			wantCode = exitError
+		}
+		if code != wantCode {
+			t.Errorf("plain exit %d, want %d", code, wantCode)
+		}
+		for _, want := range []string{"Canonical: count=5", "claude-code:", "codex:", "native_entries=", filepath.Join(filepath.Dir(canon), "claude", "projects", "-work-x", "memory"), "old-group", "source_suppressed"} {
+			// With an unrecognized native source, absence must stay unknown.
+			if broken && want == "source_suppressed" {
+				want = "unknown_incomplete_scan"
+			}
+			if !strings.Contains(out, want) {
+				t.Errorf("plain inventory omits %q:\n%s", want, out)
+			}
+		}
+		if broken && !strings.Contains(out, "nonempty source has no recognized Task Group sections") {
+			t.Errorf("plain partial evidence omits diagnostic:\n%s", out)
+		}
+		if strings.Contains(out, "[0x") {
+			t.Errorf("plain inventory contains struct pointers:\n%s", out)
+		}
+	}
+	out := captureStdout(t, func() { Run(append([]string{"status", "--plain", "--quiet"}, args...)) })
+	if out != "" {
+		t.Errorf("quiet printed inventory: %q", out)
+	}
+}
