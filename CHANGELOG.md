@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.0](https://github.com/davisbuilds/engram/compare/v0.5.0...v0.6.0) (2026-10-30)
+
+
+### Features
+
+* compare named native and canonical memories ([#59](https://github.com/davisbuilds/engram/issues/59)) ([3aec585](https://github.com/davisbuilds/engram/commit/3aec5859fa08e6996e333eb4d3e7e96ace994ebb))
+* discover CLI capabilities and accept supplied proposals ([#61](https://github.com/davisbuilds/engram/issues/61)) ([7805e7e](https://github.com/davisbuilds/engram/commit/7805e7ed2598f9232dea719575716b1e7f6c8911))
+* expose memory inventory and safer orphan leads ([#57](https://github.com/davisbuilds/engram/issues/57)) ([58429e4](https://github.com/davisbuilds/engram/commit/58429e4f0a7981ad9b2245359c9a27076873dadf))
+* report stored memory volume and freshness evidence ([#62](https://github.com/davisbuilds/engram/issues/62)) ([0e99c35](https://github.com/davisbuilds/engram/commit/0e99c357c1ec8d6ff0b90f70885b19e6be792389))
+* separate memory delivery from consumption evidence ([#60](https://github.com/davisbuilds/engram/issues/60)) ([a79f4db](https://github.com/davisbuilds/engram/commit/a79f4dba8672a5bd21ec663d8b53e92c692175b7))
+
 ## [0.5.0](https://github.com/davisbuilds/engram/compare/v0.4.1...v0.5.0) (2026-10-26)
 
 
