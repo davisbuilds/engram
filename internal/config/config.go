@@ -127,8 +127,8 @@ func defaults() Config {
 			HarnessCodex:  {Home: filepath.Join(home, ".codex")},
 		},
 		Curate: CurateConfig{Models: map[string]ModelChoice{
-			HarnessClaude: {Model: "claude-sonnet-5", Effort: "high"},
-			HarnessCodex:  {Model: "gpt-5.6-terra", Effort: "high"},
+			HarnessClaude: {Model: "claude-sonnet-5-5", Effort: "high"},
+			HarnessCodex:  {Model: "gpt-6.1-terra", Effort: "high"},
 		}},
 	}
 }

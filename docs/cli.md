@@ -804,7 +804,7 @@ not harness support, readiness, installation elsewhere or consumption.
   `--apply`, and neither flag may repeat (exit `2`, `usage`). `schema` describes
   the plan format under `curate_plan`.
   Model/effort are `--model` / `--effort` (flags win over the per-harness config
-  default: claude → `claude-sonnet-5`/`high`, codex → `gpt-5.6-terra`/`high`);
+  default: claude → `claude-sonnet-5-5`/`high`, codex → `gpt-6.1-terra`/`high`);
   `--harness` picks which agent runs (default `claude-code`). An agent run is
   bounded by `--timeout <duration>` (else `curate.timeout` in config, else
   `20m`; `0` means no deadline): on expiry engram kills the agent and every

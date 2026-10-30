@@ -77,10 +77,10 @@ func TestCodexArgv(t *testing.T) {
 }
 
 func TestClaudeInvocationCarriesModelEffortAndJSON(t *testing.T) {
-	argv := ClaudeInvocation("prompt here", Options{Model: "claude-sonnet-5", Effort: "high"}).Argv
+	argv := ClaudeInvocation("prompt here", Options{Model: "claude-sonnet-5-5", Effort: "high"}).Argv
 	joined := strings.Join(argv, " ")
 	for _, want := range []string{
-		"--output-format json", "--model claude-sonnet-5", "--effort high",
+		"--output-format json", "--model claude-sonnet-5-5", "--effort high",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("argv missing %q: %v", want, argv)
@@ -100,9 +100,9 @@ func TestClaudeInvocationCarriesModelEffortAndJSON(t *testing.T) {
 }
 
 func TestCodexInvocationCarriesModelAndEffort(t *testing.T) {
-	argv := CodexInvocation("prompt here", Options{Model: "gpt-5.6-terra", Effort: "high"}).Argv
+	argv := CodexInvocation("prompt here", Options{Model: "gpt-6.1-terra", Effort: "high"}).Argv
 	joined := strings.Join(argv, " ")
-	if !strings.Contains(joined, "--model gpt-5.6-terra") {
+	if !strings.Contains(joined, "--model gpt-6.1-terra") {
 		t.Errorf("argv missing model: %v", argv)
 	}
 	if !strings.Contains(joined, "model_reasoning_effort=high") {
