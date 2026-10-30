@@ -278,3 +278,14 @@ func TestStatusReportsNormalizationCollisionAndBadOwnedNote(t *testing.T) {
 		})
 	}
 }
+
+func TestStatusAllProjectsReportsCrossSlugCollisions(t *testing.T) {
+	canon, _, args := orphanFixture(t)
+	other := filepath.Join(filepath.Dir(canon), "claude", "projects", "-work-y", "memory", "alias.md")
+	writeFile(t, other, "---\nname: Live Lesson\ndescription: different native source\n---\nbody\n")
+	code, env := runEnvelope(t, append([]string{"status", "--all-projects"}, args...)...)
+	if code != exitError {
+		t.Fatalf("cross-slug normalization collision reported as complete: %v", env["data"])
+	}
+	assertInventoryCounts(t, statusHarness(t, env, "claude-code"), map[string]float64{"native_entries": 2, "native_names": 1, "distinct_names": 1})
+}

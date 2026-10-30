@@ -118,11 +118,6 @@ func (h *harnessInventory) addNative(res importer.Result, path string, codex boo
 	for _, d := range res.Dropped {
 		h.issue(path, d.Source+": "+d.Reason)
 	}
-	// A collision does not lose physical entries; distinct-name counts expose the
-	// normalization overlap and the diagnostic prevents a false clean inventory.
-	for _, c := range res.Collisions {
-		h.issue(path, fmt.Sprintf("normalized name collision: %v", c))
-	}
 }
 
 func (h *harnessInventory) scanClaude(dir, cwd string) {
@@ -235,6 +230,13 @@ func (h *harnessInventory) finish(mems []*schema.CanonicalMemory, s *session, ca
 	for n, paths := range h.native {
 		h.Counts.NativeEntries += len(paths)
 		names[n] = true
+		// Judge the merged scan, not each slug separately: two independent
+		// project directories may normalize different native sources to one name.
+		if len(paths) > 1 {
+			sources := append([]string{}, paths...)
+			sort.Strings(sources)
+			h.issue(sources[0], fmt.Sprintf("normalized name collision %q across %d native entries; inspect native_sources", n, len(paths)))
+		}
 	}
 	for n, paths := range h.renders {
 		h.Counts.RenderedEntries += len(paths)
@@ -261,6 +263,12 @@ func (h *harnessInventory) finish(mems []*schema.CanonicalMemory, s *session, ca
 	sort.Slice(h.CanonicalAbsent, func(i, j int) bool { return h.CanonicalAbsent[i].Name < h.CanonicalAbsent[j].Name })
 	sort.Strings(h.ScopeCwds)
 	sort.Strings(h.UnresolvedSlugs)
+	sort.Slice(h.Diagnostics, func(i, j int) bool {
+		if h.Diagnostics[i].Path != h.Diagnostics[j].Path {
+			return h.Diagnostics[i].Path < h.Diagnostics[j].Path
+		}
+		return h.Diagnostics[i].Message < h.Diagnostics[j].Message
+	})
 }
 
 func sortedKeys(m map[string]bool) []string {
