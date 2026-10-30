@@ -23,13 +23,14 @@ These ambiguities increase curation effort and can encourage premature retiremen
 This spec records six improvements. The first delivery implements safer orphan
 leads and unified read-only inventory, verified by `go test ./internal/cli` and
 `go test ./...`. Remaining capabilities are follow-ups, not prerequisites for
-this delivery. No command in this delivery mutates memories or invokes a model.
+this delivery. The second delivery adds focused content comparison. Both slices
+are read-only and do not invoke a model.
 
 | Capability | Observable outcome | Delivery |
 | --- | --- | --- |
 | Safer orphan leads | Shared-session candidates carry their evidence basis and unassessed semantic coverage; leads request inspection without recommending retirement or detachment. | First slice (implemented) |
 | Unified inventory | `status [--all-projects] --json` joins canonical names, native entries and owned render files, with explicit scan boundaries, counts, diagnostics and reasons for canonical absence. | First slice (implemented) |
-| Content comparison | A focused native/canonical comparison exposes bodies, source paths, merge-base availability and field differences. | Follow-up |
+| Content comparison | `diff --native <harness> --name <name>` exposes normalized bodies, source paths, merge-base evidence and field differences. | Second slice (implemented) |
 | Delivery versus consumption | Configuration readiness, stored renders, load eligibility and observed consumption remain distinct; unavailable consumption evidence is unknown. | Follow-up |
 | Capability discovery and supplied proposals | Installed command flags/capabilities are discoverable; an outer agent can submit operations for deterministic validation and plan binding without another model invocation. Reviewed saved plans already exist in v0.5.0. | Follow-up |
 | Volume and freshness | Per-scope bytes/words, duplicate render volume, source timestamps and unresolved references support curation without turning age or size into automatic retirement. | Follow-up |
@@ -65,6 +66,33 @@ this delivery. No command in this delivery mutates memories or invokes a model.
   semantic equivalence. Existing response-envelope schema and commands remain
   compatible; additions are command-specific data and additive orphan fields.
 
+### Second Slice: Focused Content Comparison
+
+- `diff --native <claude-code|codex> --name <canonical-name>` shows the selected
+  canonical memory and matching normalized native entries. Bare `diff` retains
+  its existing render-status shape. Bodies are emitted only in explicit named
+  comparison mode. Verify with `go test ./internal/cli -run TestNativeDiff`.
+- `--source-name <native-name>` permits comparing an orphan with a differently
+  named candidate; it never borrows a merge base across names. Claude `--shared`
+  explicitly selects a managed shared render, using its render stamp as the base.
+- Both sources expose full normalized memory fields, physical source identifiers,
+  and stable full-field/content-field difference lists. Normalization follows the
+  importers, including Codex echo stripping. Derived scope differences stay visible.
+- A recorded base exposes its hash and whether each side matches; no historical
+  base text is invented. A missing base, different lineage or ambiguous source
+  explicitly prevents binding. Relations describe literal native-authored fields,
+  never semantic coverage or an import/apply prediction.
+- Missing native/canonical inputs are distinct from parse/read failures. Exit 0
+  covers ordinary differences and observed absence; exit 1 includes partial
+  evidence and diagnostics; exit 2 rejects invalid argument combinations/names;
+  exit 3 shows every ambiguous match and selects none.
+- Plain output shows both bodies and metadata, including partial evidence on
+  failure. JSON uses the existing response envelope. `--apply` still writes
+  nothing. Disabled harnesses may be inspected, with their enabled state shown.
+- Orphan leads select a focused comparison for each provenance candidate, without
+  recommending retirement. With no candidate they inspect retained canonical
+  content and explicitly report native absence in the scanned source.
+
 ## Evaluation
 
 Use synthetic temporary harness homes and canonical stores. Exercise both
@@ -78,9 +106,9 @@ read-only inventory is an operational cross-check, not a consumption test.
 
 ## Scope
 
-Included now: safer leads, candidate-match evidence, unified inventory, public
-CLI documentation and regression coverage. Follow-ups retain the boundaries in
-the capability table. No model-based deduplication, automatic deletion, new
+Included now: safer leads, candidate-match evidence, unified inventory, focused
+native/canonical comparison, public CLI documentation and regression coverage.
+Follow-ups retain the boundaries in the capability table. No model-based deduplication, automatic deletion, new
 memory ownership, installation upgrades, scheduling or remote transport.
 
 ## Assumptions And Constraints
@@ -93,6 +121,6 @@ best-effort filesystem observation, not a cross-harness atomic snapshot.
 
 ## Open Questions
 
-None for the first slice. Exact interfaces for follow-up comparison, consumption
-evidence, supplied proposals and size/freshness reports remain open; those choices
-cannot change this slice's read-only inventory and evidence-labeling contract.
+None for the first two slices. Exact interfaces for consumption evidence,
+supplied proposals and size/freshness reports remain open; those choices cannot
+change these read-only inspection and evidence-labeling contracts.

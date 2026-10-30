@@ -50,6 +50,7 @@ func TestDataNeverCarriesNull(t *testing.T) {
 		{"sync", "--apply"},
 		{"audit"},
 		{"diff"},
+		{"diff", "--native", "codex", "--name", "a-mem"},
 		{"list"},
 		{"discover"},
 		{"status"},

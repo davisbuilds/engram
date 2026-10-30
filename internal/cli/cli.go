@@ -119,6 +119,7 @@ var (
 	migrateArgs = &argSpec{positionals: 1, bools: []string{"--shared"}}
 	forgetArgs  = &argSpec{positionals: anyPositionals, values: []string{"--reason", "--successor"}, bools: []string{"--restore"}}
 	statusArgs  = &argSpec{bools: []string{"--all-projects"}}
+	diffArgs    = &argSpec{values: []string{"--native", "--name", "--source-name"}, bools: []string{"--shared"}}
 )
 
 // commands returns the full subcommand table. The table is the single source of
@@ -137,7 +138,7 @@ func commands() []command {
 		{"status", "Inventory canonical, native memories and owned renders without writing.", statusArgs, cmdStatus},
 		{"list", "List memories relevant to a given cwd / agent / host.", noArgs, cmdList},
 		{"audit", "Report pending render actions for a harness without writing.", noArgs, cmdAudit},
-		{"diff", "Show the cross-state difference for each render target.", noArgs, cmdDiff},
+		{"diff", "Show render status, or compare a named canonical memory with a native source (--native, --name).", diffArgs, cmdDiff},
 		{"show", "Dump a harness's engram-rendered memories.", harnessArg, cmdShow},
 		{"review", "Health report: flags near-duplicate memory names, emitted as agent next_steps.", noArgs, cmdReview},
 		{"curate", "Run a headless agent over the corpus; it proposes add/merge/remove/rescope, engram applies (dry-run; --apply; --save-plan <file> keeps the reviewed plan, --plan <file> --apply applies it without the agent).", curateArgs, cmdCurate},

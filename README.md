@@ -136,6 +136,14 @@ Inspect native entries, managed renders and canonical coverage without writing:
 ./bin/engram status --all-projects --json
 ```
 
+Inspect one native/canonical pair, including its bodies and merge-base evidence:
+
+```bash
+./bin/engram diff --native codex --name explain-check-results --json
+# Compare a retained memory with a differently named candidate:
+./bin/engram diff --native codex --name old-lesson --source-name new-lesson --json
+```
+
 Counts distinguish physical entries from normalized names; incomplete sources and
 reasons for missing canonical entries are explicit. This inventories stored
 memories, not whether a session consumed them. See the [CLI contract](docs/cli.md).

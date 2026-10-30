@@ -3,7 +3,6 @@ package cli
 import (
 	"regexp"
 	"sort"
-	"strings"
 
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/importer"
@@ -101,17 +100,17 @@ func orphanNextSteps(harness string, orphans []map[string]any) []NextStep {
 		n := o["name"].(string)
 		succ := o["successors"].([]string)
 		reason := n + " is no longer in " + harness + "'s native memory"
-		switch len(succ) {
-		case 0:
-		case 1:
-			reason += "; candidate " + succ[0] + " shares session provenance, not verified lesson coverage"
-		default:
-			reason += "; candidate successors: " + strings.Join(succ, ", ")
+		command := "engram diff --native " + harness + " --name " + n
+		if len(succ) == 0 {
+			next = append(next, NextStep{Reason: reason + "; inspect retained content before choosing a disposition", Command: command + " --json"})
+			continue
 		}
-		next = append(next, NextStep{
-			Reason:  reason + "; inspect source paths and compare lessons before deciding whether to retain, merge or retire",
-			Command: "engram status --all-projects --json",
-		})
+		for _, candidate := range succ {
+			next = append(next, NextStep{
+				Reason:  reason + "; candidate " + candidate + " shares session provenance, not verified lesson coverage; compare content before choosing a disposition",
+				Command: command + " --source-name " + candidate + " --json",
+			})
+		}
 	}
 	return next
 }

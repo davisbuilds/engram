@@ -130,7 +130,8 @@ engram [global flags] <command> [args]
                  without writing (--all-projects scans every Claude slug).
     list         List memories relevant to a given cwd / agent / host.
     audit        Report pending render Actions for a harness without writing.
-    diff         Cross-state difference for each render target.
+    diff         Render status, or focused native/canonical comparison
+                 (--native <harness> --name <name>, optional --source-name).
     show         Dump a harness's engram-rendered memories.
     review       Health report: flags near-duplicate memory names —
                  emitted as next_steps leads (merge judgment left to the agent).
@@ -339,9 +340,10 @@ explicit rather than ambient.
   compatibility field is a candidate list, not proof of semantic replacement.
   `candidate_successors` adds `{name, match_basis: "shared_session",
   shared_sessions: [...], coverage: "unassessed"}` for each match, with names and
-  deduplicated session IDs sorted. Each orphan gets a read-only `status
-  --all-projects --json` lead to inspect paths and compare lessons before deciding
-  whether to retain, merge or retire. Absence and shared provenance alone do not
+  deduplicated session IDs sorted. Each orphan gets read-only `diff --native
+  <harness> --name <orphan> --source-name <candidate> --json` leads to compare each
+  candidate's content before choosing a disposition. With no candidate, the lead
+  omits `--source-name` to inspect retained content and native absence. Absence and shared provenance alone do not
   recommend retirement or detachment. Explicit `forget` and `detach` remain
   available. An empty or missing source skips detection with a warning, since it would
   make every memory look orphaned. A single-slug Claude import omits the field.
@@ -514,6 +516,49 @@ explicit rather than ambient.
   successfully parsed memories; normalization collisions are reported without
   losing physical-entry counts. This is a best-effort filesystem observation,
   not an atomic cross-harness snapshot.
+
+- **`diff --native <claude-code|codex> --name <canonical-name>`** — focused,
+  read-only content comparison. Bare `diff` keeps its existing render-status
+  contract. This mode returns the named canonical memory (regardless of session
+  relevance), its actual path, and matching normalized native memories with their
+  source identifiers and bodies. Claude scans all project slugs; Codex reads its
+  consolidated `MEMORY.md`. It reads disabled harnesses too and reports `enabled`.
+  It does not render, import, invoke an agent or write even with `--apply`.
+
+  Optional `--source-name <normalized-native-name>` compares different identities
+  (for example, an orphan and its candidate successor). Optional `--shared`,
+  Claude only, explicitly selects `<home>/engram/memory/<source-name>.md` instead
+  of native project files, requiring the matching name and Engram ownership.
+  The names must be canonical kebab-case; `--native` and `--name` are required
+  together, value flags cannot repeat, and `--shared` is invalid for Codex.
+
+  `data` includes `mode: "native"`, harness/name/source-name, `shared`, `enabled`,
+  `complete`, `canonical: {state, path, memory?}`, `scan: {path, state, skipped,
+  diagnostics}`, `native[]`, `ambiguous` and aggregate `diagnostics`. Canonical
+  states are `present`, `missing`, `withheld`, `error`; scan states distinguish
+  present/empty/missing/error. Each native row carries `source`, normalized
+  `memory`, stable `differs` (all fields), `content_differs` (description, type,
+  body), `merge_base` and `relation`. Bodies follow import normalization: Claude
+  name normalization and Codex echo removal, not raw file-byte comparison.
+  Scope differences derived from the live filesystem remain visible in `differs`.
+
+  `merge_base` reports `available: false` with a reason when there is no canonical
+  memory/base, a different name/lineage, or multiple matches. Otherwise it reports
+  the recorded hash and `native_matches`/`canonical_matches`. Claude shared mode
+  uses the render stamp, not canonical's native-import hash. Historical base text
+  is not stored and is never fabricated. `relation` is `canonical_missing`,
+  `canonical_unavailable`, `same_content`, `different_content`, `native_changed`, `canonical_changed` or
+  `both_changed`, describing only the native-authored fields. It is not semantic
+  coverage or an import outcome: scope decisions, tombstones and mutation policy
+  remain the import/reconcile commands' responsibility.
+
+  Differences and observed missing inputs exit 0. Read/parse failures exit 1 with
+  `comparison_incomplete` and partial evidence; a malformed/duplicate target
+  canonical memory is withheld, never reported as simply missing. Multiple native
+  matches exit 3 / `ambiguous_native`, displaying every source without selecting
+  or binding one. Invalid arguments exit 2. Plain output displays both normalized
+  memories, metadata, scan diagnostics and partial evidence; JSON retains the
+  response envelope. `--quiet` suppresses plain content, retaining error messages.
 
 - **`show <harness>`** — permissive on a disabled harness (proceeds, stderr note);
   contrast `import` (strict). Read vs write, mapped to filesystem semantics.
