@@ -12,6 +12,7 @@ import (
 
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/discover"
+	"github.com/davisbuilds/engram/internal/harness"
 	"github.com/davisbuilds/engram/internal/importer"
 	"github.com/davisbuilds/engram/internal/marker"
 	"github.com/davisbuilds/engram/internal/schema"
@@ -64,6 +65,7 @@ type harnessInventory struct {
 	Counts          inventoryCounts       `json:"counts"`
 	Memories        []inventoryMemory     `json:"memories"`
 	CanonicalAbsent []inventoryAbsence    `json:"canonical_absent"`
+	Delivery        deliveryEvidence      `json:"delivery"`
 	native          map[string][]string
 	renders         map[string][]string
 }
@@ -361,6 +363,8 @@ func cmdStatus(e *env, name string, args []string) int {
 	co := s.cfg.Harnesses[config.HarnessCodex]
 	claude := newHarnessInventory(config.HarnessClaude, ch.Enabled(), "memory_file")
 	codex := newHarnessInventory(config.HarnessCodex, co.Enabled(), "task_group")
+	claude.Delivery = newDelivery(harness.CheckClaude(ch.Home, ch.Enabled()))
+	codex.Delivery = newDelivery(harness.CheckCodex(co.Home, co.Enabled()))
 	claude.ScopeCwds = append(claude.ScopeCwds, s.claudeRoot)
 	codex.ScopeCwds = append(codex.ScopeCwds, s.cwd)
 	dirs := map[string]string{claudeMemoryDir(ch.Home, s.claudeRoot): s.claudeRoot}
@@ -395,9 +399,12 @@ func cmdStatus(e *env, name string, args []string) int {
 	}
 	for _, dir := range sortedKeys(dirNames) {
 		claude.scanClaude(dir, dirs[dir])
+		claude.loadRoute("claude_project", claude.loadFile("index", filepath.Join(dir, "MEMORY.md"), nil))
 	}
 	claude.scanClaude(filepath.Join(ch.Home, "engram", "memory"), s.claudeRoot)
+	claude.claudeSharedRoute(ch.Home)
 	codex.scanCodex(co.Home)
+	codex.codexRoute(co.Home)
 	claude.finish(mems, s, canonicalComplete)
 	codex.finish(mems, s, canonicalComplete)
 	complete := canonicalComplete && claude.Complete && codex.Complete
@@ -438,6 +445,18 @@ func inventoryText(data map[string]any, harnesses []*harnessInventory, diagnosti
 	}
 	for _, h := range harnesses {
 		fmt.Fprintf(&out, "\n%s: enabled=%t complete=%t scope_complete=%t\n", h.Harness, h.Enabled, h.Complete, h.ScopeComplete)
+		r := h.Delivery.Readiness
+		fmt.Fprintf(&out, "  Readiness: ready=%t basis=%s home_exists=%t native_memory=%s\n", r.Ready, r.ReadinessBasis, r.HomeExists, r.NativeMemory)
+		for _, warning := range r.Warnings {
+			fmt.Fprintf(&out, "  Warning: %s\n", warning)
+		}
+		fmt.Fprintf(&out, "  Consumption: %s (%s)\n", h.Delivery.Consumption.State, h.Delivery.Consumption.Reason)
+		for _, route := range h.Delivery.LoadPaths {
+			fmt.Fprintf(&out, "  Load path: %s eligibility=%s (%s)\n", route.Kind, route.Eligibility, route.Reason)
+			for _, a := range route.Artifacts {
+				fmt.Fprintf(&out, "    %s: %s %q\n", a.Role, a.State, a.Path)
+			}
+		}
 		c := h.Counts
 		fmt.Fprintf(&out, "  native_entries=%d (%s) native_names=%d rendered_entries=%d rendered_names=%d overlapping_names=%d distinct_names=%d\n", c.NativeEntries, h.NativeUnit, c.NativeNames, c.RenderedEntries, c.RenderedNames, c.OverlappingNames, c.DistinctNames)
 		fmt.Fprintf(&out, "  Scope cwds: %q; unresolved slugs: %q\n", h.ScopeCwds, h.UnresolvedSlugs)

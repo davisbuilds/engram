@@ -1,8 +1,5 @@
-// Package harness inspects whether each agent harness is actually set up to
-// consume what engram writes. engram's own enable toggle says only whether engram
-// should write; this package answers the separate question of whether the harness
-// will read — so a user whose harness memory is off gets a warning instead of a
-// silent no-op.
+// Package harness reports configuration heuristics for harness memory support.
+// These checks do not establish effective runtime settings or consumption.
 package harness
 
 import (
@@ -24,23 +21,24 @@ const (
 
 // Report is a per-harness readiness assessment.
 type Report struct {
-	Harness       string       `json:"harness"`
-	EngramEnabled bool         `json:"engram_enabled"`
-	HomeExists    bool         `json:"home_exists"`
-	NativeMemory  NativeMemory `json:"native_memory"`
-	Ready         bool         `json:"ready"`
-	Warnings      []string     `json:"warnings,omitempty"`
+	Harness        string       `json:"harness"`
+	EngramEnabled  bool         `json:"engram_enabled"`
+	HomeExists     bool         `json:"home_exists"`
+	NativeMemory   NativeMemory `json:"native_memory"`
+	Ready          bool         `json:"ready"`
+	ReadinessBasis string       `json:"readiness_basis"`
+	Warnings       []string     `json:"warnings,omitempty"`
 }
 
-// CheckClaude assesses whether Claude Code will read engram's rendered memory.
-// Claude Code reads project memory directories natively — there is no feature
-// toggle — so readiness turns on engram's own toggle and the home existing.
+// CheckClaude preserves the legacy readiness heuristic: engram's toggle and
+// existence of the configured home. It does not inspect effective Claude settings.
 func CheckClaude(home string, engramEnabled bool) Report {
 	r := Report{
-		Harness:       "claude-code",
-		EngramEnabled: engramEnabled,
-		HomeExists:    dirExists(home),
-		NativeMemory:  MemoryUnknown,
+		Harness:        "claude-code",
+		ReadinessBasis: "configuration_heuristic",
+		EngramEnabled:  engramEnabled,
+		HomeExists:     dirExists(home),
+		NativeMemory:   MemoryUnknown,
 	}
 	if r.HomeExists {
 		r.NativeMemory = MemoryOn
@@ -50,22 +48,22 @@ func CheckClaude(home string, engramEnabled bool) Report {
 	return r
 }
 
-// CheckCodex assesses whether Codex will consolidate engram's extension notes.
-// Codex only folds notes in when its own `memories` setting is on, so an off
-// setting means engram's notes are written but never read.
+// CheckCodex preserves the legacy home/toggle/config-file readiness heuristic.
+// The lightweight setting scan is not effective runtime configuration evidence.
 func CheckCodex(home string, engramEnabled bool) Report {
 	r := Report{
-		Harness:       "codex",
-		EngramEnabled: engramEnabled,
-		HomeExists:    dirExists(home),
-		NativeMemory:  codexMemories(home),
+		Harness:        "codex",
+		ReadinessBasis: "configuration_heuristic",
+		EngramEnabled:  engramEnabled,
+		HomeExists:     dirExists(home),
+		NativeMemory:   codexMemories(home),
 	}
 	r.Warnings = commonWarnings(engramEnabled, home, r.HomeExists)
 	switch r.NativeMemory {
 	case MemoryOff:
 		r.Warnings = append(r.Warnings,
 			"Codex memory is off (set `memories = true` in "+filepath.Join(home, "config.toml")+
-				"); engram notes will be written but never consolidated")
+				"); consolidation may be disabled")
 	case MemoryUnknown:
 		r.Warnings = append(r.Warnings,
 			"could not determine Codex `memories` setting in "+filepath.Join(home, "config.toml"))

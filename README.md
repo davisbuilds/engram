@@ -147,6 +147,8 @@ Inspect one native/canonical pair, including its bodies and merge-base evidence:
 Counts distinguish physical entries from normalized names; incomplete sources and
 reasons for missing canonical entries are explicit. This inventories stored
 memories, not whether a session consumed them. See the [CLI contract](docs/cli.md).
+Each harness's `delivery` report separates configuration readiness from loading
+artifacts and explicitly unknown consumption. Intact files do not prove loading.
 
 Reconcile imports native memories from enabled harnesses, reports review leads,
 and propagates canonical memories without echoing them onto their native source.
