@@ -31,6 +31,9 @@ func cmdCurate(e *env, name string, args []string) int {
 	if planIn := pa.last("--plan"); planIn != "" {
 		return cmdCuratePlan(e, name, planIn)
 	}
+	if pa.last("--proposal") != "" {
+		return cmdSuppliedProposal(e, name, pa)
+	}
 	planOut := pa.last("--save-plan")
 	harness := config.HarnessClaude
 	if h := pa.last("--harness"); h != "" {

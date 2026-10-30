@@ -161,12 +161,22 @@ func (e *env) emitStale(name string, data map[string]any, warns []string, stale 
 // --plan runs no agent, so the agent's flags would be silently ignored, and
 // --save-plan is a dry run's output.
 func checkPlanFlags(e *env, pa parsedArgs) *RespError {
-	for _, f := range []string{"--plan", "--save-plan"} {
+	for _, f := range []string{"--plan", "--save-plan", "--proposal"} {
 		if len(pa.vals[f]) > 1 {
 			return usageError("%s given more than once", f)
 		}
 	}
 	planIn, planOut := pa.last("--plan"), pa.last("--save-plan")
+	if pa.last("--proposal") != "" {
+		if planIn != "" || e.apply {
+			return usageError("--proposal validates or saves a new plan; review and apply it separately with --plan <file> --apply")
+		}
+		for _, f := range []string{"--harness", "--model", "--effort", "--timeout"} {
+			if len(pa.vals[f]) > 0 {
+				return usageError("--proposal runs no agent, so %s does not apply", f)
+			}
+		}
+	}
 	switch {
 	case planIn != "" && planOut != "":
 		return usageError("--plan applies a saved plan and --save-plan saves a new one; give one of them")
@@ -242,8 +252,9 @@ func planExistsError(out string) *RespError {
 // corpusCapture is what curate shows its agent: the corpus and, for
 // --save-plan, the binding of the store it was read from.
 type corpusCapture struct {
-	mems    []*schema.CanonicalMemory
-	binding curate.Binding
+	mems        []*schema.CanonicalMemory
+	binding     curate.Binding
+	parseErrors int
 }
 
 // captureCorpus reads the corpus curate shows its agent and, with bind, the
@@ -287,6 +298,7 @@ func (e *env) captureCorpus(root string, bind bool) (corpusCapture, []string, *R
 		return c, warns, &RespError{Code: "discover", Message: err.Error()}
 	}
 	c.mems = mems
+	c.parseErrors = len(perrs)
 	e.at(hookSnapshot)
 	if bind {
 		if rerr := checkPlannable(root, c.binding, perrs); rerr != nil {

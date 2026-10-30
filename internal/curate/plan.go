@@ -279,7 +279,7 @@ func checkDuplicateKeys(data []byte) error {
 	walk = func(parent string) error {
 		tok, err := dec.Token()
 		if err != nil {
-			return fmt.Errorf("decode plan: %w", err)
+			return fmt.Errorf("decode JSON: %w", err)
 		}
 		delim, ok := tok.(json.Delim)
 		if !ok {
@@ -291,7 +291,7 @@ func checkDuplicateKeys(data []byte) error {
 			for dec.More() {
 				kt, err := dec.Token()
 				if err != nil {
-					return fmt.Errorf("decode plan: %w", err)
+					return fmt.Errorf("decode JSON: %w", err)
 				}
 				key, _ := kt.(string)
 				norm := key
@@ -299,7 +299,7 @@ func checkDuplicateKeys(data []byte) error {
 					norm = strings.ToLower(key)
 				}
 				if seen[norm] {
-					return fmt.Errorf("plan repeats the key %q in one object", key)
+					return fmt.Errorf("JSON repeats the key %q in one object", key)
 				}
 				seen[norm] = true
 				if err := walk(key); err != nil {
@@ -314,7 +314,7 @@ func checkDuplicateKeys(data []byte) error {
 			}
 		}
 		if _, err := dec.Token(); err != nil {
-			return fmt.Errorf("decode plan: %w", err)
+			return fmt.Errorf("decode JSON: %w", err)
 		}
 		return nil
 	}

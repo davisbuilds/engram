@@ -20,13 +20,14 @@ the (local) design spec.
 4. **Preview bulk changes; writes are explicit.** Sync, import, reconcile,
    migrate, forget, detach, and curate preview by default and change memories
    only with `--apply`. `remember` and `share` are immediate write primitives.
-   A dry-run `curate` still invokes an agent; `--save-plan` writes a proposal
-   file without applying it to canonical.
+   Default dry-run `curate` still invokes an agent; `--proposal` and `--plan`
+   run none. `--save-plan` writes a bound plan without applying it to canonical.
 5. **Never block on a prompt.** No command waits on interactive input. Safety
    comes from the explicit `--apply` gate and from separate write commands, not
    from confirmation prompts an agent cannot answer.
 6. **Self-describing.** `engram schema` emits the machine-readable schemas
-   (response envelope + canonical memory); `engram help --json` lists commands.
+   (response envelope, canonical memory, proposals and plans). Both it and
+   `engram help --json` describe command flags and versioned capabilities.
    An agent discovers the surface without scraping prose.
 7. **Leads, not actions, for judgment.** Read commands that find something worth
    acting on (`review`, `audit`) emit `next_steps[]` — the exact follow-up
@@ -111,12 +112,14 @@ engram [global flags] <command> [args]
                  the harnesses, never back onto a memory's own source
                  (dry-run; --apply to write). The enricher
                  flow in one command; curate stays a separate, explicit step.
-    curate       Run a headless agent over the corpus; it proposes
+    curate       Run a headless agent over the corpus, or validate supplied
+                 operations with --proposal <file|-> without running an agent;
+                 the default headless mode proposes
                  add/merge/remove/rescope, engram validates and applies
                  (dry-run; --apply to write; --save-plan <file> keeps the
                  dry run's plan for review, --plan <file> --apply applies
                  exactly that plan without running the agent). The one
-                 command that runs an agent.
+                 command that can run an agent.
     forget       Retire canonical memories: tombstone them so import never
                  re-creates them, and remove their engram-owned renders
                  (dry-run; --apply to write; --restore undoes).
@@ -173,6 +176,29 @@ harness, and machine differ from engram's own process — these make the target
 explicit rather than ambient.
 
 ## Command semantics (selected)
+
+### Machine discovery
+
+`help --json` retains `usage` and each command's `name`/`summary`, adding
+`commands[].arguments`, `global_flags` and `capabilities`. `schema` exposes the
+same discovery fields alongside its existing schemas and `curate_proposal`.
+Discovery reads no configuration, corpus or harness and writes nothing.
+
+Argument metadata contains sorted `value_flags` and `boolean_flags`, plus
+`positionals_max` (`-1` means unbounded). It describes accepted names and arity,
+not every required field, repeatability rule or mutually exclusive combination;
+command validation and this reference define those constraints. Command flags
+come from the dispatch parser's declarations; `remember` uses its actual Go
+FlagSet registrations. Global flags use the same declaration as dispatch.
+
+`capabilities` maps stable names to integer contract versions. This build
+advertises version `1` for `argument_discovery`, `memory_inventory`,
+`native_comparison`, `delivery_evidence`, `curate_saved_plans` and
+`curate_supplied_proposals`. Absence means unadvertised, not an inferred negative
+from an unfamiliar version number. These describe this executable's interfaces,
+not harness support, readiness, installation elsewhere or consumption.
+
+### Operations
 
 - **`remember`** — writes one canonical memory. Accepts fields as flags
   (`--name`, `--description`, `--type`, `--scope`, `--applies-cwd`,
@@ -593,7 +619,7 @@ explicit rather than ambient.
   together; each item's `target` is `project` or `shared`.
 - **`review`** — never mutates; every finding is a `next_step` the agent may run.
 - **`curate`** — the proposer/applier loop, and the **only** command that invokes
-  an agent. engram gathers the canonical corpus + `review` findings
+  an agent in its default mode. engram gathers the canonical corpus + `review` findings
   (deterministic), hands them to a headless agent as facts, and the agent returns
   *proposed operations only* (`add` / `update` / `merge` / `remove` / `rescope`
   with reasons) — it never touches a file. engram validates every proposed
@@ -601,6 +627,41 @@ explicit rather than ambient.
   `--apply` executes it through the same `store` write-path, holding the
   exclusive canonical-root lock so the multi-file batch is atomic against a
   concurrent apply (a held lock is `locked`, exit `1`, with nothing written).
+
+  **Supplied operations:** `curate --proposal <file|->` validates a strict JSON
+  object `{"operations":[...]}` against the current canonical corpus, running
+  no agent. `-` reads stdin. The operations use the existing add/update/merge/
+  remove/rescope contract; an empty array is valid, while missing/null operations,
+  unknown fields at any depth, repeated keys (including case variants), trailing
+  data, prose and fenced JSON are refused. Syntax errors are exit 2 /
+  `parse_proposal`; input read failures exit 1 / `proposal_read`; invalid
+  operations exit 3 / `invalid_proposal`, with per-operation verdicts and no plan
+  saved. An incompletely parsed canonical corpus is refused (exit 1 /
+  `corpus_parse`), even for validation without saving.
+
+  `--proposal ... --save-plan <file>` saves the validated, resolved operations
+  through the existing bound-plan writer. Review that plan, then apply with
+  `--plan <file> --apply`. Supplied operations cannot be combined with `--apply`,
+  `--plan` or agent flags (`--harness`, `--model`, `--effort`, `--timeout`), and
+  `--proposal` cannot repeat (exit 2 / `usage`, before reading input). These
+  constraints prevent silently ignoring agent options or applying raw proposals
+  without the bound-plan review step.
+
+  `data.proposal` reports the input path (`-` for stdin) and SHA-256 of the exact
+  supplied bytes; `operations` shows resolved provenance as apply preserves it.
+  No invocation or model proposer is fabricated. Plain validation creates no
+  directory, lock or plan. Saving can create the shared-read lock file and a
+  new owner-only plan outside canonical; it never changes memories. Existing
+  output-path checks, whole-store bindings, stale-plan checks, exclusive apply
+  locking and rollback remain in force.
+
+  A supplied proposal is validated against canonical **when submitted**; it
+  carries no evidence of the corpus its author originally consulted. Saving
+  binds the validation snapshot forward, not backward. Review the saved plan
+  against current canonical before applying. Without saving, validation is a
+  read-only observation and reserves no operations or corpus version.
+
+  The following details describe the default headless and saved-plan workflows:
   Under `--apply` or `--save-plan`, the corpus the agent is shown is read
   holding the canonical lock shared, which is released before the agent runs:
   a writer holding the lock refuses the run (`locked`, exit `1`) before any
@@ -746,6 +807,10 @@ engram review --json | jq '.next_steps[]'
 # Curate with a reviewed plan: propose and save, review, apply exactly that:
 engram curate --save-plan curate-plan.json --json | jq '.data.operations'
 engram curate --plan curate-plan.json --apply --json
+
+# Supply the current agent's operations without launching another model:
+engram curate --proposal proposal.json --save-plan curate-plan.json --json
+# Review the saved plan, then use the same --plan ... --apply command above.
 
 # Discover the surface without scraping help text:
 engram schema --json

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -114,7 +115,7 @@ var (
 	harnessArg  = &argSpec{positionals: 1}
 	shareArgs   = &argSpec{positionals: 1, values: []string{"--to", "--applies-cwd"}, bools: []string{"--any-cwd"}}
 	importArgs  = &argSpec{positionals: 1, values: []string{"--refresh", "--keep"}, bools: []string{"--all", "--shared"}}
-	curateArgs  = &argSpec{values: []string{"--harness", "--model", "--effort", "--timeout", "--save-plan", "--plan"}}
+	curateArgs  = &argSpec{values: []string{"--harness", "--model", "--effort", "--timeout", "--save-plan", "--plan", "--proposal"}}
 	detachArgs  = &argSpec{positionals: anyPositionals}
 	migrateArgs = &argSpec{positionals: 1, bools: []string{"--shared"}}
 	forgetArgs  = &argSpec{positionals: anyPositionals, values: []string{"--reason", "--successor"}, bools: []string{"--restore"}}
@@ -141,7 +142,7 @@ func commands() []command {
 		{"diff", "Show render status, or compare a named canonical memory with a native source (--native, --name).", diffArgs, cmdDiff},
 		{"show", "Dump a harness's engram-rendered memories.", harnessArg, cmdShow},
 		{"review", "Health report: flags near-duplicate memory names, emitted as agent next_steps.", noArgs, cmdReview},
-		{"curate", "Run a headless agent over the corpus; it proposes add/merge/remove/rescope, engram applies (dry-run; --apply; --save-plan <file> keeps the reviewed plan, --plan <file> --apply applies it without the agent).", curateArgs, cmdCurate},
+		{"curate", "Curate through a headless agent or validate --proposal <file|-> without one; --save-plan keeps a bound plan for review, --plan <file> --apply applies it without the agent.", curateArgs, cmdCurate},
 		{"hook", "Print harness lifecycle wiring for session-boundary sync.", harnessArg, cmdHook},
 		{"config", "Show config + per-harness readiness (is each harness set up to read what engram writes?).", noArgs, cmdConfig},
 		{"schema", "Emit engram's JSON schemas (self-describing).", noArgs, cmdSchema},
@@ -159,21 +160,25 @@ func Run(args []string) int {
 	rest := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		a := args[i]
+		flagName, _, _ := strings.Cut(a, "=")
 		switch {
-		case a == "--json":
-			e.jsonMode = true
-		case a == "--plain":
-			e.jsonMode = false
-		case a == "-q" || a == "--quiet":
-			e.quiet = true
-		case a == "--apply":
-			e.apply = true
-		case a == "--version":
-			return cmdVersion(e, "version", nil)
-		case a == "-h" || a == "--help":
-			// Help wins wherever it appears; it never runs the command.
-			help = true
-		case isFlag(a, "--config"), isFlag(a, "--cwd"), isFlag(a, "--agent"), isFlag(a, "--host"):
+		case slices.Contains(globalArgs.bools, a):
+			switch a {
+			case "--json":
+				e.jsonMode = true
+			case "--plain":
+				e.jsonMode = false
+			case "-q", "--quiet":
+				e.quiet = true
+			case "--apply":
+				e.apply = true
+			case "--version":
+				return cmdVersion(e, "version", nil)
+			case "-h", "--help":
+				// Help wins wherever it appears; it never runs the command.
+				help = true
+			}
+		case slices.Contains(globalArgs.values, flagName):
 			v, next, rerr := requireValue(args, i)
 			if rerr != nil {
 				flagErr = rerr
@@ -269,6 +274,9 @@ func cmdVersion(e *env, _ string, _ []string) int {
 // canonical-memory schemas rather than inferring them from prose.
 func cmdSchema(e *env, _ string, _ []string) int {
 	data := map[string]any{
+		"commands":     commandMetadata(),
+		"global_flags": argumentMetadata(globalArgs),
+		"capabilities": capabilities(),
 		"response_envelope": map[string]any{
 			"schema_version": schemaVersion,
 			"fields": []string{
@@ -292,7 +300,7 @@ func cmdSchema(e *env, _ string, _ []string) int {
 			},
 		},
 		"curate_operation": map[string]any{
-			"note": "the JSON an agent returns from `engram curate`; engram validates each op and, under --apply, applies the whole batch or nothing (fail closed)",
+			"note": "operations proposed by a headless agent or supplied with --proposal; engram validates the whole batch and is the sole mutator (fail closed)",
 			"ops": map[string]string{
 				"add":     "{op, memory, reason} — memory.name must not already exist",
 				"update":  "{op, name, memory, reason} — memory.name must equal name (no rename)",
@@ -300,6 +308,10 @@ func cmdSchema(e *env, _ string, _ []string) int {
 				"remove":  "{op, name, reason} — name must exist",
 				"rescope": "{op, name, to_scope, reason} — to_scope is 'global' or 'project:<repo>'",
 			},
+		},
+		"curate_proposal": map[string]any{
+			"note":   "strict JSON read by curate --proposal <file|->; required operations array, no prose/fences, unknown fields, repeated keys or trailing data; validation/save only, apply a reviewed --plan separately",
+			"fields": []string{"operations:curate_operation[]"},
 		},
 		"curate_plan": map[string]any{
 			"note": "the file `engram curate --save-plan <file>` writes and `engram curate --plan <file> [--apply]` reads; strict JSON: unknown fields, repeated keys and trailing data are refused",
@@ -321,13 +333,11 @@ func (e *env) usage(code int) int {
 	sort.Slice(cs, func(i, j int) bool { return cs[i].name < cs[j].name })
 
 	if e.jsonMode {
-		list := make([]map[string]string, 0, len(cs))
-		for _, c := range cs {
-			list = append(list, map[string]string{"name": c.name, "summary": c.summary})
-		}
 		e.emit("help", code == exitOK, map[string]any{
-			"usage":    "engram [global flags] <command> [args]",
-			"commands": list,
+			"usage":        "engram [global flags] <command> [args]",
+			"commands":     commandMetadata(),
+			"global_flags": argumentMetadata(globalArgs),
+			"capabilities": capabilities(),
 		}, nil, nil, nil)
 		return code
 	}
@@ -359,9 +369,4 @@ func isTTY(f *os.File) bool {
 		return false
 	}
 	return fi.Mode()&os.ModeCharDevice != 0
-}
-
-// isFlag reports whether a is the value flag name, as `name` or `name=value`.
-func isFlag(a, name string) bool {
-	return a == name || strings.HasPrefix(a, name+"=")
 }
