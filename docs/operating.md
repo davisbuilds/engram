@@ -63,6 +63,13 @@ Read failures produce partial evidence and exit 1. Consumption is always unknown
 because Engram does not inspect a session's actual context. File presence,
 timestamps and a successful sync cannot establish that an agent used a memory.
 
+Add `status --stats` for raw stored bytes/whitespace-delimited words, canonical
+scope totals, storage-location totals, filesystem modification times, repeated
+render volume and bounded local reference checks. Declared provenance dates stay
+separate from filesystem dates. Missing references and exact duplicate copies
+are evidence for review, never automatic retirement rules. Read failures produce
+partial metrics and exit 1; missing targets alone are observed issues, exit 0.
+
 ## Try it without touching your agents
 
 After `make build`, run this from the Engram checkout in a POSIX-compatible

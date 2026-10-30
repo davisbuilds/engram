@@ -42,7 +42,7 @@ func TestDiscoveryMatchesImportantFlagsAndBothSurfaces(t *testing.T) {
 	expected := map[string]map[string][]string{
 		"curate":   {"value_flags": {"--proposal", "--save-plan", "--plan", "--harness"}},
 		"remember": {"value_flags": {"--from-json", "--name", "--applies-cwd", "--related"}, "boolean_flags": {"--force"}},
-		"status":   {"boolean_flags": {"--all-projects"}},
+		"status":   {"boolean_flags": {"--all-projects", "--stats"}},
 		"diff":     {"value_flags": {"--native", "--name", "--source-name"}, "boolean_flags": {"--shared"}},
 	}
 	for _, row := range rows {

@@ -130,7 +130,8 @@ engram [global flags] <command> [args]
     discover     Parse and list every canonical memory, with parse errors
                  (schema violations and duplicate names included).
     status       Inventory canonical, native memories and owned renders
-                 without writing (--all-projects scans every Claude slug).
+                 without writing (--all-projects scans every Claude slug;
+                 --stats measures stored volume, timestamps and references).
     list         List memories relevant to a given cwd / agent / host.
     audit        Report pending render Actions for a harness without writing.
     diff         Render status, or focused native/canonical comparison
@@ -194,7 +195,8 @@ FlagSet registrations. Global flags use the same declaration as dispatch.
 `capabilities` maps stable names to integer contract versions. This build
 advertises version `1` for `argument_discovery`, `memory_inventory`,
 `native_comparison`, `delivery_evidence`, `curate_saved_plans` and
-`curate_supplied_proposals`. Absence means unadvertised, not an inferred negative
+`curate_supplied_proposals`, plus `memory_statistics` for optional inventory
+measurements. Absence means unadvertised, not an inferred negative
 from an unfamiliar version number. These describe this executable's interfaces,
 not harness support, readiness, installation elsewhere or consumption.
 
@@ -499,7 +501,7 @@ not harness support, readiness, installation elsewhere or consumption.
   detached memory is an ordinary canonical memory to `reconcile`, which then
   renders it into every harness, its former source included. A memory already
   detached, or not imported, is `unchanged`. An unknown name exits `2`.
-- **`status [--all-projects]`** — read-only inventory of canonical, native memory
+- **`status [--all-projects] [--stats]`** — read-only inventory of canonical, native memory
   and managed renders. Unlike `show`, includes native entries and joins physical
   files/Task Groups by the importers' normalized canonical names. Default scans
   the current Claude project slug and shared directory, plus Codex's consolidated
@@ -569,6 +571,64 @@ not harness support, readiness, installation elsewhere or consumption.
   successfully parsed memories; normalization collisions are reported without
   losing physical-entry counts. This is a best-effort filesystem observation,
   not an atomic cross-harness snapshot.
+
+  **Optional statistics:** `--stats` adds `data.stats` in JSON and a readable
+  section in plain output. It re-reads observed source paths without taking a
+  lock or writing, including with `--apply`. Ordinary `status` does not collect
+  these measurements or probe referenced files. Its boundaries remain unchanged.
+
+  - `total` counts successfully measured physical paths, raw stored `bytes` and
+    `words`. `word_unit: unicode_whitespace_fields` means Go's `strings.Fields`:
+    whitespace-delimited text chunks, including Markdown and metadata, not tokens
+    or language-aware words. Canonical files (including readable malformed files),
+    Claude memory-directory Markdown and indexes, Codex's consolidated file and
+    Markdown notes are included. Loader rules/instructions, rollout bodies,
+    tombstones, non-Markdown files and unscanned projects are excluded. Each
+    literal path is counted once; canonical takes precedence if stores overlap.
+    Symlink aliases with distinct paths count separately. This is text volume,
+    not allocated disk usage or memory-entry counts.
+  - `sources[]` reports path, harness, kind, storage location, raw bytes/words
+    and filesystem `modified_at` in UTC RFC3339. Parsed canonical sources add
+    name, declared scope and optional `declared_created`/`declared_modified`
+    provenance strings, preserved as declared. Missing declarations are unknown.
+    Modification time is not creation, import, loading, last use or usefulness.
+    No bodies or automatic age thresholds are emitted.
+  - `canonical_scopes[]` groups validated canonical entries by declared scope
+    tier across the whole corpus, with stored files/bytes/words and separately
+    parsed `body_bytes`/`body_words`. It does not partition `applies_to` axes or
+    estimate session payloads. Malformed/withheld files contribute only raw
+    source/location totals. `locations[]` groups raw volume by scan location and
+    harness; known Claude project contexts add `scope_cwd`. Unresolved contexts
+    retain the inventory's scope uncertainty. Codex's consolidated file remains
+    one mixed-scope physical file, not invented per-Task-Group disk measurements.
+  - `repeated_renders[]` reports names with multiple owned render paths and their
+    total stored volume. Same-name copies may differ. `exact_duplicate_renders[]`
+    groups owned renders by SHA-256 of the entire stored file, with paths and
+    `extra_copies`, `extra_bytes`, `extra_words` beyond one identical copy.
+    Identical copies can be intentional delivery to different projects/harnesses;
+    neither list establishes semantic duplication or recommends deletion.
+  - `reference_forms` lists the bounded detectors: canonical `related` names,
+    simple Claude index bullet links to local Markdown basenames, and literal
+    Codex `rollout_summaries/<basename>.md` citations. File basenames use ASCII
+    letters/digits, dot, underscore and hyphen; Claude permits `./` and a fragment.
+    Fenced/indented code is skipped. URLs, absolute/parent paths, general Markdown
+    syntax, other body citations and recursive reference traversal are unsupported.
+    Referenced files are statted, not read or fetched; link fragments are ignored,
+    not checked against headings.
+  - `references_checked` counts unique source/kind/target observations, including
+    successful controls; `unresolved_references[]` includes `missing`, `not_file`,
+    `error` and canonical `unknown_incomplete_canonical`. A missing related target
+    is asserted only when canonical discovery is complete. An empty result is
+    limited to the reported detectors and scan, not proof all references resolve.
+
+  `stats.complete` inherits inventory/canonical completeness and becomes false
+  on measurement/reference inspection errors. Additional failures add
+  `stats.diagnostics`, make overall `data.complete: false`, and return exit 1 /
+  `inventory_incomplete`, preserving partial metrics on stdout. Missing reference
+  targets are observed issues (exit 0), distinct from probe failures. File bytes,
+  parsed canonical fields and filesystem timestamps are best-effort observations
+  across separate reads, with no atomic snapshot or consumption claim. Totals
+  cover successfully measured files only; inventory counts remain independent.
 
 - **`diff --native <claude-code|codex> --name <canonical-name>`** — focused,
   read-only content comparison. Bare `diff` keeps its existing render-status

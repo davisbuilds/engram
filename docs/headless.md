@@ -26,6 +26,13 @@ proposals, schema's `curate_operation` and `curate_proposal` describe the input.
 The input is validated against canonical at submission, and saving binds that
 snapshot forward; it does not prove which earlier corpus the author consulted.
 
+For curation evidence, `status --stats [--all-projects] --json` adds raw stored
+volume, canonical scope totals, source modification times, repeated/exact render
+copies and bounded reference checks. Inspect `stats.complete`, diagnostics,
+`reference_forms` and `references_checked` before treating an empty issue list as
+evidence. Word counts are whitespace chunks, not tokens; size, age and duplicate
+delivery never decide semantic replacement, retirement or actual consumption.
+
 ```bash
 engram curate --proposal proposal.json --save-plan reviewed-plan.json --json
 # Review the operations and binding, then:

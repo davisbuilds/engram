@@ -61,5 +61,6 @@ func capabilities() map[string]int {
 	return map[string]int{
 		"argument_discovery": 1, "memory_inventory": 1, "native_comparison": 1,
 		"delivery_evidence": 1, "curate_saved_plans": 1, "curate_supplied_proposals": 1,
+		"memory_statistics": 1,
 	}
 }

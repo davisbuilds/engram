@@ -99,14 +99,12 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
 
 ## Surface not yet built
 
-- **Memory observability follow-ups.** The [lightweight spec](../memory-observability-spec.md)
-  records per-scope volume/freshness evidence, which remains future work;
-  the first deliveries cover safer orphan leads, unified read-only inventory,
-  focused native/canonical content comparison, and static delivery evidence
-  with explicitly unknown consumption, plus command/capability discovery and
-  supplied curation proposals using reviewed bound plans. Future session-evidence integrations must
-  identify the observed harness/session and distinguish loading from use. Keep
-  semantic judgments in agents and expose unknown evidence honestly rather than implying successful consumption or replacement.
+- **Observed session consumption.** Inventory deliberately reports consumption
+  as unknown; stored renders, loader wiring and timestamps do not establish it.
+  Revisit when a supported harness exposes inspectable session-loading evidence.
+  Any integration must identify the harness/session and distinguish loading
+  from use, while keeping semantic judgments in agents. This is beyond the
+  completed [memory observability spec](../memory-observability-spec.md).
 
 
 - **`migrate` for Codex.** `migrate` adopts hand-authored Claude files (per-file
