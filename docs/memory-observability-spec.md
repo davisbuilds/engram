@@ -23,7 +23,8 @@ These ambiguities increase curation effort and can encourage premature retiremen
 This spec records six improvements. The first delivery implements safer orphan
 leads and unified read-only inventory, verified by `go test ./internal/cli` and
 `go test ./...`. Remaining capabilities are follow-ups, not prerequisites for
-this delivery. The second delivery adds focused content comparison. Both slices
+this delivery. The second delivery adds focused content comparison. The third
+adds static delivery evidence with explicit consumption limits. All three slices
 are read-only and do not invoke a model.
 
 | Capability | Observable outcome | Delivery |
@@ -31,7 +32,7 @@ are read-only and do not invoke a model.
 | Safer orphan leads | Shared-session candidates carry their evidence basis and unassessed semantic coverage; leads request inspection without recommending retirement or detachment. | First slice (implemented) |
 | Unified inventory | `status [--all-projects] --json` joins canonical names, native entries and owned render files, with explicit scan boundaries, counts, diagnostics and reasons for canonical absence. | First slice (implemented) |
 | Content comparison | `diff --native <harness> --name <name>` exposes normalized bodies, source paths, merge-base evidence and field differences. | Second slice (implemented) |
-| Delivery versus consumption | Configuration readiness, stored renders, load eligibility and observed consumption remain distinct; unavailable consumption evidence is unknown. | Follow-up |
+| Delivery versus consumption | Configuration readiness, stored renders, load eligibility and observed consumption remain distinct; unavailable consumption evidence is unknown. | Third slice (implemented) |
 | Capability discovery and supplied proposals | Installed command flags/capabilities are discoverable; an outer agent can submit operations for deterministic validation and plan binding without another model invocation. Reviewed saved plans already exist in v0.5.0. | Follow-up |
 | Volume and freshness | Per-scope bytes/words, duplicate render volume, source timestamps and unresolved references support curation without turning age or size into automatic retirement. | Follow-up |
 
@@ -93,6 +94,28 @@ are read-only and do not invoke a model.
   recommending retirement. With no candidate they inspect retained canonical
   content and explicitly report native absence in the scanned source.
 
+### Third Slice: Delivery Evidence
+
+- `status` adds `delivery` per harness, with the existing readiness report,
+  artifact evidence for each scanned Claude project index, shared index/rules
+  import, and Codex extension instructions/notes directory. Existing config and
+  readiness fields are preserved; reports add the explicit
+  `readiness_basis: configuration_heuristic` label.
+- Artifacts distinguish present, empty, missing, different wiring and read
+  error. Wiring agreement compares the exact bytes produced by the existing
+  writers; differing custom files are not declared invalid. Missing/empty
+  prerequisites are explicit; other eligibility stays unknown, even with intact
+  files. No effective runtime config, permissions, harness version, index limits
+  or per-memory references are inferred. Verify with
+  `go test ./internal/cli -run TestDelivery`.
+- Consumption is always unknown with reason `no_session_consumption_evidence`.
+  Stored counts, file timestamps and readiness never imply loaded or used.
+  No harness session or model is invoked. Disabled harnesses and old shared
+  routes remain inspectable; all-project routes follow inventory boundaries.
+- JSON and plain output show the same evidence without artifact bodies. Read
+  errors return partial diagnostics, `complete: false` and exit 1; missing
+  artifacts alone remain exit 0. Inspection writes nothing, even with `--apply`.
+
 ## Evaluation
 
 Use synthetic temporary harness homes and canonical stores. Exercise both
@@ -107,7 +130,8 @@ read-only inventory is an operational cross-check, not a consumption test.
 ## Scope
 
 Included now: safer leads, candidate-match evidence, unified inventory, focused
-native/canonical comparison, public CLI documentation and regression coverage.
+native/canonical comparison, static delivery evidence, public CLI documentation
+and regression coverage.
 Follow-ups retain the boundaries in the capability table. No model-based deduplication, automatic deletion, new
 memory ownership, installation upgrades, scheduling or remote transport.
 
@@ -121,6 +145,6 @@ best-effort filesystem observation, not a cross-harness atomic snapshot.
 
 ## Open Questions
 
-None for the first two slices. Exact interfaces for consumption evidence,
+None for the first three slices. Exact interfaces for observed session consumption,
 supplied proposals and size/freshness reports remain open; those choices cannot
 change these read-only inspection and evidence-labeling contracts.

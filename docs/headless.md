@@ -193,12 +193,15 @@ codex exec "summarize the pending engram actions: $(engram audit --json)"
 
 ## Readiness
 
-Before relying on a harness, confirm it will actually read what engram writes:
+Before relying on a harness, inspect configuration and stored loading artifacts:
 
 ```
 engram config --json    # per-harness ready flag + warnings
+engram status --json    # stored entries, loading artifacts, unknown consumption
 ```
 
 A harness whose native memory feature is off (e.g. Codex `memories = false`) is
-reported `ready: false`; `engram sync` still writes but warns that the output
-will not be consumed.
+reported `ready: false`; `engram sync` still writes but warns that consolidation
+may be disabled. Readiness is a configuration heuristic. `status` reports
+missing prerequisites separately and leaves runtime loading and consumption
+unknown; it does not inspect session context or predict whether a lesson helped.

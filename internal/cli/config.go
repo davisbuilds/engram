@@ -8,8 +8,8 @@ import (
 )
 
 // cmdConfig reports the resolved configuration and a per-harness readiness
-// assessment: not just whether engram is enabled for a harness, but whether the
-// harness itself is set up to read what engram writes. It is informational and
+// heuristic based on the configured home, engram toggle and native setting scan.
+// It does not establish effective runtime settings or consumption. It is informational and
 // always exits 0; the envelope's ok and each harness's `ready` carry the signal.
 func cmdConfig(e *env, name string, _ []string) int {
 	cfg, err := config.Load(e.config)

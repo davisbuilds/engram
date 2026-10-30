@@ -503,7 +503,34 @@ explicit rather than ambient.
   - `scope_cwds`, `unresolved_slugs` and `scope_complete` explain scope evidence.
     Default uses each harness's normal cwd/root semantics. All-project evaluation
     also uses resolvable scanned slugs. Unresolved slugs or failed enumeration
-    cannot prove that a memory is out of scope.
+    cannot prove that a memory is out of scope;
+  - `delivery.readiness`: the same home/toggle/native-setting heuristic as
+    `config`, explicitly labeled `readiness_basis: configuration_heuristic`.
+    Existing `ready` semantics are preserved, including Codex's unknown-setting
+    fallback. This does not establish effective runtime configuration;
+  - `delivery.load_paths[]`: `kind` (`claude_project`, `claude_shared`,
+    `codex_extension`), `artifacts[]` (role, path and state), `eligibility` and
+    `reason`. Project routes inspect each scanned `MEMORY.md`. The shared route
+    inspects its index and rules import; Codex inspects extension instructions
+    and reuses the inventoried notes-directory state. Routes are inspected even
+    when Engram rendering or shared-index output is disabled: old files may
+    still be present. Artifact states are `present`, `empty`, `missing`,
+    `different` (wiring bytes differ from Engram's writer), or `error`;
+  - `delivery.consumption`: always `state: unknown` with
+    `reason: no_session_consumption_evidence`. This command reads no harness
+    session context and makes no claim that a memory was loaded, consulted or
+    used successfully.
+
+  Load eligibility is `prerequisites_missing` when an inspected route has a
+  missing/empty artifact, otherwise `unknown`. Any artifact read failure leaves
+  eligibility unknown with `artifact_inspection_failed`, adds diagnostics and
+  returns exit 1 / `complete: false`; missing files alone are not errors.
+  Different wiring may be valid custom configuration and remains unknown.
+  Intact static wiring reports `runtime_loading_unverified`: permissions,
+  effective settings, harness/version support, index truncation, individual
+  memory references and session loading remain unverified. These are route
+  prerequisites, not per-memory delivery guarantees. Artifact bodies are never
+  printed; stored-memory counts remain separate from this evidence.
 
   Absence reasons describe writer `reconcile` policy, including source
   suppression, rather than plain `sync`. They are not consumption evidence.
@@ -669,6 +696,10 @@ explicit rather than ambient.
   (`locked`, exit `1`) and writes nothing; the next session boundary syncs again.
 
 ## Configuration
+
+`config` harness reports include `readiness_basis: configuration_heuristic`.
+Their `ready` flag is informational and does not prove loading or consumption.
+Use `status` for stored-memory and loader-artifact evidence alongside readiness.
 
 - `--config <path>` selects one YAML file; otherwise engram reads
   `$XDG_CONFIG_HOME/engram/config.yaml` (fallback

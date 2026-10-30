@@ -100,10 +100,12 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
 ## Surface not yet built
 
 - **Memory observability follow-ups.** The [lightweight spec](../memory-observability-spec.md)
-  records separate delivery versus consumption evidence, installed CLI
-  capability discovery and externally supplied curation proposals, and per-scope volume/freshness evidence. These
-  remain future work; the first deliveries cover safer orphan leads, unified
-  read-only inventory and focused native/canonical content comparison. Keep
+  records installed CLI capability discovery and externally supplied curation
+  proposals, and per-scope volume/freshness evidence. These remain future work;
+  the first deliveries cover safer orphan leads, unified read-only inventory,
+  focused native/canonical content comparison, and static delivery evidence
+  with explicitly unknown consumption. Future session-evidence integrations must
+  identify the observed harness/session and distinguish loading from use. Keep
   semantic judgments in agents and expose unknown evidence honestly rather than implying successful consumption or replacement.
 
 

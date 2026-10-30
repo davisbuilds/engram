@@ -54,6 +54,15 @@ Readiness has limits:
 `config` can exit `0` even with `ok: false`; inspect the payload and warnings.
 Engram never changes the harness's settings for you.
 
+`status --json` adds a separate `delivery` report for each harness. Readiness is
+explicitly labeled `configuration_heuristic`; stored memories retain their own
+counts and source paths. Load paths show project/shared indexes, the shared rules
+import and Codex extension instructions/notes. Missing or empty prerequisites
+are explicit; intact or custom wiring still leaves runtime eligibility unknown.
+Read failures produce partial evidence and exit 1. Consumption is always unknown
+because Engram does not inspect a session's actual context. File presence,
+timestamps and a successful sync cannot establish that an agent used a memory.
+
 ## Try it without touching your agents
 
 After `make build`, run this from the Engram checkout in a POSIX-compatible
