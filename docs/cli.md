@@ -126,6 +126,8 @@ engram [global flags] <command> [args]
   Introspection (read-only, --json everywhere):
     discover     Parse and list every canonical memory, with parse errors
                  (schema violations and duplicate names included).
+    status       Inventory canonical, native memories and owned renders
+                 without writing (--all-projects scans every Claude slug).
     list         List memories relevant to a given cwd / agent / host.
     audit        Report pending render Actions for a harness without writing.
     diff         Cross-state difference for each render target.
@@ -333,9 +335,15 @@ explicit rather than ambient.
   under `data.orphaned` each canonical memory imported from that harness whose
   source is gone: a Codex name matching no current Task Group, or a Claude
   `provenance.source` file present in no slug. Each row carries `successors`:
-  current Task Groups citing a session (`thread_id=`) the orphan cites. Every
-  orphan gets two `next_steps`, `forget` it (naming a sole successor) or `detach`
-  it. An empty or missing source skips detection with a warning, since it would
+  current Task Groups citing a session (`thread_id=`) the orphan cites. This
+  compatibility field is a candidate list, not proof of semantic replacement.
+  `candidate_successors` adds `{name, match_basis: "shared_session",
+  shared_sessions: [...], coverage: "unassessed"}` for each match, with names and
+  deduplicated session IDs sorted. Each orphan gets a read-only `status
+  --all-projects --json` lead to inspect paths and compare lessons before deciding
+  whether to retain, merge or retire. Absence and shared provenance alone do not
+  recommend retirement or detachment. Explicit `forget` and `detach` remain
+  available. An empty or missing source skips detection with a warning, since it would
   make every memory look orphaned. A single-slug Claude import omits the field.
 - **`migrate <harness>`** — the steady-state bridge for a harness that already
   holds hand-authored memory (the slug engram imported *from*). Plain `sync`
@@ -463,6 +471,50 @@ explicit rather than ambient.
   detached memory is an ordinary canonical memory to `reconcile`, which then
   renders it into every harness, its former source included. A memory already
   detached, or not imported, is `unchanged`. An unknown name exits `2`.
+- **`status [--all-projects]`** — read-only inventory of canonical, native memory
+  and managed renders. Unlike `show`, includes native entries and joins physical
+  files/Task Groups by the importers' normalized canonical names. Default scans
+  the current Claude project slug and shared directory, plus Codex's consolidated
+  source and Engram notes directory. Terminal output (or `--plain`) shows counts,
+  scan paths, sources, absence reasons and diagnostics as readable text. Partial
+  evidence still goes to stdout on failure, with the error on stderr; `--quiet`
+  suppresses inventory text. `--json` retains the normal response envelope.
+  `--all-projects` adds every existing Claude
+  project slug; it does not discover repositories, render, invoke an agent,
+  contact remote hosts or write even with `--apply`.
+
+  `data.canonical` reports `root`, `state` (`present`, `empty`, `missing`, `error`),
+  `count`, `complete` and `diagnostics`. `data.harnesses[]` reports:
+
+  - `harness`, `enabled`, `complete`, `native_unit` (`memory_file` or `task_group`);
+  - `locations[]` with path, kind, state, skipped loop-guard count and unmanaged
+    note count, and `diagnostics[]` with paths and messages;
+  - `counts`: accepted `native_entries`, owned `rendered_entries`, distinct
+    `native_names`, `rendered_names`, `overlapping_names` and their union
+    `distinct_names`. Repeated files count as physical entries, not new names.
+    Indexes, rollout summaries and unrelated files are not memory entries;
+  - `memories[]`: sorted names, `native_sources` and `rendered_paths`, without
+    bodies. A Codex native source identifier includes its Task Group title;
+  - `canonical_absent[]`: names absent from both native and managed stores and a
+    reason: `harness_disabled`, `source_suppressed`, `scope_excluded`,
+    `missing_render`, `unknown_scope` or `unknown_incomplete_scan`;
+  - `scope_cwds`, `unresolved_slugs` and `scope_complete` explain scope evidence.
+    Default uses each harness's normal cwd/root semantics. All-project evaluation
+    also uses resolvable scanned slugs. Unresolved slugs or failed enumeration
+    cannot prove that a memory is out of scope.
+
+  Absence reasons describe writer `reconcile` policy, including source
+  suppression, rather than plain `sync`. They are not consumption evidence.
+  Disabled harness paths are still inspected, with `enabled: false` reported.
+  Parse/read failures return exit 1 / `inventory_incomplete` with partial counts
+  and `complete: false`. A nonempty unrecognized Codex source is an error, not an
+  empty inventory. Missing paths are explicitly observed as missing (exit 0);
+  missing canonical additionally makes overall `complete: false`. Present empty
+  stores are distinct from missing stores. Malformed entries are not counted as
+  successfully parsed memories; normalization collisions are reported without
+  losing physical-entry counts. This is a best-effort filesystem observation,
+  not an atomic cross-harness snapshot.
+
 - **`show <harness>`** — permissive on a disabled harness (proceeds, stderr note);
   contrast `import` (strict). Read vs write, mapped to filesystem semantics.
   `show claude-code` lists the cwd's project slug and Claude's shared memory dir

@@ -130,6 +130,16 @@ outcomes and render actions, then apply:
 ./bin/engram reconcile --apply --json
 ```
 
+Inspect native entries, managed renders and canonical coverage without writing:
+
+```bash
+./bin/engram status --all-projects --json
+```
+
+Counts distinguish physical entries from normalized names; incomplete sources and
+reasons for missing canonical entries are explicit. This inventories stored
+memories, not whether a session consumed them. See the [CLI contract](docs/cli.md).
+
 Reconcile imports native memories from enabled harnesses, reports review leads,
 and propagates canonical memories without echoing them onto their native source.
 It sweeps all Claude project memory directories, not just the current project.

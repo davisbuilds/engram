@@ -52,6 +52,8 @@ func TestDataNeverCarriesNull(t *testing.T) {
 		{"diff"},
 		{"list"},
 		{"discover"},
+		{"status"},
+		{"status", "--all-projects"},
 		{"review"},
 		{"config"},
 		{"reconcile"},

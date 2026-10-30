@@ -99,6 +99,15 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
 
 ## Surface not yet built
 
+- **Memory observability follow-ups.** The [lightweight spec](../memory-observability-spec.md)
+  records focused native/canonical content comparison, separate delivery versus
+  consumption evidence, installed CLI capability discovery and externally
+  supplied curation proposals, and per-scope volume/freshness evidence. These
+  remain future work; the first delivery covers safer orphan leads and unified
+  read-only inventory. Keep semantic judgments in agents and expose unknown
+  evidence honestly rather than implying successful consumption or replacement.
+
+
 - **`migrate` for Codex.** `migrate` adopts hand-authored Claude files (per-file
   per-slug memory) that canonical supersedes, so a re-sync into the source slug
   neither duplicates nor conflicts. Codex keeps one consolidated `MEMORY.md`
