@@ -192,3 +192,8 @@ func importedType(t string) schema.Type {
 	}
 	return schema.Type(t)
 }
+
+// ClaudeProjectCwd resolves a stored project slug for inventory scope reporting.
+// False means the live filesystem cannot resolve it uniquely; callers must not
+// infer scope exclusions from such a slug.
+func ClaudeProjectCwd(slug string) (string, bool) { return pathFromClaudeSlug(slug) }

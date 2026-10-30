@@ -91,10 +91,21 @@ func TestCodexOrphansAreReportedWithSuccessors(t *testing.T) {
 			}
 		}
 		cmds := nextCommands(env)
-		for _, want := range []string{"engram forget old-group --successor new-group", "engram detach old-group --apply"} {
+		for _, want := range []string{"engram status --all-projects --json"} {
 			if !strings.Contains(cmds, want) {
 				t.Errorf("%v: next_steps missing %q:\n%s", argv, want, cmds)
 			}
+		}
+		if strings.Contains(cmds, "engram forget ") || strings.Contains(cmds, "engram detach ") {
+			t.Errorf("%v: unassessed coverage must not recommend retirement or detachment:\n%s", argv, cmds)
+		}
+		candidates, _ := row["candidate_successors"].([]any)
+		if len(candidates) != 1 {
+			t.Fatalf("%v: expected one explicitly unassessed candidate: %v", argv, row)
+		}
+		candidate := candidates[0].(map[string]any)
+		if candidate["match_basis"] != "shared_session" || candidate["coverage"] != "unassessed" {
+			t.Errorf("candidate overstates evidence: %v", candidate)
 		}
 	}
 }
@@ -176,4 +187,35 @@ func anyStrings(xs []any) []string {
 		out = append(out, x.(string))
 	}
 	return out
+}
+
+func TestOrphanCandidatesExposeEvidenceWithoutSemanticClaims(t *testing.T) {
+	canon, codex, args := orphanFixture(t)
+	const id = "019ffc76-3cb2-7420-8af3-95fbe1a4a753"
+	writeFile(t, filepath.Join(codex, "memories", "MEMORY.md"), "# Task Group: Z unrelated lesson\n\n- thread_id="+id+"\n- thread_id="+id+"\nDistinct content.\n# Task Group: A unrelated lesson\n\n- thread_id="+id+"\n")
+	canonFile(t, canon, "no-match", "import:codex", "", "Unique lesson without session citations.\n")
+	for _, argv := range [][]string{{"import", "codex"}, {"reconcile"}} {
+		_, env := runEnvelope(t, append(argv, args...)...)
+		rows, _ := orphanRows(env)
+		candidates := rows["old-group"]["candidate_successors"].([]any)
+		if len(candidates) != 2 {
+			t.Fatalf("expected two provenance candidates: %v", candidates)
+		}
+		for i, want := range []string{"a-unrelated-lesson", "z-unrelated-lesson"} {
+			c := candidates[i].(map[string]any)
+			sessions := c["shared_sessions"].([]any)
+			if c["name"] != want || c["coverage"] != "unassessed" || c["match_basis"] != "shared_session" || len(sessions) != 1 || sessions[0] != id {
+				t.Errorf("candidate evidence: %v", c)
+			}
+		}
+		if len(rows["no-match"]["candidate_successors"].([]any)) != 0 {
+			t.Errorf("unmatched orphan got a candidate: %v", rows["no-match"])
+		}
+		for _, step := range env["next_steps"].([]any) {
+			lead := step.(map[string]any)
+			if strings.Contains(lead["reason"].(string), "is no longer in") && strings.Contains(lead["command"].(string), "--apply") {
+				t.Error("orphan inspection leads must be read-only")
+			}
+		}
+	}
 }

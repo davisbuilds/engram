@@ -118,6 +118,7 @@ var (
 	detachArgs  = &argSpec{positionals: anyPositionals}
 	migrateArgs = &argSpec{positionals: 1, bools: []string{"--shared"}}
 	forgetArgs  = &argSpec{positionals: anyPositionals, values: []string{"--reason", "--successor"}, bools: []string{"--restore"}}
+	statusArgs  = &argSpec{bools: []string{"--all-projects"}}
 )
 
 // commands returns the full subcommand table. The table is the single source of
@@ -133,6 +134,7 @@ func commands() []command {
 		{"migrate", "Adopt hand-authored native memory canonical supersedes, in place (dry-run; --apply). Claude Code only.", migrateArgs, cmdMigrate},
 		{"reconcile", "Cross-harness one-shot: import every harness → review leads → sync back (dry-run; --apply). Enricher flow in one command.", noArgs, cmdReconcile},
 		{"discover", "Parse and list every canonical memory, with parse errors.", noArgs, cmdDiscover},
+		{"status", "Inventory canonical, native memories and owned renders without writing.", statusArgs, cmdStatus},
 		{"list", "List memories relevant to a given cwd / agent / host.", noArgs, cmdList},
 		{"audit", "Report pending render actions for a harness without writing.", noArgs, cmdAudit},
 		{"diff", "Show the cross-state difference for each render target.", noArgs, cmdDiff},

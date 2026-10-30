@@ -8,11 +8,10 @@ import (
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/importer"
 	"github.com/davisbuilds/engram/internal/schema"
-	"github.com/davisbuilds/engram/internal/tombstone"
 )
 
 // threadIDRe matches the rollout session ids a Codex Task Group cites. Two Task
-// Groups citing one session are the same work, retitled.
+// Groups citing one session may cover different lessons from that session.
 var threadIDRe = regexp.MustCompile(`thread_id=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`)
 
 // findOrphans reports the canonical memories imported from harness whose native
@@ -43,57 +42,76 @@ func findOrphans(canon []*schema.CanonicalMemory, harness string, res importer.R
 		if harness == config.HarnessClaude && (m.Provenance.Source == "" || sources[m.Provenance.Source]) {
 			continue
 		}
+		candidates := candidateSuccessors(m, res.Memories)
+		names := make([]string, 0, len(candidates))
+		for _, candidate := range candidates {
+			names = append(names, candidate.Name)
+		}
 		orphans = append(orphans, map[string]any{
-			"name": m.Name, "origin": m.Provenance.Origin, "successors": successors(m, res.Memories),
+			"name": m.Name, "origin": m.Provenance.Origin, "successors": names,
+			"candidate_successors": candidates,
 		})
 	}
 	sort.Slice(orphans, func(i, j int) bool { return orphans[i]["name"].(string) < orphans[j]["name"].(string) })
 	return orphans, ""
 }
 
-// successors lists the current candidates that cite a session the orphan cites.
-func successors(orphan *schema.CanonicalMemory, cands []*schema.CanonicalMemory) []string {
+type successorCandidate struct {
+	Name           string   `json:"name"`
+	MatchBasis     string   `json:"match_basis"`
+	SharedSessions []string `json:"shared_sessions"`
+	Coverage       string   `json:"coverage"`
+}
+
+// candidateSuccessors reports provenance overlap, never semantic replacement.
+func candidateSuccessors(orphan *schema.CanonicalMemory, cands []*schema.CanonicalMemory) []successorCandidate {
 	ids := map[string]bool{}
 	for _, m := range threadIDRe.FindAllStringSubmatch(orphan.Body, -1) {
 		ids[m[1]] = true
 	}
-	out := []string{}
+	out := []successorCandidate{}
 	if len(ids) == 0 {
 		return out
 	}
 	for _, c := range cands {
+		shared := map[string]bool{}
 		for _, m := range threadIDRe.FindAllStringSubmatch(c.Body, -1) {
 			if ids[m[1]] {
-				out = append(out, c.Name)
-				break
+				shared[m[1]] = true
 			}
 		}
+		if len(shared) > 0 {
+			sessions := make([]string, 0, len(shared))
+			for id := range shared {
+				sessions = append(sessions, id)
+			}
+			sort.Strings(sessions)
+			out = append(out, successorCandidate{c.Name, "shared_session", sessions, "unassessed"})
+		}
 	}
-	sort.Strings(out)
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 
-// orphanNextSteps offers each orphan's two dispositions: forget it (naming the
-// successor when there is exactly one), or detach it to keep it.
+// orphanNextSteps requests inspection before any explicit disposition. A shared
+// session does not justify retirement, and absence does not justify detachment.
 func orphanNextSteps(harness string, orphans []map[string]any) []NextStep {
 	var next []NextStep
 	for _, o := range orphans {
 		n := o["name"].(string)
 		succ := o["successors"].([]string)
-		note := tombstone.Note{Reason: "no longer in " + harness}
 		reason := n + " is no longer in " + harness + "'s native memory"
 		switch len(succ) {
 		case 0:
 		case 1:
-			note = tombstone.Note{Reason: "superseded by " + succ[0], Successor: succ[0]}
-			reason += "; " + succ[0] + " cites the same sessions"
+			reason += "; candidate " + succ[0] + " shares session provenance, not verified lesson coverage"
 		default:
 			reason += "; candidate successors: " + strings.Join(succ, ", ")
 		}
-		forget := forgetCommand([]string{n}, note)
-		next = append(next,
-			NextStep{Reason: reason + " (retire it)", Command: forget},
-			NextStep{Reason: "or keep " + n + " as a standalone memory", Command: "engram detach " + n + " --apply"})
+		next = append(next, NextStep{
+			Reason:  reason + "; inspect source paths and compare lessons before deciding whether to retain, merge or retire",
+			Command: "engram status --all-projects --json",
+		})
 	}
 	return next
 }
