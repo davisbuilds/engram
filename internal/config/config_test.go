@@ -71,12 +71,12 @@ func TestCurateModelDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	claude := cfg.CurateModel(HarnessClaude)
-	if claude.Model != "claude-sonnet-5" || claude.Effort != "high" {
-		t.Errorf("claude default = %+v, want claude-sonnet-5/high", claude)
+	if claude.Model != "claude-sonnet-5-5" || claude.Effort != "high" {
+		t.Errorf("claude default = %+v, want claude-sonnet-5-5/high", claude)
 	}
 	codex := cfg.CurateModel(HarnessCodex)
-	if codex.Model != "gpt-5.6-terra" || codex.Effort != "high" {
-		t.Errorf("codex default = %+v, want gpt-5.6-terra/high", codex)
+	if codex.Model != "gpt-6.1-terra" || codex.Effort != "high" {
+		t.Errorf("codex default = %+v, want gpt-6.1-terra/high", codex)
 	}
 }
 

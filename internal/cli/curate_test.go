@@ -38,6 +38,62 @@ func seedCanon(t *testing.T, canon string, names ...string) {
 	}
 }
 
+func TestCurateRequestedModelsAndOverridesReachRunner(t *testing.T) {
+	for _, harness := range []struct{ name, model string }{
+		{"claude-code", "claude-sonnet-5-5"}, {"codex", "gpt-6.1-terra"},
+	} {
+		for _, mode := range []string{"default", "config", "flags"} {
+			t.Run(harness.name+"/"+mode, func(t *testing.T) {
+				dir := t.TempDir()
+				canon := filepath.Join(dir, "canonical")
+				seedCanon(t, canon, "model-lesson")
+				cfg := filepath.Join(dir, "config.yaml")
+				text := "canonical_root: " + canon + "\n"
+				wantModel, wantEffort := harness.model, "high"
+				args := []string{"--harness", harness.name}
+				if mode != "default" {
+					text += "curate:\n  models:\n    " + harness.name + ":\n      model: configured-model\n      effort: medium\n"
+					wantModel, wantEffort = "configured-model", "medium"
+				}
+				if mode == "flags" {
+					args = append(args, "--model", "flag-model", "--effort", "low")
+					wantModel, wantEffort = "flag-model", "low"
+				}
+				writeFile(t, cfg, text)
+				calls := 0
+				runner := func(inv agentexec.Invocation) ([]byte, error) {
+					calls++
+					value := func(flag string) string {
+						for i := 0; i+1 < len(inv.Argv); i++ {
+							if inv.Argv[i] == flag {
+								return inv.Argv[i+1]
+							}
+						}
+						return ""
+					}
+					if got := value("--model"); got != wantModel {
+						t.Errorf("requested model = %q, want %q", got, wantModel)
+					}
+					if harness.name == "claude-code" {
+						if value("--effort") != wantEffort {
+							t.Errorf("requested Claude effort: %v", inv.Argv)
+						}
+						return fakeClaudeRunner(`{"operations":[]}`)(inv)
+					}
+					if value("-c") != "model_reasoning_effort="+wantEffort {
+						t.Errorf("requested Codex effort: %v", inv.Argv)
+					}
+					return []byte("{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"{\\\"operations\\\":[]}\"}}\n"), nil
+				}
+				code, resp := runCurate(t, curateEnv(cfg, false, runner), args...)
+				if code != exitOK || calls != 1 {
+					t.Fatalf("curate: code=%d calls=%d response=%v", code, calls, resp)
+				}
+			})
+		}
+	}
+}
+
 // TestCurateApplyAppliesValidProposal pins the proposer/applier loop: a fake
 // agent proposes a merge + a remove, and --apply mutates canonical accordingly.
 func TestCurateApplyAppliesValidProposal(t *testing.T) {

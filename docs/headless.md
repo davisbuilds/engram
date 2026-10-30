@@ -196,7 +196,7 @@ source paths and merge-base evidence. With no candidate, the lead omits
 merge, retire or detach only after inspecting coverage; engram neither chooses
 these dispositions nor recommends them from provenance overlap alone.
 
-The default models are `claude-sonnet-5`/`high` and `gpt-5.6-terra`/`high`;
+The default models are `claude-sonnet-5-5`/`high` and `gpt-6.1-terra`/`high`;
 set per-harness defaults under `curate.models.<harness>` in config, or override
 per run with `--model` / `--effort`. Each agent run times out after `curate.timeout` (default `20m`,
 `0` for none), overridable per run with `--timeout`.
