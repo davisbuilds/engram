@@ -382,7 +382,15 @@ func cmdDiscover(e *env, name string, _ []string) int {
 
 // cmdDiff shows the full per-memory reconciliation status for each harness,
 // including the memories already in sync — a superset of audit's pending actions.
-func cmdDiff(e *env, name string, _ []string) int {
+func cmdDiff(e *env, name string, args []string) int {
+	pa, rerr := parseArgs(args, *diffArgs)
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitUsage
+	}
+	if len(pa.vals) > 0 || len(pa.bools) > 0 {
+		return cmdNativeDiff(e, name, pa)
+	}
 	s, rerr := e.newSession()
 	if rerr != nil {
 		e.emit(name, false, nil, nil, rerr, nil)

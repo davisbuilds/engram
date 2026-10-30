@@ -160,10 +160,13 @@ native source that still exists; it reports the candidate as `forgotten`.
 
 **Orphans are leads, not actions.** `reconcile` (and `import codex`,
 `import claude-code --all`) lists each imported memory whose native source is
-gone under `orphaned`, with two `next_steps`: `engram forget <name> --apply`
-(naming the successor when one Task Group cites the same session) or
-`engram detach <name> --apply` to keep it. Choosing between them is judgment;
-engram retires nothing on its own.
+gone under `orphaned`. Shared-session matches remain unassessed candidates,
+not verified replacements. Read-only `diff --native <harness> --name <orphan>
+--source-name <candidate> --json` leads expose each candidate's normalized content,
+source paths and merge-base evidence. With no candidate, the lead omits
+`--source-name` and shows retained content plus observed native absence. Retain,
+merge, retire or detach only after inspecting coverage; engram neither chooses
+these dispositions nor recommends them from provenance overlap alone.
 
 The default models are `claude-sonnet-5`/`high` and `gpt-5.6-terra`/`high`;
 set per-harness defaults under `curate.models.<harness>` in config, or override

@@ -91,7 +91,7 @@ func TestCodexOrphansAreReportedWithSuccessors(t *testing.T) {
 			}
 		}
 		cmds := nextCommands(env)
-		for _, want := range []string{"engram status --all-projects --json"} {
+		for _, want := range []string{"engram diff --native codex --name old-group --source-name new-group --json"} {
 			if !strings.Contains(cmds, want) {
 				t.Errorf("%v: next_steps missing %q:\n%s", argv, want, cmds)
 			}
