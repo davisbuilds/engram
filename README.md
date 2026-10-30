@@ -150,6 +150,12 @@ memories, not whether a session consumed them. See the [CLI contract](docs/cli.m
 Each harness's `delivery` report separates configuration readiness from loading
 artifacts and explicitly unknown consumption. Intact files do not prove loading.
 
+`help --json` and `schema --json` expose supported flags and versioned capabilities.
+To curate with the current agent, supply operations with
+`curate --proposal proposal.json --save-plan reviewed-plan.json --json`, review
+the plan, then apply it with `curate --plan reviewed-plan.json --apply --json`.
+Neither supplied-proposal validation nor saved-plan application launches a model.
+
 Reconcile imports native memories from enabled harnesses, reports review leads,
 and propagates canonical memories without echoing them onto their native source.
 It sweeps all Claude project memory directories, not just the current project.
@@ -197,7 +203,8 @@ transport files or coordinate writers across machines. See
   provably supersedes it. Preview it first.
 - **Writes.** `remember` and `share` write immediately. Sync, import, reconcile,
   migration, retirement, and curation apply only with `--apply`; a dry-run
-  `curate` still launches an agent, and `--save-plan` writes a proposal file.
+  Default `curate` still launches an agent; `--proposal` and `--plan` do not.
+  `--save-plan` writes a bound plan file.
 - **Network and agents.** Engram itself has no network client or background
   daemon. `curate` passes the canonical corpus and review findings to a headless
   agent, even in a dry run; that agent may send them to its provider. Rendered

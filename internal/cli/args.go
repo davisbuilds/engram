@@ -76,7 +76,7 @@ func parseArgs(args []string, spec argSpec) (parsedArgs, *RespError) {
 func requireValue(args []string, i int) (string, int, *RespError) {
 	name, v, inline := strings.Cut(args[i], "=")
 	if !inline {
-		if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+		if i+1 < len(args) && (!strings.HasPrefix(args[i+1], "-") || args[i+1] == "-") {
 			v, i = args[i+1], i+1
 		}
 	}

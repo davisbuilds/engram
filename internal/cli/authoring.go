@@ -27,23 +27,35 @@ func (m *multiFlag) Set(v string) error {
 	return nil
 }
 
-func cmdRemember(e *env, name string, args []string) int {
+type rememberOptions struct {
+	nm, desc, typ, scp, body, fromJSON *string
+	force                              *bool
+	cwds, agents, hosts, related       multiFlag
+}
+
+// The same registrations drive parsing and machine discovery, including the
+// flags handled by Go's FlagSet rather than argSpec.
+func rememberFlags() (*flag.FlagSet, *rememberOptions) {
 	fs := flag.NewFlagSet("remember", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	var (
-		nm       = fs.String("name", "", "memory name (kebab-case)")
-		desc     = fs.String("description", "", "one-line description")
-		typ      = fs.String("type", "", "memory type")
-		scp      = fs.String("scope", "global", "scope tier")
-		body     = fs.String("body", "", "markdown body")
-		fromJSON = fs.String("from-json", "", "read a full memory as JSON from this path (- for stdin)")
-		force    = fs.Bool("force", false, "overwrite a differing canonical memory of the same name")
-	)
-	var cwds, agents, hosts, related multiFlag
-	fs.Var(&cwds, "applies-cwd", "cwd glob (repeatable)")
-	fs.Var(&agents, "applies-agent", "agent filter (repeatable)")
-	fs.Var(&hosts, "applies-host", "host label (repeatable)")
-	fs.Var(&related, "related", "related memory name (repeatable)")
+	v := &rememberOptions{
+		nm:       fs.String("name", "", "memory name (kebab-case)"),
+		desc:     fs.String("description", "", "one-line description"),
+		typ:      fs.String("type", "", "memory type"),
+		scp:      fs.String("scope", "global", "scope tier"),
+		body:     fs.String("body", "", "markdown body"),
+		fromJSON: fs.String("from-json", "", "read a full memory as JSON from this path (- for stdin)"),
+		force:    fs.Bool("force", false, "overwrite a differing canonical memory of the same name"),
+	}
+	fs.Var(&v.cwds, "applies-cwd", "cwd glob (repeatable)")
+	fs.Var(&v.agents, "applies-agent", "agent filter (repeatable)")
+	fs.Var(&v.hosts, "applies-host", "host label (repeatable)")
+	fs.Var(&v.related, "related", "related memory name (repeatable)")
+	return fs, v
+}
+
+func cmdRemember(e *env, name string, args []string) int {
+	fs, v := rememberFlags()
 	if err := fs.Parse(args); err != nil {
 		e.emit(name, false, nil, nil, &RespError{Code: "usage", Message: err.Error()}, nil)
 		return exitUsage
@@ -53,7 +65,7 @@ func cmdRemember(e *env, name string, args []string) int {
 		return exitUsage
 	}
 
-	m, rerr := buildMemory(*fromJSON, *nm, *desc, *typ, *scp, *body, cwds, agents, hosts, related)
+	m, rerr := buildMemory(*v.fromJSON, *v.nm, *v.desc, *v.typ, *v.scp, *v.body, v.cwds, v.agents, v.hosts, v.related)
 	if rerr != nil {
 		e.emit(name, false, nil, nil, rerr, nil)
 		return exitUsage
@@ -85,7 +97,7 @@ func cmdRemember(e *env, name string, args []string) int {
 		return exitError
 	}
 	defer release()
-	outcome, path, err := store.Save(cfg.CanonicalRoot, m, *force)
+	outcome, path, err := store.Save(cfg.CanonicalRoot, m, *v.force)
 	if err != nil {
 		e.emit(name, false, nil, nil, &RespError{Code: "save", Message: err.Error()}, nil)
 		return exitError

@@ -1,6 +1,6 @@
 # Headless agent workflows
 
-engram is plumbing; a headless agent is the intelligence. Two integration
+engram is plumbing; a headless agent is the intelligence. Three integration
 shapes realize that split:
 
 1. **Leads (default).** Read commands emit `--json` — a stable envelope with a
@@ -11,9 +11,30 @@ shapes realize that split:
    *propose* operations, then validates and applies them. The trust boundary is
    preserved by construction: the model only proposes, engram is the sole mutator
    (see "Curate" below).
+3. **Supplied proposals.** The current outer agent writes strict operations
+   JSON. `curate --proposal <file|-> [--save-plan <file>]` validates it without
+   another model invocation. Review the bound plan and apply it with the existing
+   `--plan <file> --apply` path.
 
-Both keep the same invariant — a model never mutates canonical directly; every
+All keep the same invariant — a model never mutates canonical directly; every
 change goes through engram's validated, idempotent write-path.
+
+Use `help --json` or `schema --json` to inspect this executable's versioned
+capabilities and accepted command/global flags. The metadata describes argument
+arity; command-specific combinations still require validation. For supplied
+proposals, schema's `curate_operation` and `curate_proposal` describe the input.
+The input is validated against canonical at submission, and saving binds that
+snapshot forward; it does not prove which earlier corpus the author consulted.
+
+```bash
+engram curate --proposal proposal.json --save-plan reviewed-plan.json --json
+# Review the operations and binding, then:
+engram curate --plan reviewed-plan.json --apply --json
+```
+
+Plain proposal validation writes nothing. Saving writes the plan and may create
+the read-lock file, without changing memories. Raw proposal application is
+rejected; any canonical drift invalidates its saved plan.
 
 ## The `--` separator (required for `claude -p`)
 

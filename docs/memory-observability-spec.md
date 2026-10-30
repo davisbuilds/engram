@@ -25,7 +25,9 @@ leads and unified read-only inventory, verified by `go test ./internal/cli` and
 `go test ./...`. Remaining capabilities are follow-ups, not prerequisites for
 this delivery. The second delivery adds focused content comparison. The third
 adds static delivery evidence with explicit consumption limits. All three slices
-are read-only and do not invoke a model.
+are read-only and do not invoke a model. The fourth adds discovery and supplied
+proposal validation/saved plans; these also run no model and apply only through
+the existing explicit saved-plan workflow.
 
 | Capability | Observable outcome | Delivery |
 | --- | --- | --- |
@@ -33,7 +35,7 @@ are read-only and do not invoke a model.
 | Unified inventory | `status [--all-projects] --json` joins canonical names, native entries and owned render files, with explicit scan boundaries, counts, diagnostics and reasons for canonical absence. | First slice (implemented) |
 | Content comparison | `diff --native <harness> --name <name>` exposes normalized bodies, source paths, merge-base evidence and field differences. | Second slice (implemented) |
 | Delivery versus consumption | Configuration readiness, stored renders, load eligibility and observed consumption remain distinct; unavailable consumption evidence is unknown. | Third slice (implemented) |
-| Capability discovery and supplied proposals | Installed command flags/capabilities are discoverable; an outer agent can submit operations for deterministic validation and plan binding without another model invocation. Reviewed saved plans already exist in v0.5.0. | Follow-up |
+| Capability discovery and supplied proposals | Installed command flags/capabilities are discoverable; an outer agent can submit operations for deterministic validation and plan binding without another model invocation. | Fourth slice (implemented) |
 | Volume and freshness | Per-scope bytes/words, duplicate render volume, source timestamps and unresolved references support curation without turning age or size into automatic retirement. | Follow-up |
 
 ## Success Criteria
@@ -116,6 +118,27 @@ are read-only and do not invoke a model.
   errors return partial diagnostics, `complete: false` and exit 1; missing
   artifacts alone remain exit 0. Inspection writes nothing, even with `--apply`.
 
+### Fourth Slice: Discovery And Supplied Proposals
+
+- `help --json` and `schema` expose the same command argument metadata, global
+  flags and versioned capability identifiers. Existing fields and envelope
+  schema 2 remain compatible. Accepted flag spellings/arity derive from dispatch
+  declarations, including the actual `remember` FlagSet; metadata does not claim
+  to encode every semantic combination. Discovery reads no config or corpus.
+- `curate --proposal <file|->` strictly parses an operations object and validates
+  it against current canonical, with no model invocation. Unknown/duplicate keys,
+  trailing data, missing/null operations and malformed corpora are refused.
+  Invalid batches cannot save plans or mutate canonical.
+- With `--save-plan`, use existing resolved operations, whole-store binding,
+  path guards and owner-only plan writing. Apply only with the separate reviewed
+  `--plan ... --apply` path, retaining locked stale checks and rollback. Raw
+  proposals cannot combine with apply, plan or agent flags. No model identity is
+  fabricated. Report the submitted input's exact byte hash.
+- A saved proposal binds its validation snapshot forward, never claims evidence
+  of what its author previously read. Plain validation writes no lock or files;
+  saving writes a plan and may create a shared-read lock file, without changing
+  memories. Verify with `go test ./internal/cli -run 'TestDiscovery|TestSuppliedProposal'`.
+
 ## Evaluation
 
 Use synthetic temporary harness homes and canonical stores. Exercise both
@@ -130,8 +153,8 @@ read-only inventory is an operational cross-check, not a consumption test.
 ## Scope
 
 Included now: safer leads, candidate-match evidence, unified inventory, focused
-native/canonical comparison, static delivery evidence, public CLI documentation
-and regression coverage.
+native/canonical comparison, static delivery evidence, discovery, supplied
+proposals with reviewed plans, public CLI documentation and regression coverage.
 Follow-ups retain the boundaries in the capability table. No model-based deduplication, automatic deletion, new
 memory ownership, installation upgrades, scheduling or remote transport.
 
@@ -145,6 +168,6 @@ best-effort filesystem observation, not a cross-harness atomic snapshot.
 
 ## Open Questions
 
-None for the first three slices. Exact interfaces for observed session consumption,
-supplied proposals and size/freshness reports remain open; those choices cannot
+None for the first four slices. Exact interfaces for observed session consumption
+and size/freshness reports remain open; those choices cannot
 change these read-only inspection and evidence-labeling contracts.

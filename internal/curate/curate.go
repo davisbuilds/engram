@@ -7,9 +7,11 @@
 package curate
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -51,6 +53,29 @@ type Operation struct {
 // Proposal is the agent's full response: an ordered list of operations.
 type Proposal struct {
 	Operations []Operation `json:"operations"`
+}
+
+// ParseProposalJSON accepts machine-supplied operations, without the prose/fence
+// recovery used for a headless agent's response. It shares the plan reader's
+// duplicate-key guard and rejects unknown fields, trailing data and null/missing
+// operations. Semantic validation remains Validate's responsibility.
+func ParseProposalJSON(data []byte) (Proposal, error) {
+	var p Proposal
+	if err := checkDuplicateKeys(data); err != nil {
+		return p, err
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&p); err != nil {
+		return p, err
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return p, errors.New("proposal has data after the JSON object")
+	}
+	if p.Operations == nil {
+		return p, errors.New("proposal requires an operations array")
+	}
+	return p, nil
 }
 
 // OpResult pairs a proposed operation with its validation verdict.
