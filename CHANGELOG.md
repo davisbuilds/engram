@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/davisbuilds/engram/compare/v0.6.0...v0.6.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* update default curation models ([#63](https://github.com/davisbuilds/engram/issues/63)) ([ba304da](https://github.com/davisbuilds/engram/commit/ba304da4ccdc09dd63fc85c3fa2890d0dd52c34a))
+
 ## [0.6.0](https://github.com/davisbuilds/engram/compare/v0.5.0...v0.6.0) (2026-10-30)
 
 
