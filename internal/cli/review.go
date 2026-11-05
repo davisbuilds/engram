@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"strings"
-
 	"github.com/davisbuilds/engram/internal/agentexec"
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/discover"
@@ -11,10 +9,9 @@ import (
 
 // cmdReview produces health leads over the canonical set and emits each as a
 // next_step. It never mutates: the merge decision is the agent's. A
-// near-duplicate lead carries a ready-to-run headless `claude -p` invocation
-// (with the `--` separator guaranteed) that asks the agent to compare the two
-// memories and merge them if warranted. Scope/promotion judgment is deliberately
-// left to `curate`, where an agent can reason about a memory's content.
+// near-duplicate lead points to the existing read-only curate proposer, which
+// validates operations instead of inviting direct canonical edits. Scope judgment
+// is left to curation, where an agent can reason about a memory's content.
 func cmdReview(e *env, name string, _ []string) int {
 	cfg, err := config.Load(e.config)
 	if err != nil {
@@ -34,15 +31,7 @@ func cmdReview(e *env, name string, _ []string) int {
 		items = append(items, map[string]any{
 			"kind": f.Kind, "names": f.Names, "detail": f.Detail,
 		})
-		cmd := f.Suggested
-		if f.Kind == "near-duplicate" {
-			cmd = agentexec.ClaudeCommand(
-				"Compare canonical memories "+strings.Join(f.Names, " and ")+
-					" and decide whether to merge them; if so, rewrite one and delete the other.",
-				"Read", "Edit",
-			)
-		}
-		next = append(next, NextStep{Reason: f.Detail, Command: cmd})
+		next = append(next, e.reviewLead(f))
 	}
 
 	e.emit(name, true, map[string]any{
@@ -51,4 +40,17 @@ func cmdReview(e *env, name string, _ []string) int {
 		"findings":       items,
 	}, warnParseErrors(perrs), nil, next)
 	return exitOK
+}
+
+// reviewLead keeps review and reconcile on the same validated preview path.
+// One curate invocation considers the whole corpus, including every finding.
+func (e *env) reviewLead(f review.Finding) NextStep {
+	cmd := f.Suggested
+	if f.Kind == "near-duplicate" {
+		cmd = "engram curate --json"
+		if e.config != "" {
+			cmd += " --config " + agentexec.ShellQuote(e.config)
+		}
+	}
+	return NextStep{Reason: f.Detail, Command: cmd}
 }

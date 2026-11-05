@@ -71,11 +71,18 @@ Follow the `agent-memory-capture` skill for what is worth remembering.
 engram review --json | jq -c '.next_steps[]'
 ```
 
-Each near-duplicate finding's `next_steps[].command` is a runnable, `--`-guarded
-`claude -p ... -- '...'` pass that asks the agent to compare the two memories and
-merge them if warranted. Every argument is POSIX single-quoted, so a shell reads it
-back as exactly the intended argv and never expands anything in the prompt. The `agent-memory-review` skill covers the judgment;
-broader scope/promotion calls are left to `curate`.
+Near-duplicate findings compare memory-name tokens, not semantic coverage. The
+`agent-memory-review` skill covers the judgment. The current agent can inspect
+the memories and submit a proposal through the supplied-proposal workflow above.
+Alternatively, `next_steps[].command` runs `engram curate --json`, carrying an
+explicit review configuration when supplied. This invokes the no-tools proposer
+over the whole corpus and validates its proposal without changing memories. The
+same curation pass covers every finding; repeated leads do not require repeated
+agent runs. `reconcile` emits the same leads; its dry-run findings may include
+pending imports, while curation reads stored canonical. Complete accepted imports
+before curating that content. Save and review a plan before applying changes.
+Scope/promotion judgment is also left to curation; a project memory needs no cwd
+glob.
 
 `migrate` emits a lead too: when it finds a hand-authored file that `diverged`
 from canonical, it cannot adopt it deterministically (adopting would overwrite
