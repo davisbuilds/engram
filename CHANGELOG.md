@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/davisbuilds/engram/compare/v0.6.0...v0.6.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **review:** use validated curation previews for memory review ([#66](https://github.com/davisbuilds/engram/issues/66)) ([2221970](https://github.com/davisbuilds/engram/commit/222197045b6601ff032202f2af86a9013d404141))
+* update default curation models ([#63](https://github.com/davisbuilds/engram/issues/63)) ([ba304da](https://github.com/davisbuilds/engram/commit/ba304da4ccdc09dd63fc85c3fa2890d0dd52c34a))
+
 ## [0.6.0](https://github.com/davisbuilds/engram/compare/v0.5.0...v0.6.0) (2026-10-30)
 
 
