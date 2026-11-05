@@ -99,6 +99,19 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
 
 ## Surface not yet built
 
+- **Targeted delivery after curation.** A small canonical correction can require
+  a broad render plan: `sync` includes native-origin entries, while `reconcile`
+  suppresses source echoes but also imports native content. First qualify narrow
+  context selection with isolated fixtures. If it cannot express a desired
+  correction, design a reviewed delivery operation that preserves unselected
+  files and native ownership; a filtered inventory must not imply stale deletion.
+- **Maintained references in curation evidence.** The built-in proposer receives
+  canonical memories and name-similarity findings, so it cannot independently
+  establish whether external maintained guidance supersedes a prescription.
+  Explore optional, operator-selected references with explicit scope and
+  provenance. Keep semantic judgment in agents and distinguish reference evidence
+  from mutation authority. Work through preservation and conflict cases before
+  selecting an interface; avoid assumptions about workspace layout or harness.
 - **Observed session consumption.** Inventory deliberately reports consumption
   as unknown; stored renders, loader wiring and timestamps do not establish it.
   Revisit when a supported harness exposes inspectable session-loading evidence.
@@ -118,8 +131,8 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
   content-hash loop-guard item above).
 - Skills are project-scoped only (in-repo symlinks). Global install via the
   workspace `~/.agents/skills` + skill-standardizer flow is a later promotion.
-- `review` heuristics are deliberately simple (name-token Jaccard for near-dupes,
-  unconstrained project scope for promotion). Semantic/LLM near-dupe detection is
+- `review` heuristics are deliberately simple (name-token Jaccard for near-dupes;
+  scope promotion requires separate judgment). Semantic/LLM near-dupe detection is
   Stage 2 and belongs in an agent flow, not the CLI.
 
 ## CLI contract

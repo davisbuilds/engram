@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/davisbuilds/engram/internal/agentexec"
 	"github.com/davisbuilds/engram/internal/config"
 	"github.com/davisbuilds/engram/internal/discover"
 	"github.com/davisbuilds/engram/internal/harness"
@@ -172,17 +171,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 	var next []NextStep
 	for _, f := range findings {
 		reviewItems = append(reviewItems, map[string]any{"kind": f.Kind, "names": f.Names, "detail": f.Detail})
-		cmd := f.Suggested
-		if f.Kind == "near-duplicate" {
-			cmd = agentexec.ClaudeCommand("Compare canonical memories "+strings.Join(f.Names, " and ")+" and decide whether to merge them; if so, rewrite one and delete the other.", "Read", "Edit")
-		}
-		next = append(next, NextStep{Reason: f.Detail, Command: cmd})
-	}
-	if len(findings) > 0 {
-		next = append(next, NextStep{
-			Reason:  "review found overlapping memories; curate can merge/rescope them (judgment step, run explicitly)",
-			Command: "engram curate --apply",
-		})
+		next = append(next, e.reviewLead(f))
 	}
 
 	next = append(next, orphanNext...)

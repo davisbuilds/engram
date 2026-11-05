@@ -677,7 +677,13 @@ not harness support, readiness, installation elsewhere or consumption.
   contrast `import` (strict). Read vs write, mapped to filesystem semantics.
   `show claude-code` lists the cwd's project slug and Claude's shared memory dir
   together; each item's `target` is `project` or `shared`.
-- **`review`** — never mutates; every finding is a `next_step` the agent may run.
+- **`review`** — never mutates; findings compare memory-name tokens, not semantic
+  coverage. Each `next_step` offers `engram curate --json` with the explicit
+  configuration preserved. That optional no-tools proposer considers the whole
+  corpus and validates without writing; one run covers all findings. `reconcile`
+  emits the same review leads. The current agent can instead inspect the evidence
+  and submit operations through `curate --proposal`; save and review a plan before
+  applying either form of proposal.
 - **`curate`** — the proposer/applier loop, and the **only** command that invokes
   an agent in its default mode. engram gathers the canonical corpus + `review` findings
   (deterministic), hands them to a headless agent as facts, and the agent returns
