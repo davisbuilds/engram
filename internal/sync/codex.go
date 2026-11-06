@@ -22,6 +22,8 @@ const instructionsFile = "instructions.md"
 type CodexTarget struct {
 	ExtensionDir string
 	Desired      []*schema.CanonicalMemory
+	// Names limits delivery without treating unselected renders as stale.
+	Names map[string]bool
 	// Now supplies the timestamp for new note filenames; nil means time.Now.
 	Now func() time.Time
 	// KeepStale holds back STALE removals; see ClaudeTarget.KeepStale.
@@ -46,13 +48,33 @@ func (t CodexTarget) instructionsPath() string {
 
 // codexNote is an engram-owned note already on disk.
 type codexNote struct {
-	content []byte
-	path    string
-	scope   string
+	content   []byte
+	path      string
+	scope     string
+	duplicate bool
 }
 
 // Plan computes the reconciliation actions without writing.
 func (t CodexTarget) Plan() ([]Action, error) {
+	if !hasSelectedMemory(t.Names, t.Desired) {
+		return nil, nil
+	}
+	if t.Names != nil {
+		cur, err := os.ReadFile(t.instructionsPath())
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		if errors.Is(err, os.ErrNotExist) {
+			if occupied, lerr := pathOccupied(t.instructionsPath()); lerr != nil {
+				return nil, lerr
+			} else if occupied {
+				return []Action{{Conflict, instructionsFile, t.instructionsPath(), "instructions path is occupied and ownership cannot be established"}}, nil
+			}
+		}
+		if err == nil && !bytes.Equal(cur, []byte(render.CodexInstructions)) {
+			return []Action{{Conflict, instructionsFile, t.instructionsPath(), "existing instructions differ; ownership cannot be established"}}, nil
+		}
+	}
 	owned, err := scanCodexNotes(t.notesDir())
 	if err != nil {
 		return nil, err
@@ -70,6 +92,9 @@ func (t CodexTarget) Plan() ([]Action, error) {
 
 	desired := map[string]bool{}
 	for _, m := range t.Desired {
+		if !selectedName(t.Names, m.Name) {
+			continue
+		}
 		desired[m.Name] = true
 		rr, err := renderer.Render(m)
 		if err != nil {
@@ -77,14 +102,26 @@ func (t CodexTarget) Plan() ([]Action, error) {
 		}
 		cur, exists := owned[m.Name]
 		switch {
+		case t.Names != nil && cur.duplicate:
+			actions = append(actions, Action{Conflict, m.Name, cur.path, "multiple engram-owned notes claim this canonical name"})
 		case !exists:
-			actions = append(actions, Action{Create, m.Name, t.notesDir(), "new note"})
+			path := t.notesDir()
+			if t.Names != nil {
+				path = t.newNotePath(m.Name, t.now())
+				if occupied, err := pathOccupied(path); err != nil {
+					return nil, err
+				} else if occupied {
+					actions = append(actions, Action{Conflict, m.Name, path, "new note filename is already occupied"})
+					continue
+				}
+			}
+			actions = append(actions, Action{Create, m.Name, path, "new note"})
 		case !bytes.Equal(cur.content, rr.Content):
 			actions = append(actions, Action{Update, m.Name, cur.path, ""})
 		}
 	}
 	for name, cur := range owned {
-		if !desired[name] && !t.KeepStale && (t.InView == nil || t.InView(name, cur.scope)) {
+		if t.Names == nil && !desired[name] && !t.KeepStale && (t.InView == nil || t.InView(name, cur.scope)) {
 			actions = append(actions, Action{Stale, name, cur.path, "canonical no longer renders here"})
 		}
 	}
@@ -94,11 +131,20 @@ func (t CodexTarget) Plan() ([]Action, error) {
 
 // Apply reconciles the Codex extension under an exclusive lock.
 func (t CodexTarget) Apply() (Result, error) {
+	if !hasSelectedMemory(t.Names, t.Desired) {
+		return Result{}, nil
+	}
 	unlock, err := acquireLock(t.ExtensionDir)
 	if err != nil {
 		return Result{}, err
 	}
 	defer unlock()
+	if t.Names != nil {
+		// Plan and apply address the same filename even across a second
+		// boundary, so a selected create cannot evade its collision check.
+		now := t.now()
+		t.Now = func() time.Time { return now }
+	}
 
 	actions, err := t.Plan()
 	if err != nil {
@@ -108,6 +154,9 @@ func (t CodexTarget) Apply() (Result, error) {
 	renderer := render.CodexRenderer{}
 	rendered := map[string]render.CodexRender{}
 	for _, m := range t.Desired {
+		if !selectedName(t.Names, m.Name) {
+			continue
+		}
 		rr, err := renderer.Render(m)
 		if err != nil {
 			return Result{}, err
@@ -122,14 +171,15 @@ func (t CodexTarget) Apply() (Result, error) {
 	var res Result
 	for _, a := range actions {
 		switch {
+		case a.Kind == Conflict:
+			res.Conflicts = append(res.Conflicts, a)
 		case a.Name == instructionsFile:
 			if err := atomicWrite(t.instructionsPath(), []byte(render.CodexInstructions)); err != nil {
 				return res, err
 			}
 			res.Applied = append(res.Applied, a)
 		case a.Kind == Create:
-			fn := now().UTC().Format("2006-01-02T15-04-05") + "-" + a.Name + ".md"
-			a.Path = filepath.Join(t.notesDir(), fn)
+			a.Path = t.newNotePath(a.Name, now())
 			if err := atomicWrite(a.Path, rendered[a.Name].Content); err != nil {
 				return res, err
 			}
@@ -147,6 +197,25 @@ func (t CodexTarget) Apply() (Result, error) {
 		}
 	}
 	return res, nil
+}
+
+func (t CodexTarget) now() time.Time {
+	if t.Now != nil {
+		return t.Now()
+	}
+	return time.Now()
+}
+
+func (t CodexTarget) newNotePath(name string, now time.Time) string {
+	return filepath.Join(t.notesDir(), now.UTC().Format("2006-01-02T15-04-05")+"-"+name+".md")
+}
+
+func pathOccupied(path string) (bool, error) {
+	_, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 // scanCodexNotes returns the engram-owned notes in dir, keyed by canonical name.
@@ -170,7 +239,8 @@ func scanCodexNotes(dir string) (map[string]codexNote, error) {
 			return nil, rerr
 		}
 		if name, scope, ok := marker.CodexNoteName(string(content)); ok {
-			owned[name] = codexNote{content: content, path: path, scope: scope}
+			_, duplicate := owned[name]
+			owned[name] = codexNote{content: content, path: path, scope: scope, duplicate: duplicate}
 		}
 	}
 	return owned, nil

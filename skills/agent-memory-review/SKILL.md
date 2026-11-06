@@ -82,13 +82,21 @@ authorize deleting them. Use the owning native workflow for native changes.
 ## Verify the affected surfaces
 
 Inspect canonical changes, preserved content, provenance and tombstones, then
-preview delivery in the affected contexts. `sync` renders all relevant memories,
-including native-origin entries; `reconcile` suppresses source echoes but also
-imports native content. Inspect the full action list before choosing either;
-a small canonical update does not authorize unrelated imports, new copies or
-conflict resolution. Use the intended configuration and cwd when applying the
-reviewed render changes. Re-run `engram audit --json` in those contexts and
-inspect warnings and conflicts.
+preview delivery in the affected contexts. For named content corrections or
+missing renders, use `sync --name NAME --harness codex --json` (or
+`--harness claude-code`), repeating `--name` as needed; carry configuration and cwd through
+preview and apply. Confirm `selected_sync` in this executable's capabilities.
+Selected sync creates or updates those renders and their required wiring without
+imports or stale removals. It does not clean up old copies after a scope move or
+retirement. Native-origin canonical entries can still render to their origin;
+this does not adopt or edit the native original.
+
+For broader delivery or cleanup, ordinary `sync` renders all relevant memories;
+`reconcile` suppresses source echoes but also imports native content. Inspect the
+full action list before choosing either. A small canonical update does not
+authorize unrelated imports, new copies or conflict resolution. After applying,
+repeat the selected preview for a narrow check, or `engram audit --json` for the
+full context. Inspect warnings and conflicts separately.
 
 Check `status` and relevant native comparisons separately for stale index links
 or native echoes. A clean render audit does not prove native cleanup or semantic

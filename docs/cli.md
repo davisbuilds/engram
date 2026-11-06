@@ -196,8 +196,8 @@ FlagSet registrations. Global flags use the same declaration as dispatch.
 advertises version `1` for `argument_discovery`, `memory_inventory`,
 `native_comparison`, `delivery_evidence`, `curate_saved_plans` and
 `curate_supplied_proposals`, plus `memory_statistics` for optional inventory
-measurements. Absence means unadvertised, not an inferred negative
-from an unfamiliar version number. These describe this executable's interfaces,
+measurements and `selected_sync` for named delivery to one harness. Absence means
+unadvertised, not an inferred negative from an unfamiliar version number. These describe this executable's interfaces,
 not harness support, readiness, installation elsewhere or consumption.
 
 ### Operations
@@ -275,7 +275,39 @@ not harness support, readiness, installation elsewhere or consumption.
   case-insensitive filesystem, including a case variant of the name) is a
   `CONFLICT`, never an overwrite. Only a `MEMORY.md` line that *ends* with the
   `<!-- engram name=… -->` marker is engram's; a line quoting it mid-text is not.
-- **`audit`** — `sync`'s read-only projection: the `Action` list as data, always
+- **`sync --name <name>... --harness <claude-code|codex>`** — deliver selected
+  canonical memories to one enabled harness, without imports or unrelated render
+  changes. Repeat `--name` for multiple memories; names are deduplicated. Both
+  flags are required together, and `--harness` must appear exactly once. It
+  chooses the destination; `--agent` still controls relevance. Preview without
+  `--apply`, inspect the actions, then use the same configuration, cwd and flags
+  with `--apply`. The apply recomputes against current state; it is not a saved
+  plan. `data.names` and `data.harness` identify the requested selection.
+
+  Selection permits `CREATE` and `UPDATE`, never `STALE`. Canonical files,
+  provenance, native originals, unselected renders and other harnesses remain
+  untouched. Existing scope, cwd, agent and host restrictions still apply. All
+  names are checked before any render writes: missing or retired names return
+  `unknown_memory`, malformed/duplicate canonical identities return
+  `withheld_memory`, excluded names return `out_of_scope`, and a disabled
+  destination returns `harness_disabled` (all exit `2`). Unrelated canonical
+  parse failures remain warnings. The canonical read lock and target write locks
+  are the same as ordinary sync.
+
+  A selected Claude memory may update its marked index line and the managed
+  index header; unrelated index entries are preserved. Required missing shared
+  rules or Codex instructions may be created, and Engram-owned shared rules may
+  be repaired. Foreign shared rules or a differing existing Codex instructions
+  file block dependent writes with `CONFLICT`; Codex instructions have no
+  ownership marker, so selected delivery does not overwrite them. Duplicate
+  selected Codex note identities also conflict. Held shared edits and unmarked
+  memory collisions retain their existing conflict behavior (exit `3`).
+
+  This delivers content corrections and missing renders, not retirement or scope
+  migration cleanup. Old copies in former scopes are retained; review a full
+  sync plan for that cleanup. Native consolidated memory and runtime consumption
+  remain separate: selected sync neither runs consolidation nor proves loading.
+- **`audit`** — ordinary `sync`'s read-only projection: the `Action` list as data, always
   zero side effects.
 - **`import <harness>`** — reverse-sync, explicit and one-shot. Dry-run lists every
   candidate memory with the `outcome` `--apply` would produce for it (`created` /

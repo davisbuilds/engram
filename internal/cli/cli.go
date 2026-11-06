@@ -112,6 +112,7 @@ type command struct {
 
 var (
 	noArgs      = &argSpec{}
+	syncArgs    = &argSpec{values: []string{"--name", "--harness"}}
 	harnessArg  = &argSpec{positionals: 1}
 	shareArgs   = &argSpec{positionals: 1, values: []string{"--to", "--applies-cwd"}, bools: []string{"--any-cwd"}}
 	importArgs  = &argSpec{positionals: 1, values: []string{"--refresh", "--keep"}, bools: []string{"--all", "--shared"}}
@@ -129,7 +130,7 @@ func commands() []command {
 	return []command{
 		{"remember", "Author a canonical memory (flags, or --from-json - on stdin).", nil, cmdRemember},
 		{"share", "Change where a memory applies: scope tier (--to) and/or cwd globs (--applies-cwd, --any-cwd). Writes canonical.", shareArgs, cmdShare},
-		{"sync", "Render canonical memories into the harnesses (dry-run; --apply to write).", noArgs, cmdSync},
+		{"sync", "Render canonical memories (dry-run; --apply). Select delivery with --name NAME (repeatable) and --harness claude-code|codex; selected delivery never removes renders.", syncArgs, cmdSync},
 		{"import", "Reverse-sync a harness's native memory into canonical (one-shot; --apply).", importArgs, cmdImport},
 		{"detach", "Stop tracking an imported memory's source, so a kept orphan is no longer reported (dry-run; --apply).", detachArgs, cmdDetach},
 		{"forget", "Retire canonical memories: tombstone them so import never re-creates them, and remove their renders (dry-run; --apply; --restore undoes).", forgetArgs, cmdForget},

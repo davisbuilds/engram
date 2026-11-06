@@ -30,6 +30,8 @@ type ClaudeSharedTarget struct {
 	// RulesFile is <claude home>/rules/engram-memory.md.
 	RulesFile string
 	Desired   []*schema.CanonicalMemory
+	// Names limits delivery without treating unselected renders as stale.
+	Names map[string]bool
 	// KeepStale holds back removals, as for ClaudeTarget.
 	KeepStale bool
 	// Discard names edited shared renders to overwrite or remove anyway.
@@ -45,12 +47,24 @@ func (ClaudeSharedTarget) Harness() string { return SharedHarness }
 func (t ClaudeSharedTarget) DesiredMemories() []*schema.CanonicalMemory { return t.Desired }
 
 func (t ClaudeSharedTarget) dir() ClaudeTarget {
-	return ClaudeTarget{MemoryDir: t.Dir, Desired: t.Desired, KeepStale: t.KeepStale, Stamp: true, Discard: t.Discard, Known: t.Known}
+	return ClaudeTarget{MemoryDir: t.Dir, Desired: t.Desired, Names: t.Names, KeepStale: t.KeepStale, Stamp: true, Discard: t.Discard, Known: t.Known}
 }
 
 // Plan computes the actions without writing: the shared dir's, then the rules
 // file's.
 func (t ClaudeSharedTarget) Plan() ([]Action, error) {
+	if !hasSelectedMemory(t.Names, t.Desired) {
+		return nil, nil
+	}
+	if t.Names != nil {
+		if a, ok, err := t.planRules(); err != nil {
+			return nil, err
+		} else if ok && a.Kind == Conflict {
+			// Selected delivery must not write a memory behind wiring that
+			// cannot load it and that engram cannot safely repair.
+			return []Action{a}, nil
+		}
+	}
 	actions, err := t.dir().Plan()
 	if err != nil {
 		return nil, err
@@ -69,11 +83,21 @@ func (t ClaudeSharedTarget) Plan() ([]Action, error) {
 // Apply reconciles the shared dir and then the rules file, both under the
 // dir's lock, so the rules file is written only once the index it imports is.
 func (t ClaudeSharedTarget) Apply() (Result, error) {
+	if !hasSelectedMemory(t.Names, t.Desired) {
+		return Result{}, nil
+	}
 	unlock, err := acquireLock(t.Dir)
 	if err != nil {
 		return Result{}, err
 	}
 	defer unlock()
+	if t.Names != nil {
+		if a, ok, err := t.planRules(); err != nil {
+			return Result{}, err
+		} else if ok && a.Kind == Conflict {
+			return Result{Conflicts: []Action{a}}, nil
+		}
+	}
 	res, err := t.dir().applyLocked()
 	if err != nil {
 		return res, err
@@ -109,6 +133,13 @@ func (t ClaudeSharedTarget) planRules() (Action, bool, error) {
 	exists := err == nil
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return Action{}, false, err
+	}
+	if !exists && t.Names != nil {
+		if occupied, lerr := pathOccupied(t.RulesFile); lerr != nil {
+			return Action{}, false, lerr
+		} else if occupied {
+			return Action{Conflict, RulesActionName, t.RulesFile, "rules path is occupied and is not engram-owned"}, true, nil
+		}
 	}
 	want := len(t.Desired) > 0
 	switch {

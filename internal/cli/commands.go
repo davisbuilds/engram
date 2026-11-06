@@ -210,28 +210,34 @@ func (s *session) targets() ([]sync.Target, []string, *RespError) {
 // read of canonical, filtering its memories per harness (the agent axis
 // differs by harness).
 func (s *session) targetsFrom(v canonView) ([]sync.Target, []string) {
+	return s.targetsFor(v, "")
+}
+
+// targetsFor keeps the complete canonical view while optionally limiting the
+// destination harness. --agent changes relevance, not destination selection.
+func (s *session) targetsFor(v canonView, only string) ([]sync.Target, []string) {
 	mems, keepStale := v.mems, v.keepStale
 	warns := append([]string(nil), v.warns...)
 
 	var targets []sync.Target
-	if h := s.cfg.Harnesses[config.HarnessClaude]; h.Enabled() {
+	if h := s.cfg.Harnesses[config.HarnessClaude]; h.Enabled() && (only == "" || only == config.HarnessClaude) {
 		agent := s.agentFor("claude")
 		rel, shared := s.claudeSplit(h, mems, agent, keepStale)
 		targets = append(targets, sync.ClaudeTarget{
 			MemoryDir: claudeMemoryDir(h.Home, s.claudeRoot), Desired: rel, KeepStale: keepStale,
 		}, shared)
 		warns = append(warns, harnessWarnings(harness.CheckClaude(h.Home, true))...)
-	} else {
+	} else if only == "" || only == config.HarnessClaude {
 		warns = append(warns, s.skippedNote(config.HarnessClaude))
 	}
-	if h := s.cfg.Harnesses[config.HarnessCodex]; h.Enabled() {
+	if h := s.cfg.Harnesses[config.HarnessCodex]; h.Enabled() && (only == "" || only == config.HarnessCodex) {
 		rel := scope.RelevantFor(mems, s.cwd, s.agentFor("codex"), s.host)
 		targets = append(targets, sync.CodexTarget{
 			ExtensionDir: codexExtDir(h.Home), Desired: rel, Now: time.Now, KeepStale: keepStale,
 			InView: codexInView(mems, s.cwd, s.agentFor("codex"), s.host),
 		})
 		warns = append(warns, harnessWarnings(harness.CheckCodex(h.Home, true))...)
-	} else {
+	} else if only == "" || only == config.HarnessCodex {
 		warns = append(warns, s.skippedNote(config.HarnessCodex))
 	}
 	return targets, warns
@@ -252,11 +258,20 @@ func codexInView(mems []*schema.CanonicalMemory, cwd, agent, host string) func(n
 	}
 }
 
-func cmdSync(e *env, name string, _ []string) int {
+func cmdSync(e *env, name string, args []string) int {
+	sel, rerr := parseSyncSelection(args)
+	if rerr != nil {
+		e.emit(name, false, nil, nil, rerr, nil)
+		return exitUsage
+	}
 	s, rerr := e.newSession()
 	if rerr != nil {
 		e.emit(name, false, nil, nil, rerr, nil)
 		return exitError
+	}
+	if sel.harness != "" && !s.cfg.Harnesses[sel.harness].Enabled() {
+		e.emit(name, false, nil, nil, &RespError{Code: "harness_disabled", Message: sel.harness + " is disabled; nothing was delivered"}, nil)
+		return exitUsage
 	}
 	// Under --apply every render is written from this one read, all of it
 	// holding the canonical lock shared, so a forget or curate removal either
@@ -268,7 +283,14 @@ func cmdSync(e *env, name string, _ []string) int {
 		return exitError
 	}
 	defer release()
-	targets, warns := s.targetsFrom(v)
+	targets, warns := s.targetsFor(v, sel.harness)
+	if sel.harness != "" {
+		targets, rerr = sel.targets(v, targets)
+		if rerr != nil {
+			e.emit(name, false, nil, warns, rerr, nil)
+			return exitUsage
+		}
+	}
 	if len(targets) == 0 {
 		e.emit(name, false, nil, warns, &RespError{Code: "no_harness", Message: "no enabled harness to sync"}, nil)
 		return exitUsage
@@ -305,9 +327,13 @@ func cmdSync(e *env, name string, _ []string) int {
 		}
 		entries = append(entries, entry)
 	}
-	e.emit(name, exit == exitOK, map[string]any{
+	data := map[string]any{
 		"cwd": s.cwd, "host": s.host, "apply": e.apply, "harnesses": entries,
-	}, warns, harnessFailure(entries), next)
+	}
+	if sel.harness != "" {
+		data["names"], data["harness"] = sel.names, sel.harness
+	}
+	e.emit(name, exit == exitOK, data, warns, harnessFailure(entries), next)
 	return exit
 }
 
