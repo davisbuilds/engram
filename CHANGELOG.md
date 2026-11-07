@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/davisbuilds/engram/compare/v0.6.1...v0.7.0) (2026-11-07)
+
+
+### Features
+
+* **sync:** deliver selected memories to one harness ([#67](https://github.com/davisbuilds/engram/issues/67)) ([37649e6](https://github.com/davisbuilds/engram/commit/37649e69754952fad5c93634b82780eacaa2f69b))
+
 ## [0.6.1](https://github.com/davisbuilds/engram/compare/v0.6.0...v0.6.1) (2026-11-05)
 
 

@@ -8,13 +8,14 @@ tags, without distributing binaries or packages.
 
 ## Version and history policy
 
-The manifest currently identifies the published `v0.2.0` release. CI uses that
-actual tag's commit as the unreleased-history boundary. If the manifest advances
-before its next tag exists, the conservative fallback is `bootstrap-sha`, now
-set to the real `v0.2.0` commit (`a29b7a2cff20ea900ddd3a35a78612b77eb8ccb4`).
-The original bootstrap predates already released non-Conventional commits;
-refreshing it avoids retroactively rejecting that legitimate published history.
-No tags or historical changelogs are rewritten.
+The release version is recorded in `.release-please-manifest.json`. CI resolves
+its matching `vX.Y.Z` tag to the actual commit and uses that as the
+unreleased-history boundary. If the manifest advances before its tag exists,
+CI falls back to `bootstrap-sha` in `release-please-config.json`. That configured
+boundary excludes historical commits from before the release policy was
+established; the fallback still checks every later unreleased commit. Read the
+manifest, configuration and tags for their current values. No tags or historical
+changelogs are rewritten.
 
 PRs are squash merged with their title and body as the commit message. Use
 Conventional Commit titles and inspect the final squash message before merging:
