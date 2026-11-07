@@ -117,6 +117,23 @@ engram curate --harness codex --json # run the codex agent instead of claude
 engram curate --model claude-opus-5 --effort high --json   # override the model/effort
 ```
 
+### Deliver selected corrections
+
+After applying reviewed canonical updates, preview delivery of those names to
+the intended harness and context:
+
+```sh
+engram sync --name review-lesson --name setup-lesson --harness codex --cwd /work/project --json
+engram sync --name review-lesson --name setup-lesson --harness codex --cwd /work/project --apply --json
+```
+
+Carry any explicit `--config` through both commands. Selected sync never imports
+native memories or removes renders. It leaves unselected memories and other
+harnesses alone, while maintaining the selected memories' required index/wiring.
+Inspect conflicts and warnings; the apply replans current state rather than
+applying a saved preview. Retirements, scope moves, native cleanup and observed
+session consumption need separate verification. See [the command contract](cli.md#operations).
+
 ### Reviewed plans
 
 A plain `--apply` runs the agent again, and the agent is not deterministic, so

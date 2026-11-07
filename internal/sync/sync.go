@@ -83,6 +83,9 @@ type Target interface {
 type ClaudeTarget struct {
 	MemoryDir string
 	Desired   []*schema.CanonicalMemory
+	// Names limits delivery to these canonical names when non-nil. Selected
+	// delivery creates or updates renders, but never removes stale renders.
+	Names map[string]bool
 	// KeepStale holds back STALE removals because Desired may be incomplete (the
 	// canonical root is missing or a canonical file failed to parse): an owned
 	// render absent from Desired might still have a live canonical source.
@@ -113,6 +116,9 @@ type ownedFile struct {
 
 // Plan computes the actions needed to reconcile the target, without writing.
 func (t ClaudeTarget) Plan() ([]Action, error) {
+	if !hasSelectedMemory(t.Names, t.Desired) {
+		return nil, nil
+	}
 	owned, unmarked, err := scanMemoryDir(t.MemoryDir)
 	if err != nil {
 		return nil, err
@@ -122,6 +128,9 @@ func (t ClaudeTarget) Plan() ([]Action, error) {
 	desired := map[string]bool{}
 	var actions []Action
 	for _, m := range t.Desired {
+		if !selectedName(t.Names, m.Name) {
+			continue
+		}
 		desired[m.Name] = true
 		rr, err := renderer.Render(m)
 		if err != nil {
@@ -159,6 +168,9 @@ func (t ClaudeTarget) Plan() ([]Action, error) {
 	}
 	for name, cur := range owned {
 		switch {
+		case t.Names != nil:
+			// A delivery selection never authorizes removal, even when a
+			// selected name no longer belongs in this target.
 		case desired[name]:
 		case t.KeepStale && !t.Discard[name]:
 			// Held while canonical may be incomplete, unless the operator named
@@ -176,6 +188,9 @@ func (t ClaudeTarget) Plan() ([]Action, error) {
 // Apply reconciles the target under an exclusive lock and reports what it did.
 // Conflicts are surfaced, not applied.
 func (t ClaudeTarget) Apply() (Result, error) {
+	if !hasSelectedMemory(t.Names, t.Desired) {
+		return Result{}, nil
+	}
 	unlock, err := acquireLock(t.MemoryDir)
 	if err != nil {
 		return Result{}, err
@@ -199,6 +214,9 @@ func (t ClaudeTarget) applyLocked() (Result, error) {
 	rendered := map[string]render.ClaudeRender{}
 	byName := map[string]*schema.CanonicalMemory{}
 	for _, m := range t.Desired {
+		if !selectedName(t.Names, m.Name) {
+			continue
+		}
 		rr, err := renderer.Render(m)
 		if err != nil {
 			return Result{}, err
@@ -236,6 +254,24 @@ func (t ClaudeTarget) applyLocked() (Result, error) {
 		}
 	}
 	return res, nil
+}
+
+func selectedName(names map[string]bool, name string) bool {
+	return names == nil || names[name]
+}
+
+// A nil selection preserves ordinary full reconciliation, including empty-set
+// cleanup. An explicit selection without an admitted memory does nothing.
+func hasSelectedMemory(names map[string]bool, desired []*schema.CanonicalMemory) bool {
+	if names == nil {
+		return true
+	}
+	for _, m := range desired {
+		if names[m.Name] {
+			return true
+		}
+	}
+	return false
 }
 
 // HeldEditNote opens the note of a CONFLICT that holds an edited render, so a

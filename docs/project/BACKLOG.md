@@ -99,12 +99,6 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
 
 ## Surface not yet built
 
-- **Targeted delivery after curation.** A small canonical correction can require
-  a broad render plan: `sync` includes native-origin entries, while `reconcile`
-  suppresses source echoes but also imports native content. First qualify narrow
-  context selection with isolated fixtures. If it cannot express a desired
-  correction, design a reviewed delivery operation that preserves unselected
-  files and native ownership; a filtered inventory must not imply stale deletion.
 - **Maintained references in curation evidence.** The built-in proposer receives
   canonical memories and name-similarity findings, so it cannot independently
   establish whether external maintained guidance supersedes a prescription.

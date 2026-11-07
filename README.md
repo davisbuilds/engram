@@ -156,6 +156,13 @@ artifacts and explicitly unknown consumption. Intact files do not prove loading.
 To curate with the current agent, supply operations with
 `curate --proposal proposal.json --save-plan reviewed-plan.json --json`, review
 the plan, then apply it with `curate --plan reviewed-plan.json --apply --json`.
+
+**Deliver a specific correction.** Preview `engram sync --name lesson-name
+--harness codex --json`, then repeat with `--apply` after inspecting its actions.
+Repeat `--name` for more memories or use `--harness claude-code`. This updates or
+creates selected renders and their required wiring without importing native
+content or deleting unrelated renders. Keep the same configuration and cwd;
+see the [selection and ownership contract](docs/cli.md#operations).
 Neither supplied-proposal validation nor saved-plan application launches a model.
 
 Reconcile imports native memories from enabled harnesses, reports review leads,
