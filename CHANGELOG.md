@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0](https://github.com/davisbuilds/engram/compare/v0.7.0...v0.8.0) (2026-11-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* **import:** `schema_version` is now `3`. `import --apply` exits `3` (not `0`) when a candidate is `invalid`, as `reconcile` already did. Shared-edit import rows report `canonical: "removed" | "unknown"` and `error` instead of prose in `differs`. A canonical lock that cannot be taken at all is `error.code = "lock"`, not the retryable `locked`.
+
+### Bug Fixes
+
+* **import:** judge every import candidate by one outcome state machine ([#69](https://github.com/davisbuilds/engram/issues/69)) ([f4d210a](https://github.com/davisbuilds/engram/commit/f4d210aac138027a39294656afa407487b82722e))
+
 ## [0.7.0](https://github.com/davisbuilds/engram/compare/v0.6.1...v0.7.0) (2026-11-07)
 
 
