@@ -41,7 +41,7 @@ Every `--json` result:
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "sync",
   "ok": true,
   "data": { "...": "command-specific payload" },
@@ -63,10 +63,13 @@ Every `--json` result:
   `message`; the failed harness's entry in `data` still carries its own `error`.
 - Lists in `data` are always JSON arrays, `[]` when empty, never `null`.
 - `next_steps` — agent-consumable leads; may be empty/absent.
-- `schema_version` changes only when the envelope's shape does. Version 2 made
-  empty lists `[]` (they were `null`, e.g. a sync result's `applied` and
-  `conflicts`) and added the top-level `harness_failed` error (a harness failure
-  used to appear only inside `data`).
+- `schema_version` changes only when the envelope's shape or the exit-code
+  semantics do. Version 2 made empty lists `[]` (they were `null`, e.g. a sync
+  result's `applied` and `conflicts`) and added the top-level `harness_failed`
+  error (a harness failure used to appear only inside `data`). Version 3 made
+  `import --apply` exit `3` when a candidate is `invalid` (it exited `0`, while
+  `reconcile` already exited `3`) and split the canonical lock's `error.code`:
+  `locked` only when another holder has it, `lock` when it cannot be taken.
 
 Primary data (and all JSON) goes to **stdout**; diagnostics, warnings, and human
 notes go to **stderr**.

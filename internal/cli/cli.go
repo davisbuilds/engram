@@ -16,9 +16,10 @@ import (
 	"github.com/davisbuilds/engram/internal/version"
 )
 
-// schemaVersion is the version of the response envelope below. Bump it only on a
-// breaking change to the envelope shape, never for command-specific payloads.
-const schemaVersion = 2
+// schemaVersion is the version of the response contract: the envelope below and
+// the exit-code semantics. Bump it on a breaking change to either, never for
+// additive command-specific payloads.
+const schemaVersion = 3
 
 // Exit codes are a stable contract: an agent operator branches on these before
 // parsing any output. Keep them in sync with docs/cli.md.
