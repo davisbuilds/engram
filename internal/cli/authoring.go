@@ -348,6 +348,12 @@ func cmdImport(e *env, name string, args []string) int {
 			if note != "" {
 				warns = append(warns, note)
 			}
+			// The gates apply in one order on every surface (importoutcome.go),
+			// so the preview reports what apply will.
+			if verr := m.Validate(); verr != nil {
+				items = append(items, invalidRow(m.Name, verr))
+				continue
+			}
 			// Say what apply would do with each candidate, not just that it exists.
 			// The row is built after scope resolution so it carries the scope apply
 			// lands on, and `force` is honored so a scope-only revision that apply
@@ -413,10 +419,6 @@ func cmdImport(e *env, name string, args []string) int {
 			outcomes = append(outcomes, forgottenRow(m.Name))
 			continue
 		}
-		if verr := m.Validate(); verr != nil {
-			outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": "invalid", "error": verr.Error()})
-			continue
-		}
 		if row, ok := withheldRow(s.cfg.CanonicalRoot, m); ok {
 			outcomes = append(outcomes, row)
 			conflicts++
@@ -433,6 +435,11 @@ func cmdImport(e *env, name string, args []string) int {
 		}
 		if note != "" {
 			warns = append(warns, note)
+		}
+		if verr := m.Validate(); verr != nil {
+			outcomes = append(outcomes, invalidRow(m.Name, verr))
+			conflicts++ // not written: the native needs fixing, as reconcile reports
+			continue
 		}
 		stored, _, _, lerr := store.Load(s.cfg.CanonicalRoot, m.Name)
 		if lerr != nil {

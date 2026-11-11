@@ -228,6 +228,7 @@ transport files or coordinate writers across machines. See
 | `CONFLICT` or exit `3` | Read the named source and canonical files. Import can explicitly keep canonical or refresh from native; don't force an overwrite to make a check green. See [adoption](docs/operating.md#adopt-existing-memories). |
 | A memory is missing in another project | Check scope and directory/agent/host filters with `list --json` from that project. Host filters require configured host labels. |
 | `locked` | Another Engram operation holds the lock. Let it finish and retry; deleting the lock file is not recovery. |
+| `lock` | The lock could not be taken at all (the canonical root or its lock file cannot be created or opened). Retrying won't help; fix the path or its permissions. |
 | A command prints JSON in a pipe | That's the default for non-TTY output. Use `--plain` for text or `--json` to make structured output explicit. |
 
 ## Go further

@@ -27,13 +27,22 @@ import (
 // interleave — closing the load-then-write race in store.Save between two
 // concurrent same-name writes, and keeping a multi-file batch atomic against a
 // single write. A held lock yields a retryable "locked" error rather than a
-// silent second writer.
+// silent second writer; a lock that cannot be taken at all is "lock".
 func canonLock(root string) (func(), *RespError) {
 	release, err := lock.Acquire(root)
 	if err != nil {
-		return nil, &RespError{Code: "locked", Message: err.Error()}
+		return nil, lockError(err)
 	}
 	return release, nil
+}
+
+// lockError reports a lock that was not taken: `locked` (retryable) only when
+// another holder has it, `lock` when it could not be taken at all.
+func lockError(err error) *RespError {
+	if errors.Is(err, lock.ErrLocked) {
+		return &RespError{Code: "locked", Message: err.Error()}
+	}
+	return &RespError{Code: "lock", Message: err.Error()}
 }
 
 // canonReadLock takes the canonical-root lock shared, for a command that
@@ -49,7 +58,7 @@ func canonReadLock(root string) (release func(), missing bool, rerr *RespError) 
 		return func() {}, true, nil
 	}
 	if err != nil {
-		return nil, false, &RespError{Code: "locked", Message: err.Error()}
+		return nil, false, lockError(err)
 	}
 	return release, false, nil
 }
@@ -685,7 +694,7 @@ func conflictNextSteps(actions []sync.Action) []NextStep {
 	for _, a := range actions {
 		if a.Kind == sync.Conflict && strings.HasPrefix(a.Note, sync.HeldEditNote) {
 			steps = append(steps, NextStep{
-				Reason:  "the shared render of " + a.Name + " was edited in place; reconcile imports it, or settle it explicitly",
+				Reason:  "the shared render of " + a.Name + " was edited in place; import --shared takes it when canonical has not moved, else lists how to settle it",
 				Command: "engram import claude-code --shared --apply",
 			})
 			continue

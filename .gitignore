@@ -22,3 +22,7 @@ Thumbs.db
 /.engram/
 *.local.yaml
 *.local.yml
+
+# Python bytecode (scripts/ tests)
+__pycache__/
+*.pyc

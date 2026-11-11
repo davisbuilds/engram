@@ -41,7 +41,7 @@ Every `--json` result:
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "sync",
   "ok": true,
   "data": { "...": "command-specific payload" },
@@ -63,10 +63,13 @@ Every `--json` result:
   `message`; the failed harness's entry in `data` still carries its own `error`.
 - Lists in `data` are always JSON arrays, `[]` when empty, never `null`.
 - `next_steps` — agent-consumable leads; may be empty/absent.
-- `schema_version` changes only when the envelope's shape does. Version 2 made
-  empty lists `[]` (they were `null`, e.g. a sync result's `applied` and
-  `conflicts`) and added the top-level `harness_failed` error (a harness failure
-  used to appear only inside `data`).
+- `schema_version` changes only when the envelope's shape or the exit-code
+  semantics do. Version 2 made empty lists `[]` (they were `null`, e.g. a sync
+  result's `applied` and `conflicts`) and added the top-level `harness_failed`
+  error (a harness failure used to appear only inside `data`). Version 3 made
+  `import --apply` exit `3` when a candidate is `invalid` (it exited `0`, while
+  `reconcile` already exited `3`) and split the canonical lock's `error.code`:
+  `locked` only when another holder has it, `lock` when it cannot be taken.
 
 Primary data (and all JSON) goes to **stdout**; diagnostics, warnings, and human
 notes go to **stderr**.
@@ -230,7 +233,9 @@ not harness support, readiness, installation elsewhere or consumption.
   read canonical. Readers share the lock with each other; the canonical lock
   is always taken before any render directory's. A held lock, either way, is a
   retryable error (exit `1`, `error.code = "locked"`) and the refused command
-  writes nothing, never a silent second write. A dry run takes no lock and
+  writes nothing, never a silent second write. A lock that cannot be taken at
+  all (the root cannot be created or opened) is `error.code = "lock"` (exit `1`),
+  which retrying does not fix. A dry run takes no lock and
   writes nothing, not even the lock file.
   An `applies_to.cwd` glob must be `**` or an absolute, clean path, since it is
   matched against an absolute, cleaned cwd. `remember` and `share` spell input
@@ -311,11 +316,17 @@ not harness support, readiness, installation elsewhere or consumption.
   zero side effects.
 - **`import <harness>`** — reverse-sync, explicit and one-shot. Dry-run lists every
   candidate memory with the `outcome` `--apply` would produce for it (`created` /
-  `updated` / `unchanged` / `canonical_ahead` / `conflict` / `forgotten`);
-  `--apply` writes them.
+  `updated` / `unchanged` / `canonical_ahead` / `conflict` / `forgotten` /
+  `invalid`); `--apply` writes them. Every import source and surface (`import`
+  dry-run and `--apply`, `reconcile`, shared edits below) applies the same gates
+  in the same order before planning a save: a tombstone (`forgotten`), a
+  withheld canonical file (`conflict` with `withheld`), then validation of the
+  candidate as scope resolution leaves it (`invalid`).
   `forgotten` means a tombstone holds the name (see `forget`): the memory was
   deliberately retired, so it is not written, even with `--force` or `--refresh`,
-  and it is not a conflict. Each `conflict`
+  and it is not a conflict. `invalid` means the candidate fails validation; its
+  row carries `error`, nothing is written, and, as for a conflict, `--apply`
+  exits `3` so the native gets fixed. Each `conflict`
   result also carries `differs`, a comma-separated list of the fields that differ
   (`description`, `type`, `scope`, `applies_to`, `related`, `provenance`, `body`),
   so the cause is visible without diffing files. A `conflict` carrying `withheld`
@@ -418,8 +429,8 @@ not harness support, readiness, installation elsewhere or consumption.
   that is `curate`'s job). Adoption is gated on **body-identity**: a file is
   adopted only when its body is byte-identical to canonical, so taking ownership
   loses nothing; a file whose body diverged (edited since import, or canonical
-  changed) is reported as `diverged` and left byte-for-byte untouched, and a
-  non-one-to-one match is reported as `ambiguous` and left alone. Adoption is
+  changed) is reported as `DIVERGED` and left byte-for-byte untouched, and a
+  non-one-to-one match is reported as `AMBIGUOUS` and left alone. Adoption is
   **non-lossy**: it sets only engram's managed frontmatter fields (name,
   description, metadata.type, metadata.origin) and preserves every other key the
   harness wrote (e.g. Claude Code's `node_type` / `originSessionId`) — the same
@@ -478,13 +489,24 @@ not harness support, readiness, installation elsewhere or consumption.
   as its own source, `data.import[]` entry `"harness": "claude-code:shared"`:
   `updated` when canonical has not moved since the stamp (the edit becomes
   canonical and the render is restamped), `unchanged` when canonical already
-  says it, `conflict` when canonical moved too, and `invalid` when the edit is
-  not a valid memory. A render without a stamp (written before stamping) has no
+  says it, `conflict` when canonical moved too (with `differs`, the fields), and
+  `invalid` (with `error`) when the edit is not a valid memory. When canonical
+  has no live memory by the name, the import gates decide instead: `forgotten`
+  when a tombstone holds the name (not a conflict in canonical, but the render
+  stays held, exit `3`, until `--keep` discards it); `conflict` with `withheld`
+  when a canonical file claims the name but does not load; `conflict` with
+  `"canonical": "unknown"` when canonical was not read whole (its root is
+  missing, or a file that does not load may be this memory); and `conflict` with
+  `"canonical": "removed"` when canonical, read whole, has neither the memory
+  nor a tombstone. Neither `--refresh` nor `--keep` settles a `withheld` or
+  `unknown` one, and the edit is never discarded meanwhile; the same checks are
+  repeated under the lock before anything is saved or discarded. `differs` only
+  ever names fields. A render without a stamp (written before stamping) has no
   known base and is simply updated. **`import claude-code --shared`** settles the
   held ones: a dry-run lists them; `--apply` takes every fast-forwardable edit,
   `--refresh <name>` takes a conflicting edit anyway, and `--keep <name>` keeps
   canonical and discards the edit, even one canonical could fast-forward to
-  (row outcome `kept`); it then re-syncs the shared dir from canonical as the
+  (row outcome `kept`; also how a `forgotten` or removed one is discarded); it then re-syncs the shared dir from canonical as the
   saves left it, still holding the canonical lock, so taken
   edits are restamped and discarded ones overwritten (or removed, for a memory
   no longer shared). A `--refresh` or `--keep` name with no edited render is a
@@ -516,7 +538,10 @@ not harness support, readiness, installation elsewhere or consumption.
   name is removed from each Claude project slug and Claude's shared memory dir
   (file and marked index line) and from the shared Codex notes directory, each
   under its own lock; when that leaves nothing shared, the engram-owned rules
-  file importing the shared index goes too. A tombstone is
+  file importing the shared index goes too. A shared render edited in place and
+  not yet imported is removed as well, and its `STALE` note says so
+  (`discards an in-place edit not yet imported`), so the dry-run shows the
+  edit is lost before `--apply`. A tombstone is
   `<canonical_root>/.forgotten/<name>.yaml`, holding the name, origin, source,
   `forgotten_at`, `--reason`, `--successor`, and the forgotten file's full text;
   discovery never reads that directory. Forgetting a name again (another harness
