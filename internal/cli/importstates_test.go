@@ -141,6 +141,17 @@ func TestImportDryRunReportsAnInvalidCandidate(t *testing.T) {
 	}
 }
 
+// TestForgetNamesAnUnimportedSharedEditItDiscards pins forget's preview of an
+// edited shared render: forgetting removes it (retirement is the operator's
+// call), but the dry-run says the edit goes with it, so it is never a surprise.
+func TestForgetNamesAnUnimportedSharedEditItDiscards(t *testing.T) {
+	_, c, _, _ := editedShared(t)
+	_, env := runEnvelope(t, append([]string{"forget", "g-mem", "--cwd", "/work/x"}, c...)...)
+	if renders := stringify(env["data"].(map[string]any)["renders"]); !strings.Contains(renders, "discards an in-place edit not yet imported") {
+		t.Errorf("dry-run should name the discarded edit: %s", renders)
+	}
+}
+
 // TestCanonLockReportsLockedOnlyForAHeldLock pins the retry signal: `locked`
 // tells an agent to retry, so a lock that cannot be taken at all (the root
 // cannot be created) is a plain `lock` failure, not a retryable one.

@@ -175,7 +175,12 @@ func (p Purge) planClaude(dir string) ([]Action, error) {
 	var actions []Action
 	for _, name := range p.Names {
 		if f, ok := owned[name]; ok {
-			actions = append(actions, Action{Stale, name, f.path, purgeNote})
+			note := purgeNote
+			if _, edited := editedRender(f.content); edited {
+				// Retirement still removes it, but never silently.
+				note += "; discards an in-place edit not yet imported"
+			}
+			actions = append(actions, Action{Stale, name, f.path, note})
 		} else if _, ok := currentIndexLine(dir, name); ok {
 			actions = append(actions, Action{Stale, name, indexPath(dir), purgeNote + " (index line)"})
 		}
