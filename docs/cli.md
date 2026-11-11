@@ -230,7 +230,9 @@ not harness support, readiness, installation elsewhere or consumption.
   read canonical. Readers share the lock with each other; the canonical lock
   is always taken before any render directory's. A held lock, either way, is a
   retryable error (exit `1`, `error.code = "locked"`) and the refused command
-  writes nothing, never a silent second write. A dry run takes no lock and
+  writes nothing, never a silent second write. A lock that cannot be taken at
+  all (the root cannot be created or opened) is `error.code = "lock"` (exit `1`),
+  which retrying does not fix. A dry run takes no lock and
   writes nothing, not even the lock file.
   An `applies_to.cwd` glob must be `**` or an absolute, clean path, since it is
   matched against an absolute, cleaned cwd. `remember` and `share` spell input

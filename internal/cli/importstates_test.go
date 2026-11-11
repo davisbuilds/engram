@@ -141,6 +141,30 @@ func TestImportDryRunReportsAnInvalidCandidate(t *testing.T) {
 	}
 }
 
+// TestCanonLockReportsLockedOnlyForAHeldLock pins the retry signal: `locked`
+// tells an agent to retry, so a lock that cannot be taken at all (the root
+// cannot be created) is a plain `lock` failure, not a retryable one.
+func TestCanonLockReportsLockedOnlyForAHeldLock(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "not-a-dir")
+	writeFile(t, file, "x")
+	root := filepath.Join(file, "canonical")
+	if _, rerr := canonLock(root); rerr == nil || rerr.Code != "lock" {
+		t.Errorf("exclusive: got %+v, want code lock", rerr)
+	}
+	if _, _, rerr := canonReadLock(file); rerr == nil || rerr.Code != "lock" {
+		t.Errorf("shared: got %+v, want code lock", rerr)
+	}
+	held := t.TempDir()
+	release, rerr := canonLock(held)
+	if rerr != nil {
+		t.Fatal(rerr)
+	}
+	defer release()
+	if _, rerr := canonLock(held); rerr == nil || rerr.Code != "locked" {
+		t.Errorf("held: got %+v, want code locked", rerr)
+	}
+}
+
 // TestSharedEditIsNeverDiscardedWhileCanonicalIsIncomplete pins the stale hold
 // for shared edits: when discovery cannot vouch that canonical lacks the name
 // (the root is missing, or a file that does not parse may be it), the edit is
