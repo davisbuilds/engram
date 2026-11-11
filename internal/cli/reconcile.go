@@ -90,7 +90,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 
 	// Edits made in place to Claude's shared renders are an import source of
 	// their own, judged by each render's stamp after the native imports.
-	sharedPlans, rerr := s.sharedEditPlans(merged, nil)
+	sharedPlans, rerr := s.sharedEditPlans(canonView{mems: merged, perrs: perrs, keepStale: keepStale}, tombs, nil)
 	if rerr != nil {
 		e.emit(name, false, nil, warns, rerr, nil)
 		return exitError
@@ -104,8 +104,10 @@ func cmdReconcile(e *env, name string, _ []string) int {
 			"skipped": []string{}, "dropped": []importer.Dropped{}, "collisions": []importer.Collision{},
 		})
 		merged = withSharedEdits(merged, sharedPlans)
-		if countOutcome(sharedPlans, editConflict)+countOutcome(sharedPlans, editInvalid) > 0 {
-			exit = worseExit(exit, exitConflicts)
+		for _, p := range sharedPlans {
+			if p.held() {
+				exit = worseExit(exit, exitConflicts)
+			}
 		}
 	}
 
@@ -142,7 +144,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 				}
 			}
 		}
-		if serr := applySharedEdits(root, sharedPlans, nil); serr != nil {
+		if serr := applySharedEdits(root, sharedPlans, tombs, keepStale || absent, nil); serr != nil {
 			e.emit(name, false, nil, warns, &RespError{Code: "save", Message: serr.Error()}, nil)
 			return exitError
 		}
@@ -176,6 +178,20 @@ func cmdReconcile(e *env, name string, _ []string) int {
 
 	next = append(next, orphanNext...)
 	next = append(next, sharedEditNextSteps(sharedPlans)...)
+	// sync's generic lead for a held edit defers to the specific ones above.
+	planned := map[string]bool{}
+	for _, p := range sharedPlans {
+		planned[p.edit.Name] = true
+	}
+	syncLead := func(actions []sync.Action) []NextStep {
+		var rest []sync.Action
+		for _, a := range actions {
+			if !planned[a.Name] || !strings.HasPrefix(a.Note, sync.HeldEditNote) {
+				rest = append(rest, a)
+			}
+		}
+		return conflictNextSteps(rest)
+	}
 
 	targets, twarns := s.enricherTargets(merged, keepStale)
 	warns = append(warns, twarns...)
@@ -191,7 +207,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 			} else {
 				entry["actions"] = orEmpty(actions)
 				exit = worseExit(exit, exitForActions(actions))
-				next = append(next, conflictNextSteps(actions)...)
+				next = append(next, syncLead(actions)...)
 			}
 		} else {
 			res, err := tg.Apply()
@@ -202,7 +218,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 				entry["result"] = res
 				if len(res.Conflicts) > 0 {
 					exit = worseExit(exit, exitConflicts)
-					next = append(next, conflictNextSteps(res.Conflicts)...)
+					next = append(next, syncLead(res.Conflicts)...)
 				}
 			}
 		}
@@ -265,7 +281,7 @@ func mergeImports(existing []*schema.CanonicalMemory, imports []importGather, wi
 				notes = append(notes, note)
 			}
 			if verr := m.Validate(); verr != nil {
-				outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": "invalid", "error": verr.Error()})
+				outcomes = append(outcomes, invalidRow(m.Name, verr))
 				hadConflict = true
 				continue
 			}
@@ -331,7 +347,7 @@ func refreshedEntry(name string, stored, cand *schema.CanonicalMemory) map[strin
 // forgottenRow is the result row for an import candidate a tombstone keeps out:
 // the memory was deliberately forgotten, so it is neither written nor a conflict.
 func forgottenRow(name string) map[string]string {
-	return map[string]string{"name": name, "outcome": "forgotten"}
+	return map[string]string{"name": name, "outcome": string(outcomeForgotten)}
 }
 
 // outcomeEntry is the per-memory result row shared by every import surface

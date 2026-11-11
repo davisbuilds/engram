@@ -57,12 +57,49 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
   keys through render.
 - **`reconcile --apply` ignores the scope force and the Save outcome.** It calls
   `store.Save(..., false)` and checks only the error, discarding the `force` that
-  `decideImportScope` computes and any `Conflict` outcome. Inert today (reconcile
-  only runs provisional imports), but a trap for an authoritative import path.
+  `decideImportScope` computes and any `Conflict` outcome; its native import rows
+  and exit code come from the unlocked simulation (shared-edit rows are rebuilt
+  after the apply). Inert today (reconcile only runs provisional imports), but a
+  trap for an authoritative import path, and a concurrent writer between the
+  simulation and the lock can make the reported rows wrong.
 - **`scopeIsSoleDiff` is stricter than `store.Plan`.** It requires a full-render
   match including provenance, so an authoritative scope-only rename is refused
   when the stored memory carries one more provenance field than the candidate.
   Compare with provenance neutralized, as `Plan` does.
+
+## Implicit state machines (audit 2026-11-11)
+
+The import outcome vocabulary is now one typed set with one gate order
+(`internal/cli/importoutcome.go`). From the same code-reading audit, these
+remain implicit:
+
+- **Three-way merge relation, derived three times.** `store.Plan` (merge base
+  `import_hash`), `planSharedEdits` (render stamp `engram_base`) and `diff
+  --native` (`comparisonBase`) each decide native-moved / canonical-moved /
+  both / same separately. `diff --native --shared` treats an invalid edit as a
+  scan error where import reports `invalid`, and its `merge_base.reason` values
+  (`no_recorded_base`, `lineage_mismatch`, `cross_name_comparison`,
+  `ambiguous_source`) are undocumented. Next: one relation function the three
+  share, then document the reasons.
+- **`CONFLICT` sub-states live only in `Action.Note` text.** Unmarked file, case
+  variant and held edit are told apart by `strings.HasPrefix(a.Note,
+  sync.HeldEditNote)` in `conflictNextSteps`. An additive typed `reason` on
+  `Action` would let agents branch without parsing prose.
+- **A forgotten name can be live again with its tombstone kept.** `remember` and
+  a curate `add` do not consult tombstones, so a re-authored memory coexists
+  with the tombstone that still blocks the original native family (reported
+  `forgotten`, not a conflict with the new memory). Decide whether that is the
+  intended "retired native stays retired" or should warn.
+- **Curate meets an incompletely parsed corpus three ways.** `--proposal` and
+  `--plan` refuse up front (`corpus_parse`); agent-driven `--apply` runs the
+  agent first and then fails with `apply`. Refuse before invoking the agent.
+- **`forget --restore` checks the batch whole but writes per name**, so a
+  mid-batch write failure leaves a partial restore.
+- **Canonical root state is re-derived per command.** `rootAbsent`,
+  `canonReadLock`'s missing flag, `discover.Locate` (missing reads as empty) and
+  `status` each answer it, and a writer that renders must remember to capture
+  `absent` before its lock and call `holdAbsent`. Revisit when a new
+  rendering writer is added: give `canonView` the state instead.
 
 ## Import quality
 

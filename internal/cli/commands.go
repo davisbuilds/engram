@@ -685,7 +685,7 @@ func conflictNextSteps(actions []sync.Action) []NextStep {
 	for _, a := range actions {
 		if a.Kind == sync.Conflict && strings.HasPrefix(a.Note, sync.HeldEditNote) {
 			steps = append(steps, NextStep{
-				Reason:  "the shared render of " + a.Name + " was edited in place; reconcile imports it, or settle it explicitly",
+				Reason:  "the shared render of " + a.Name + " was edited in place; import --shared takes it when canonical has not moved, else lists how to settle it",
 				Command: "engram import claude-code --shared --apply",
 			})
 			continue
