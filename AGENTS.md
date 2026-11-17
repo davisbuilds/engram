@@ -122,3 +122,17 @@ is the intelligence. See `README.md` for the user-facing overview.
 - Update the owning reference when a public contract or procedure changes. Keep
   `docs/project/BACKLOG.md` future-only; agents may work from entries directly,
   and issues help when persistent discussion or coordination is needed.
+
+## Planning and continuity
+
+Use the accepted conversation or task as the contract when it is sufficient.
+Save a design, spec, or plan when it helps coordinate work, define acceptance,
+or sequence execution. Leave a concise handoff when unfinished work transfers
+and the recipient needs context. Keep lifecycle status current and commit
+documents needed for shared execution that suit the public repository. Keep
+private working documents in the ignored `docs/design/`, `docs/specs/`, or
+`docs/plans/` directories and share private context through an appropriate
+private channel. Before moving completed public execution documents to the
+ignored `docs/archive/`, preserve lasting decisions and open work in maintained
+references and repair incoming links. Git history retains formerly tracked
+versions.

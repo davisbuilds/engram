@@ -144,11 +144,11 @@ remain implicit:
   from mutation authority. Work through preservation and conflict cases before
   selecting an interface; avoid assumptions about workspace layout or harness.
 - **Observed session consumption.** Inventory deliberately reports consumption
-  as unknown; stored renders, loader wiring and timestamps do not establish it.
+  as unknown under the [CLI contract](../cli.md#operations). Stored renders,
+  loader wiring and timestamps describe delivery evidence.
   Revisit when a supported harness exposes inspectable session-loading evidence.
   Any integration must identify the harness/session and distinguish loading
-  from use, while keeping semantic judgments in agents. This is beyond the
-  completed [memory observability spec](../memory-observability-spec.md).
+  from use, while keeping semantic judgments in agents.
 
 
 - **`migrate` for Codex.** `migrate` adopts hand-authored Claude files (per-file
