@@ -97,18 +97,11 @@ is the intelligence. See `README.md` for the user-facing overview.
   shell/title controls and real Git release-history validation; main pushes
   additionally validate the complete unreleased retained history.
 
-## Conventions
+## Working Agreement
 
-- **Release Please owns releases.** Use Conventional Commit PR titles (squash
-  merge titles become the commits parsed for release). Follow `docs/releases.md`;
-  do not create competing release tags. `go.mod` declares the Go language version,
-  not the engram application version. Preserve Git-derived build provenance.
 - **Zero external dependencies** beyond `gopkg.in/yaml.v3`. Prefer the standard
   library. Match the house style: small packages with one responsibility each,
   deterministic output, atomic temp-then-rename writes.
-- **TDD for behavior:** red → green. The red step must fail for the reason you're
-  about to fix. Skip it only for code with no behavior to assert (plain data
-  holders, thin glue), and cover that after.
 - **Agent-first output contract.** Every command emits the stable JSON envelope
   under `--json` (auto when stdout is not a TTY); exit codes are a documented
   contract (`0` ok, `1` runtime error, `2` usage/disabled-harness, `3`
@@ -119,6 +112,20 @@ is the intelligence. See `README.md` for the user-facing overview.
   paths, real host names, or private repository references in tracked files or
   commit messages. Host identity and harness home directories are configuration,
   not code.
+- **TDD for behavior:** red → green. The red step must fail for the reason you're
+  about to fix. Skip it only for code with no behavior to assert (plain data
+  holders, thin glue), and cover that after.
 - Update the owning reference when a public contract or procedure changes. Keep
   `docs/project/BACKLOG.md` future-only; agents may work from entries directly,
   and issues help when persistent discussion or coordination is needed.
+- **Planning and continuity.** Reuse clear task context. Save planning docs when
+  decisions, acceptance, or coordination need persistence. Leave a brief handoff
+  only when needed to resume unfinished work. Commit shared docs and keep status
+  current. Before archiving, preserve lasting decisions and open work in
+  maintained docs and repair links. Keep private working docs in the ignored
+  `docs/design/`, `docs/specs/`, or `docs/plans/` directories and share private
+  context through restricted channels.
+- **Release Please owns releases.** Use Conventional Commit PR titles (squash
+  merge titles become the commits parsed for release). Follow `docs/releases.md`;
+  do not create competing release tags. `go.mod` declares the Go language version,
+  not the engram application version. Preserve Git-derived build provenance.
