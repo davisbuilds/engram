@@ -72,32 +72,26 @@ is the intelligence. See `README.md` for the user-facing overview.
 
 ## Source layout
 
-| Path | Responsibility |
-| --- | --- |
-| `cmd/engram` | Binary entrypoint |
-| `internal/cli` | Command dispatch and the JSON response envelope |
-| `internal/schema`, `internal/store`, `internal/discover` | Memory validation, atomic canonical writes, and corpus discovery |
-| `internal/render`, `internal/sync` | Pure harness renderers and filesystem application/ownership |
-| `internal/importer` | Native harness memory imports |
-| `internal/review`, `internal/curate`, `internal/agentexec` | Deterministic findings, validated curation batches, and headless agent execution |
-| `internal/lock`, `internal/scope`, `internal/config` | Apply serialization, relevance filters, and resolved configuration |
-| `internal/harness` | Harness memory readiness checks |
+Each `internal/` package's doc comment states its responsibility (`go doc
+./internal/<pkg>`); the binary entry point is `cmd/engram`.
 
-## Build & Test
+## Local gate (matches `.github/workflows/ci.yml`)
 
-- `make build` (or `go build ./...`); the binary entry point is `cmd/engram`.
-- `go test ./...` — full suite; CI additionally runs `go test -race ./...`.
-- `gofumpt -w .` to format; `golangci-lint run ./...` to lint (config in
-  `.golangci.yml`, golangci-lint v2 with gofumpt as the configured formatter).
-- CI (`.github/workflows/ci.yml`) runs a module tidy/verify check, build, race
-  tests, lint and a gofumpt format gate on every pull request and push to
-  `main`. `.github/workflows/security.yml` runs `govulncheck` on every pull
-  request, push to `main`, and weekly
-  (`go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...` locally). `make test-scripts` checks
-  shell/title controls and real Git release-history validation; main pushes
-  additionally validate the complete unreleased retained history.
+```bash
+go mod tidy -diff && go mod verify
+go build ./...
+go test -race ./...
+golangci-lint run ./... && golangci-lint fmt --diff   # CI pins golangci-lint v2.14.0
+make test-scripts
+```
 
-## Working Agreement
+`gofumpt -w .` fixes formatting (`.golangci.yml` configures gofumpt as the
+formatter). CI also checks the PR title (`scripts/check-pr-title.sh`), and on
+`main` pushes validates the complete unreleased history.
+`.github/workflows/security.yml` runs `govulncheck` on PRs, `main` pushes, and
+weekly (`go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...` locally).
+
+## Guardrails
 
 - **Zero external dependencies** beyond `gopkg.in/yaml.v3`. Prefer the standard
   library. Match the house style: small packages with one responsibility each,
@@ -115,9 +109,30 @@ is the intelligence. See `README.md` for the user-facing overview.
 - **TDD for behavior:** red → green. The red step must fail for the reason you're
   about to fix. Skip it only for code with no behavior to assert (plain data
   holders, thin glue), and cover that after.
-- Update the owning reference when a public contract or procedure changes. Keep
-  `docs/project/BACKLOG.md` future-only; agents may work from entries directly,
-  and issues help when persistent discussion or coordination is needed.
+
+## Git and releases
+
+- Squash-merge only ([policy](docs/project/GIT_HISTORY_POLICY.md)); the PR title
+  and body become the `main` commit, so PR titles are Conventional Commits.
+  `build-test-lint` is the required check; branches need not be up to date.
+- **Release Please owns releases** ([release operations](docs/releases.md)).
+  Ordinary merges only update the open release PR; merging that release PR
+  creates the `vX.Y.Z` tag and GitHub Release. Do not create competing release
+  tags. `go.mod` declares the Go language version, not the engram application
+  version. Preserve Git-derived build provenance.
+
+## Working Agreement
+
+- **Clarify before building** when a request is vague, contradictory, or skips a
+  key decision; clear, well-scoped requests need no interview.
+- **Fix small issues now; backlog the rest.** Fix simple, quick, or blocking
+  issues in this repo as part of the current change and call them out. Record in
+  `docs/project/BACKLOG.md` only what can't be finished now or needs the
+  maintainer's decision; don't open a branch or PR just for a backlog entry.
+  Keep the backlog future-only; agents may work from entries directly, and
+  issues help when persistent discussion or coordination is needed.
+- **Keep docs current** when a change makes a documented contract, boundary,
+  procedure, or direction stale.
 - **Planning and continuity.** Reuse clear task context. Save planning docs when
   decisions, acceptance, or coordination need persistence. Leave a brief handoff
   only when needed to resume unfinished work. Commit shared docs and keep status
@@ -125,7 +140,11 @@ is the intelligence. See `README.md` for the user-facing overview.
   maintained docs and repair links. Keep private working docs in the ignored
   `docs/design/`, `docs/specs/`, or `docs/plans/` directories and share private
   context through restricted channels.
-- **Release Please owns releases.** Use Conventional Commit PR titles (squash
-  merge titles become the commits parsed for release). Follow `docs/releases.md`;
-  do not create competing release tags. `go.mod` declares the Go language version,
-  not the engram application version. Preserve Git-derived build provenance.
+- **Commit and push.** Commit coherent chunks, staging by explicit path. Push
+  your task branch and open a PR once the work is complete and the local gate
+  passes; don't push directly to `main`.
+- **Merge** only under the standing merge authority in the maintainer's
+  workspace instructions, or when the maintainer asks. Without those
+  instructions in context, leave the PR for the maintainer.
+- **Re-ground after compaction** in source, this file, the owning docs, and
+  recent commits. A summary and your own earlier proposals are not user approval.
