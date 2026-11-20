@@ -30,11 +30,16 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
   and strips the `Curated Engram update (DATE):` bullets the consolidator writes
   when it folds a note. In real consolidated output (2026-10) no group carried
   either signal: the consolidator paraphrased notes into labeled bullets, so a
-  content-hash fallback (spec SC-06 / EV-NEG-02) would not have matched them. The
-  group check still has a false positive: a genuine group that merely mentions
-  the `extensions/engram/` path (a Codex session that worked on engram itself) is
-  skipped whole. Revisit when: a real consolidation shows a whole-group echo, or
-  the false positive drops a genuine group; then narrow the check to lines.
+  content-hash fallback would not have matched them. By
+  2026-11-20 that had changed: the consolidator cited `extensions/engram/` notes
+  as evidence in 12 of 20 Task Groups (none carried `extension=engram`), so the
+  group check now decides most groups. It still has a false positive: a genuine
+  group that merely mentions the `extensions/engram/` path (a Codex session that
+  worked on engram itself, or a genuine rollout folded together with a cited
+  note) is skipped whole. Whether any of the 12 mixes genuine rollouts is
+  unchecked. The revisit trigger (a real whole-group echo, or a dropped genuine
+  group) has likely fired: decide whether to narrow the check to lines, together
+  with `migrate` for Codex below. Fixtures must be synthetic.
 - **Codex curate has no verified failure-event handling.** `ExtractCodexText` now
   parses the `codex exec --json` JSONL stream and returns the final
   `agent_message`; an exit-0 run with no assistant message is reported as "no
@@ -79,11 +84,13 @@ remain implicit:
   both / same separately. `diff --native --shared` treats an invalid edit as a
   scan error where import reports `invalid`, and its `merge_base.reason` values
   (`no_recorded_base`, `lineage_mismatch`, `cross_name_comparison`,
-  `ambiguous_source`) are undocumented. Next: one relation function the three
-  share, then document the reasons.
+  `ambiguous_source`) are not listed in `docs/cli.md`, which describes them only
+  in prose. Next: one relation function the three share, then document the
+  reasons.
 - **`CONFLICT` sub-states live only in `Action.Note` text.** Unmarked file, case
   variant and held edit are told apart by `strings.HasPrefix(a.Note,
-  sync.HeldEditNote)` in `conflictNextSteps`. An additive typed `reason` on
+  sync.HeldEditNote)` in `conflictNextSteps` and in reconcile's held-edit
+  check. An additive typed `reason` on
   `Action` would let agents branch without parsing prose.
 - **A forgotten name can be live again with its tombstone kept.** `remember` and
   a curate `add` do not consult tombstones, so a re-authored memory coexists
@@ -149,8 +156,6 @@ remain implicit:
   Revisit when a supported harness exposes inspectable session-loading evidence.
   Any integration must identify the harness/session and distinguish loading
   from use, while keeping semantic judgments in agents.
-
-
 - **`migrate` for Codex.** `migrate` adopts hand-authored Claude files (per-file
   per-slug memory) that canonical supersedes, so a re-sync into the source slug
   neither duplicates nor conflicts. Codex keeps one consolidated `MEMORY.md`
@@ -162,9 +167,6 @@ remain implicit:
   content-hash loop-guard item above).
 - Skills are project-scoped only (in-repo symlinks). Global install via the
   workspace `~/.agents/skills` + skill-standardizer flow is a later promotion.
-- `review` heuristics are deliberately simple (name-token Jaccard for near-dupes;
-  scope promotion requires separate judgment). Semantic/LLM near-dupe detection is
-  Stage 2 and belongs in an agent flow, not the CLI.
 
 ## CLI contract
 
