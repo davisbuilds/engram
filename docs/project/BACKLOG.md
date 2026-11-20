@@ -30,7 +30,7 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
   and strips the `Curated Engram update (DATE):` bullets the consolidator writes
   when it folds a note. In real consolidated output (2026-10) no group carried
   either signal: the consolidator paraphrased notes into labeled bullets, so a
-  content-hash fallback (spec SC-06 / EV-NEG-02) would not have matched them. By
+  content-hash fallback would not have matched them. By
   2026-11-20 that had changed: the consolidator cited `extensions/engram/` notes
   as evidence in 12 of 20 Task Groups (none carried `extension=engram`), so the
   group check now decides most groups. It still has a false positive: a genuine
