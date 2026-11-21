@@ -59,6 +59,7 @@ Quality gates before merge:
 - `golangci-lint run ./...`
 - `golangci-lint fmt --diff` (gofumpt formatting)
 - `make test-scripts` (shell controls and real Git release-history regression checks)
+- `python3 scripts/check_comments.py` (comment ratchet against `.comment-baseline.json`)
 
 ## Branch Protection
 

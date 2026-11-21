@@ -36,6 +36,9 @@ jobs:
       - name: Test release history validation
         run: python3 -m unittest discover -s scripts -p 'test_release_history.py'
 
+      - name: Comment ratchet
+        run: python3 scripts/check_comments.py
+
       - name: Validate main push and complete unreleased history
         if: github.event_name == 'push'
         env:
