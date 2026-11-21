@@ -5,7 +5,7 @@
     ".github/dependabot.yml": 4,
     ".github/workflows/ci.yml": 8,
     ".github/workflows/release-please.yml": 3,
-    ".github/workflows/security.yml": 5,
+    ".github/workflows/security.yml": 6,
     ".github/workflows/zizmor.yml": 8,
     ".golangci.yml": 5,
     "Makefile": 6,
@@ -87,7 +87,7 @@
     "scripts/check_publication_hygiene.py": 4,
     "scripts/check_release_history.py": 6,
     "scripts/semver-next.sh": 1,
-    "scripts/semver-next_test.sh": 4,
+    "scripts/semver-next_test.sh": 5,
     "scripts/test_release_history.py": 3
   }
 }
