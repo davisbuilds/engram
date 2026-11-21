@@ -9,8 +9,6 @@ import (
 	"github.com/davisbuilds/engram/internal/schema"
 )
 
-// --- helpers ------------------------------------------------------------------
-
 func memBody(name, body string) *schema.CanonicalMemory {
 	return &schema.CanonicalMemory{
 		Name: name, Description: "desc of " + name, Type: schema.TypeLesson,
@@ -113,8 +111,6 @@ func TestMigrateEV02ExactNameAdoption(t *testing.T) {
 	assertIndexHasMarked(t, dir, "alpha")
 	assertSyncClean(t, dir, m)
 }
-
-// --- provenance tier independent of slug-equality -----------------------------
 
 func TestMigrateProvenanceTier(t *testing.T) {
 	dir := t.TempDir()
@@ -318,8 +314,6 @@ func TestMigrateEV07SteadyStateConvergence(t *testing.T) {
 		t.Errorf("codex-only should still be a legitimate CREATE post-migrate; actions=%v", after)
 	}
 }
-
-// --- assertions ---------------------------------------------------------------
 
 func mustPlan(t *testing.T, tgt ClaudeTarget) []Action {
 	t.Helper()
