@@ -98,12 +98,12 @@ func TestPlanDecisionTable(t *testing.T) {
 		existing *schema.CanonicalMemory
 		cand     *schema.CanonicalMemory
 		want     Outcome
-		wantSrc  string // provenance.source on the memory Plan says to persist
+		wantSrc  string
 	}{
 		{"absent is created", nil, imported, Created, ""},
 		{"identical is unchanged", imported, imported, Unchanged, ""},
 		{
-			// The regression: an importer that started stamping provenance.source
+			// WHY: The regression: an importer that started stamping provenance.source
 			// after canonical was written must backfill it, not conflict forever.
 			"provenance-only backfill of an empty field",
 			imported,
@@ -111,15 +111,13 @@ func TestPlanDecisionTable(t *testing.T) {
 			Updated, "a-mem.md",
 		},
 		{
-			// A differing non-empty provenance value is not a content conflict, and
-			// the stored value wins: nothing to write.
 			"provenance-only difference in a populated field keeps the stored value",
 			withProv(base, schema.Provenance{Origin: "import:codex"}),
 			withProv(base, schema.Provenance{Origin: "import:claude-code"}),
 			Unchanged, "",
 		},
 		{
-			// Origin and Source together identify where a memory came from; filling
+			// WHY: Origin and Source together identify where a memory came from; filling
 			// only Source under a different Origin would make a hybrid that two
 			// consumers (origin-based propagation, source-based migrate) read as
 			// different harnesses.
@@ -229,7 +227,6 @@ func TestSaveBackfillsProvenanceWithoutForce(t *testing.T) {
 		t.Errorf("backfill altered content: %+v", got)
 	}
 
-	// Second time round it is a no-op.
 	if out2, _, _ := Save(root, cand, false); out2 != Unchanged {
 		t.Errorf("repeat outcome = %q, want unchanged", out2)
 	}

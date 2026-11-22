@@ -32,7 +32,7 @@ func unsandboxed(root string) ([]string, error) {
 		if rerr != nil {
 			return rerr
 		}
-		// testhome's own tests call Main unqualified.
+		// WHY: testhome's own tests call Main unqualified.
 		if strings.Contains(string(body), "testhome.Main(m)") || strings.Contains(string(body), "{ Main(m) }") {
 			guarded[dir] = true
 		}

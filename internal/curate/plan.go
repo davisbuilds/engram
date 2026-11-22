@@ -105,13 +105,13 @@ func Fingerprint(root string) (Binding, error) {
 				return err
 			}
 			if info.IsDir() {
-				// Discovery does not descend into a linked directory, and
+				// WHY: Discovery does not descend into a linked directory, and
 				// rollback restores the link, not what it points at, so
 				// the link is all the state there is.
 				h.Write([]byte("dirlink\x00" + target))
 				content = false
 			} else {
-				// Discovery reads a memory through its link, so both the
+				// WHY: Discovery reads a memory through its link, so both the
 				// link and what it points at are state.
 				h.Write([]byte("link\x00" + target + "\x00"))
 			}

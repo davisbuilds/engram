@@ -214,7 +214,7 @@ func applyToWorkingSet(op Operation, working map[string]*schema.CanonicalMemory)
 }
 
 func validateOne(op Operation, existing map[string]*schema.CanonicalMemory) error {
-	// A name an operation targets must be a memory name before it is looked up:
+	// WHY: A name an operation targets must be a memory name before it is looked up:
 	// a path-shaped one is refused for what it is.
 	if op.Name != "" && !schema.ValidName(op.Name) {
 		return fmt.Errorf("%s target %q is not a valid memory name", op.Op, op.Name)
@@ -254,7 +254,7 @@ func validateOne(op Operation, existing map[string]*schema.CanonicalMemory) erro
 			if !schema.ValidName(s) {
 				return fmt.Errorf("merge source %q is not a valid memory name", s)
 			}
-			// A repeated source would pass the two-source rule while merging
+			// WHY: A repeated source would pass the two-source rule while merging
 			// one memory, a rename under another name.
 			if seen[s] {
 				return fmt.Errorf("merge lists source %q more than once", s)
@@ -267,7 +267,7 @@ func validateOne(op Operation, existing map[string]*schema.CanonicalMemory) erro
 		if op.Memory == nil {
 			return fmt.Errorf("merge requires the merged memory")
 		}
-		// The merged memory's name must be new or one of the sources; otherwise
+		// WHY: The merged memory's name must be new or one of the sources; otherwise
 		// applying it would force-overwrite an existing, unrelated memory.
 		if _, exists := existing[op.Memory.Name]; exists && !contains(op.Sources, op.Memory.Name) {
 			return fmt.Errorf("merge target %q already exists and is not among the sources; refusing to overwrite unrelated canonical content", op.Memory.Name)
@@ -292,7 +292,6 @@ func validateOne(op Operation, existing map[string]*schema.CanonicalMemory) erro
 		if op.ToScope == "" {
 			return fmt.Errorf("rescope requires to_scope")
 		}
-		// Validate the target scope by applying it to a copy and revalidating.
 		probe := *m
 		probe.Scope = op.ToScope
 		return probe.Validate()
@@ -328,7 +327,7 @@ func ApplyPlan(root string, p *Plan) ([]Applied, error) {
 }
 
 func apply(root string, ops []Operation, plan *Plan) ([]Applied, error) {
-	// Hold the canonical-root lock across discovery, validation, and the whole
+	// WHY: Hold the canonical-root lock across discovery, validation, and the whole
 	// multi-file mutation so no other writer can change canonical between the
 	// check and the writes, and the merge/remove sequence never half-applies.
 	release, err := lock.Acquire(root)
@@ -337,7 +336,7 @@ func apply(root string, ops []Operation, plan *Plan) ([]Applied, error) {
 	}
 	defer release()
 
-	// Tombstones written through a linked .forgotten would land where neither
+	// WHY: Tombstones written through a linked .forgotten would land where neither
 	// the plan's binding nor the rollback snapshot looks.
 	if err := CheckHistory(root); err != nil {
 		return nil, err
@@ -353,7 +352,7 @@ func apply(root string, ops []Operation, plan *Plan) ([]Applied, error) {
 	if derr != nil {
 		return nil, fmt.Errorf("re-discover canonical under lock: %w", derr)
 	}
-	// A malformed canonical file is omitted from the corpus, so an add/merge could
+	// WHY: A malformed canonical file is omitted from the corpus, so an add/merge could
 	// silently force-overwrite it. Refuse to mutate a store that does not fully
 	// parse; the operator fixes the bad file first.
 	if len(perrs) > 0 {
@@ -374,7 +373,7 @@ func apply(root string, ops []Operation, plan *Plan) ([]Applied, error) {
 		if err != nil {
 			err = fmt.Errorf("apply %s: %w", op.Op, err)
 			if rerr := snap.restore(root); rerr != nil {
-				// Report what is still changed on disk, not which operations
+				// WHY: Report what is still changed on disk, not which operations
 				// ran: rollback may have undone those, and the failing
 				// operation may have left writes of its own.
 				left, cerr := snap.changed(root)
@@ -415,7 +414,7 @@ func applyOne(root string, op Operation) (Applied, error) {
 		var removed []string
 		for _, s := range op.Sources {
 			if s == op.Memory.Name {
-				continue // the merged memory reuses this name; keep it
+				continue // WHY: the merged memory reuses this name; keep it
 			}
 			if err := forget(root, s, tombstone.Note{Reason: op.Reason, Successor: op.Memory.Name}); err != nil {
 				return Applied{}, err
@@ -429,7 +428,7 @@ func applyOne(root string, op Operation) (Applied, error) {
 		}
 		return Applied{Op: op.Op, Name: op.Name, Removed: []string{op.Name}}, nil
 	case OpRescope:
-		// Load the current on-disk memory so a rescope after an update/merge of
+		// WHY: Load the current on-disk memory so a rescope after an update/merge of
 		// the same name in this batch operates on the latest content, not a stale
 		// snapshot (which would silently discard the earlier op's change).
 		m, _, found, err := store.Load(root, op.Name)
@@ -544,7 +543,7 @@ func firstJSONObject(text string) (string, bool) {
 		case c == '"':
 			inStr = !inStr
 		case inStr:
-			// nothing
+			// WHY: a brace inside a string literal does not change the depth.
 		case c == '{':
 			depth++
 		case c == '}':

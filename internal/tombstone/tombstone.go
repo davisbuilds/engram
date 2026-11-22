@@ -125,7 +125,7 @@ func Restore(root, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// The recorded text is written back as canonical, so it must be a valid
+	// WHY: The recorded text is written back as canonical, so it must be a valid
 	// memory of this very name: a corrupt or mismatched record would otherwise
 	// land as a broken file or a duplicate of another memory.
 	m, perr := schema.Parse([]byte(ts.Memory))
@@ -151,7 +151,7 @@ func Restore(root, name string) (string, error) {
 	if err := os.Remove(Path(root, name)); err != nil {
 		return path, err
 	}
-	// The newest earlier record, if any, becomes the latest: it keeps blocking
+	// WHY: The newest earlier record, if any, becomes the latest: it keeps blocking
 	// its origin and is what a later restore would bring back.
 	if n := archives(root, name); n > 0 {
 		if err := os.Rename(archivePath(root, name, n), Path(root, name)); err != nil {

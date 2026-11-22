@@ -61,7 +61,7 @@ func Locate(root string) ([]Located, []ParseError, error) {
 			perrs = append(perrs, ParseError{Path: path, Err: perr})
 			return nil
 		}
-		// Parsing is lenient; the schema is what every consumer (scope
+		// WHY: Parsing is lenient; the schema is what every consumer (scope
 		// matching, rendered commands, file names) relies on.
 		if verr := m.Validate(); verr != nil {
 			perrs = append(perrs, ParseError{Path: path, Name: m.Name, Err: verr})

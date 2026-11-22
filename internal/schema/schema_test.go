@@ -71,7 +71,6 @@ func TestParseUnterminatedFrontmatter(t *testing.T) {
 }
 
 func TestParseRejectsMergeMarkers(t *testing.T) {
-	// A git-conflicted canonical file must be refused, never parsed and rendered.
 	conflicted := "---\nname: x\ndescription: y\ntype: lesson\nscope: global\n---\n" +
 		"<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch\n"
 	if _, err := Parse([]byte(conflicted)); err == nil {

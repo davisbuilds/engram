@@ -18,7 +18,7 @@ const staleAfter = 30 * 24 * time.Hour
 // empty once its engram echo bullets are removed. A missing file yields an empty
 // result.
 func ImportCodex(memoryFile string) (Result, error) {
-	// Scope derives from each Task Group's recorded `applies_to: cwd=<path>`, a
+	// WHY: Scope derives from each Task Group's recorded `applies_to: cwd=<path>`, a
 	// historical path that may not resolve on this machine, so a Codex import is
 	// provisional (ScopeAuthoritative stays false): it preserves an existing
 	// memory's scope rather than re-deriving it. See cli.decideImportScope.

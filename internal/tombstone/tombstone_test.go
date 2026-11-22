@@ -105,7 +105,6 @@ func TestRestoreRoundTripsByteForByte(t *testing.T) {
 		t.Fatal(err)
 	}
 	orig := saveMem(t, root, "nested", "import:claude-code")
-	// Move it into a subdirectory: restore must return it to where it was.
 	if err := os.Rename(filepath.Join(root, "nested.md"), filepath.Join(root, "sub", "nested.md")); err != nil {
 		t.Fatal(err)
 	}
@@ -217,8 +216,6 @@ func TestForgettingANameTwiceKeepsBothRecords(t *testing.T) {
 	if ts, ok := set.Latest("shared"); !ok || ts.Reason != "two" {
 		t.Errorf("Latest = %+v, want the second forget", ts)
 	}
-	// Restoring brings back the latest; the earlier record keeps blocking and
-	// becomes the one a later restore would bring back.
 	if _, err := Restore(root, "shared"); err != nil {
 		t.Fatal(err)
 	}

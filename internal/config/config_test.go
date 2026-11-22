@@ -45,8 +45,6 @@ func TestLoadOverridesAndMerges(t *testing.T) {
 	if cfg.Harnesses[HarnessCodex].Enabled() {
 		t.Error("codex should be disabled per config")
 	}
-	// Once harnesses: is present, an unlisted harness is disabled rather than
-	// enabled at the real default home; it keeps that home for reporting.
 	if cfg.Harnesses[HarnessClaude].Enabled() {
 		t.Error("claude is not listed under harnesses:, so it should be disabled")
 	}
@@ -66,7 +64,7 @@ func TestHostLabelUnknownIsNotOK(t *testing.T) {
 }
 
 func TestCurateModelDefaults(t *testing.T) {
-	cfg, err := Load("") // no file: built-in defaults
+	cfg, err := Load("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +79,6 @@ func TestCurateModelDefaults(t *testing.T) {
 }
 
 func TestCurateModelPartialOverrideFallsBack(t *testing.T) {
-	// A config that sets only the model must inherit the default effort.
 	cfg := &Config{Curate: CurateConfig{Models: map[string]ModelChoice{
 		HarnessClaude: {Model: "claude-opus-5"},
 	}}}

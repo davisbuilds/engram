@@ -143,7 +143,7 @@ func TestSaveLeavesCanonicalAheadUnlessForced(t *testing.T) {
 func TestPlanIgnoresACandidateHashThatDoesNotMatchItsContent(t *testing.T) {
 	s := stored("original\n")
 	c := imported("edited\n")
-	c.Provenance.ImportHash = s.Provenance.ImportHash // stale: describes "original"
+	c.Provenance.ImportHash = s.Provenance.ImportHash // WHY: stale: describes "original"
 	if out, _ := Plan(s, c); out != Conflict {
 		t.Errorf("Plan = %s, want conflict", out)
 	}

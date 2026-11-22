@@ -31,7 +31,7 @@ type claudeNative struct {
 // files are ignored. A missing directory yields an empty result.
 func ImportClaude(memoryDir, cwd string) (Result, error) {
 	scope := projectScopeFromRepo(cwd)
-	// A single import may revise an existing memory's scope only when its cwd is a
+	// WHY: A single import may revise an existing memory's scope only when its cwd is a
 	// live directory on this machine — then the repo probe is ground truth. A --cwd
 	// naming a deleted or unmounted project resolves to global without erroring, so
 	// treat it as provisional (never authoritative) lest it force-widen exactly the
@@ -58,14 +58,14 @@ func ImportClaude(memoryDir, cwd string) (Result, error) {
 		front, body, ok := frontmatterAndBody(data)
 		if !ok {
 			if opensFrontmatterFence(data) {
-				// An opening `---` with no parseable closing fence — truncated, or
+				// WHY: An opening `---` with no parseable closing fence — truncated, or
 				// CRLF/alternate line endings we don't split on. This is malformed
 				// frontmatter, not an absence of it: report it rather than force-import
 				// the raw document (which would also bypass the origin loop guard).
 				res.Dropped = append(res.Dropped, Dropped{Source: fname, Reason: "malformed frontmatter: opening fence without a parseable closing fence (check line endings)"})
 				continue
 			}
-			// Genuinely no frontmatter: recover the memory rather than lose it. The
+			// WHY: Genuinely no frontmatter: recover the memory rather than lose it. The
 			// filename supplies the name, the first heading the description, and the
 			// whole file the body.
 			name := Slugify(fileBase)
@@ -92,7 +92,7 @@ func ImportClaude(memoryDir, cwd string) (Result, error) {
 			res.Skipped = append(res.Skipped, n.Name)
 			continue
 		}
-		// Normalize the native name to kebab-case: real Claude names are free text
+		// WHY: Normalize the native name to kebab-case: real Claude names are free text
 		// (sentences, snake_case), which canonical rejects. Fall back to the
 		// filename when the frontmatter name is absent or all punctuation.
 		name := Slugify(n.Name)
@@ -150,7 +150,7 @@ func deriveTitle(body, fileBase string) string {
 // project. Results across all slugs are merged; a missing projects dir yields an
 // empty result. Unlike single import, this needs no cwd — the slug carries it.
 func ImportClaudeAll(claudeHome string) (Result, error) {
-	// A full-tree sweep derives each project's scope from a reconstructed slug path
+	// WHY: A full-tree sweep derives each project's scope from a reconstructed slug path
 	// that may not resolve on this machine, so the aggregate is provisional (it
 	// preserves, rather than revises, an existing memory's scope) even though the
 	// inner single imports it aggregates are individually authoritative.
@@ -169,7 +169,7 @@ func ImportClaudeAll(claudeHome string) (Result, error) {
 		}
 		slug := e.Name()
 		memDir := filepath.Join(projectsDir, slug, "memory")
-		// Resolve the slug to the cwd ImportClaude derives scope from; an empty cwd
+		// WHY: Resolve the slug to the cwd ImportClaude derives scope from; an empty cwd
 		// (unresolvable slug) yields global, exactly as a deleted project should.
 		cwd, _ := pathFromClaudeSlug(slug)
 		sub, err := ImportClaude(memDir, cwd)
@@ -180,7 +180,7 @@ func ImportClaudeAll(claudeHome string) (Result, error) {
 		res.Skipped = append(res.Skipped, sub.Skipped...)
 		res.Dropped = append(res.Dropped, sub.Dropped...)
 	}
-	// Judged over the merged batch, which supersedes each slug's own report.
+	// WHY: Judged over the merged batch, which supersedes each slug's own report.
 	clearAmbiguous(&res, claudeSource)
 	return res, nil
 }

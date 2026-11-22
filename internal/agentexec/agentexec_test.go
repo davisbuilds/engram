@@ -14,7 +14,7 @@ import (
 
 func TestClaudeArgvSeparatorAlwaysBeforePrompt(t *testing.T) {
 	cases := [][]string{
-		{}, // no tools
+		{},
 		{"Read"},
 		{"Read", "Edit"},
 	}
@@ -32,7 +32,6 @@ func TestClaudeArgvSeparatorAlwaysBeforePrompt(t *testing.T) {
 		if argv[len(argv)-2] != "--" {
 			t.Errorf("`--` must immediately precede the prompt: %v", argv)
 		}
-		// The prompt must never be adjacent to a tool flag value.
 		for i, a := range argv[:len(argv)-1] {
 			if a == "the prompt" {
 				t.Errorf("prompt appeared before the separator at index %d: %v", i, argv)
@@ -86,7 +85,7 @@ func TestClaudeInvocationCarriesModelEffortAndJSON(t *testing.T) {
 			t.Errorf("argv missing %q: %v", want, argv)
 		}
 	}
-	// The proposer must run with all tools explicitly disabled (--tools ""): the
+	// WHY: The proposer must run with all tools explicitly disabled (--tools ""): the
 	// corpus is untrusted, and an absent --allowedTools does not disable tools.
 	found := false
 	for i := 0; i < len(argv)-1; i++ {
@@ -239,7 +238,7 @@ func TestExtractCodexTextErrorsWithoutAgentMessage(t *testing.T) {
 func TestExtractCodexTextFailsClosedOnMalformedEvent(t *testing.T) {
 	stream := strings.Join([]string{
 		codexItemLine(t, "agent_message", "superseded proposal"),
-		`{"type":"item.completed","item":{"id":"item_1","type":"agent_mess`, // truncated final line
+		`{"type":"item.completed","item":{"id":"item_1","type":"agent_mess`,
 	}, "\n")
 	if _, err := ExtractCodexText([]byte(stream)); err == nil {
 		t.Error("a malformed JSON event after a valid message must fail closed, not return the earlier message")
@@ -345,7 +344,7 @@ func processAlive(pid int) bool {
 	}
 	out, err := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
 	if err != nil {
-		return false // ps exits non-zero once the pid is gone
+		return false // WHY: ps exits non-zero once the pid is gone
 	}
 	return !strings.HasPrefix(strings.TrimSpace(string(out)), "Z")
 }

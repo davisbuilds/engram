@@ -148,13 +148,13 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Decode harnesses into an empty map, not the defaults: yaml merges into an
+	// WHY: Decode harnesses into an empty map, not the defaults: yaml merges into an
 	// existing map, which would keep every unlisted harness enabled.
 	cfg.Harnesses = nil
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
-	// A bare or null harnesses: key decodes to a nil map, the same as no key at
+	// WHY: A bare or null harnesses: key decodes to a nil map, the same as no key at
 	// all; the section is present, though, so it must still disable every harness.
 	if cfg.Harnesses == nil {
 		var keys map[string]any
