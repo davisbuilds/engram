@@ -1,9 +1,8 @@
 BINARY := engram
 BIN_DIR := bin
-# Install prefix; the binary lands in $(PREFIX)/bin. Override with `make install PREFIX=/usr/local`.
 PREFIX ?= $(HOME)/.local
 
-# Stamp the version from git so `engram version` reports something meaningful
+# WHY: Stamp the version from git so `engram version` reports something meaningful
 # instead of the 0.0.0-dev default. Falls back to "dev" outside a git checkout.
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -X github.com/davisbuilds/engram/internal/version.Version=$(VERSION)
@@ -13,7 +12,6 @@ LDFLAGS := -X github.com/davisbuilds/engram/internal/version.Version=$(VERSION)
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) ./cmd/engram
 
-# Build with the version stamp and install onto PATH (default ~/.local/bin).
 install:
 	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) ./cmd/engram
 	mkdir -p $(PREFIX)/bin
@@ -40,7 +38,7 @@ fmt:
 clean:
 	rm -rf $(BIN_DIR)
 
-# Read-only diagnostic; Release Please owns release version selection and tags.
+# WHY: Read-only diagnostic; Release Please owns release version selection and tags.
 # Override LEVEL=minor or LEVEL=major to preview a different mathematical bump.
 LEVEL ?= patch
 next-version:

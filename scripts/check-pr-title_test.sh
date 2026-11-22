@@ -13,7 +13,7 @@ for title in 'Add a feature' 'fix:' 'fix: ' 'fix:   ' 'fix((scope): invalid' $'f
 done
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
-# The substitution is intentionally literal hostile input, not shell code.
+# WHY: The substitution is intentionally literal hostile input, not shell code.
 # shellcheck disable=SC2016
 PR_TITLE='fix: $(touch '"$scratch"'/injected)' "$here/check-pr-title.sh"
 if [ -e "$scratch/injected" ]; then

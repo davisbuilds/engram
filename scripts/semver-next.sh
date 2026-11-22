@@ -27,7 +27,6 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
 	exit 1
 fi
 
-# Latest vX.Y.Z tag by semver order; empty when the repo has no version tags yet.
 latest="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || true)"
 if [ -z "$latest" ]; then
 	major=0 minor=0 patch=0
