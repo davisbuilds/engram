@@ -46,7 +46,6 @@ func cmdHook(e *env, name string, args []string) int {
 		return exitOK
 	}
 
-	// Human mode: emit the paste-ready fragment on stdout, the guidance on stderr.
 	b, err := json.MarshalIndent(fragment, "", "  ")
 	if err != nil {
 		e.emit(name, false, nil, nil, &RespError{Code: "encode", Message: err.Error()}, nil)

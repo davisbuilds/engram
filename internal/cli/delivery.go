@@ -98,7 +98,7 @@ func (h *harnessInventory) claudeSharedRoute(home string) {
 
 func (h *harnessInventory) codexRoute(home string) {
 	dir := codexExtDir(home)
-	// The notes directory is already scanned by inventory; reuse that evidence
+	// WHY: The notes directory is already scanned by inventory; reuse that evidence
 	// rather than creating a second observation with a potentially different view.
 	for _, loc := range h.Locations {
 		if loc.Kind == "codex_notes" {

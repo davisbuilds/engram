@@ -37,7 +37,7 @@ func TestDecideImportScope_NewSeeds(t *testing.T) {
 // surfaces a note naming both scopes.
 func TestDecideImportScope_ProvisionalPreservesAndNotes(t *testing.T) {
 	existing := mem("project:foo", "d", "b")
-	cand := mem("global", "d", "b2") // repo absent on this machine -> derived global
+	cand := mem("global", "d", "b2") // WHY: repo absent on this machine -> derived global
 	got, force, note := decideImportScope(existing, cand, false)
 	if got != "project:foo" {
 		t.Fatalf("scope: got %q, want project:foo (preserved)", got)
@@ -113,7 +113,7 @@ func TestDecideImportScope_AuthoritativeBodyDiffDoesNotForce(t *testing.T) {
 // brings no change, so it raises no note either (it would repeat every run).
 func TestMergeImportsProvisionalPreservesScope(t *testing.T) {
 	existing := []*schema.CanonicalMemory{mem("project:foo", "d", "b")}
-	// Reconstructed sweep on a machine lacking the repo derives global for the same
+	// WHY: Reconstructed sweep on a machine lacking the repo derives global for the same
 	// memory (identical body, only scope differs).
 	cand := mem("global", "d", "b")
 	imports := []importGather{{

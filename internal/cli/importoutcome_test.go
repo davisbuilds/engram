@@ -77,7 +77,7 @@ func TestImportApplyBackfillsProvenanceThenSettles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Age the canonical file: strip the source stamp an older importer never wrote.
+	// WHY: Age the canonical file: strip the source stamp an older importer never wrote.
 	var aged []string
 	for _, ln := range strings.Split(string(written), "\n") {
 		if !strings.HasPrefix(strings.TrimSpace(ln), "source:") {
@@ -98,7 +98,6 @@ func TestImportApplyBackfillsProvenanceThenSettles(t *testing.T) {
 	}
 	_ = claudeMem
 
-	// Settled: another pass changes nothing.
 	if code := Run(append([]string{"import", "claude-code", "--apply"}, args...)); code != exitOK {
 		t.Errorf("third import exit = %d, want %d", code, exitOK)
 	}
@@ -254,7 +253,6 @@ func TestImportRefreshOverwritesOnlyTheNamedConflict(t *testing.T) {
 		return code, by
 	}
 
-	// Dry-run shows what the refresh would overwrite, and the other stays a conflict.
 	_, dry := rows("--refresh", "claude-lesson")
 	if dry["claude-lesson"]["outcome"] != "updated" || !strings.Contains(dry["claude-lesson"]["differs"], "body") {
 		t.Errorf("dry-run refreshed row = %v, want updated with differs naming body", dry["claude-lesson"])

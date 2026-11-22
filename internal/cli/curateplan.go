@@ -119,7 +119,7 @@ func (e *env) savePlan(name, out, root string, binding curate.Binding, proposer 
 		e.emit(name, false, data, warns, &RespError{Code: "plan_write", Message: err.Error()}, nil)
 		return exitError
 	}
-	// The path was checked before the agent ran; check it again, since it had
+	// WHY: The path was checked before the agent ran; check it again, since it had
 	// all that time to change.
 	path, rerr := checkPlanOut(out, root)
 	if rerr != nil {

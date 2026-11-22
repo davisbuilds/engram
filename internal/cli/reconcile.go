@@ -35,7 +35,6 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		return exitError
 	}
 
-	// 1. Import each enabled harness (read-only gather) and read current canonical.
 	imports, warns, ierr := s.gatherImports()
 	if ierr != nil {
 		e.emit(name, false, nil, warns, ierr, nil)
@@ -48,13 +47,13 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		return exitError
 	}
 	mems, perrs, keepStale := pre.mems, pre.perrs, pre.keepStale
-	// The canonical warnings sit at warns[canonAt:canonEnd]; under --apply
+	// WHY: The canonical warnings sit at warns[canonAt:canonEnd]; under --apply
 	// they are replaced by the warnings of the read propagation renders from.
 	canonAt := len(warns)
 	warns = append(warns, pre.warns...)
 	canonEnd := len(warns)
 
-	// Simulate the imports against current canonical (same rule as store.Save:
+	// WHY: Simulate the imports against current canonical (same rule as store.Save:
 	// new name -> created, identical -> unchanged, differing name-collision ->
 	// conflict, keeping the existing memory). The merged set is what review and
 	// propagation run against in *both* dry-run and apply, so the preview reflects
@@ -88,7 +87,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		}
 	}
 
-	// Edits made in place to Claude's shared renders are an import source of
+	// WHY: Edits made in place to Claude's shared renders are an import source of
 	// their own, judged by each render's stamp after the native imports.
 	sharedPlans, rerr := s.sharedEditPlans(canonView{mems: merged, perrs: perrs, keepStale: keepStale}, tombs, nil)
 	if rerr != nil {
@@ -111,22 +110,22 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		}
 	}
 
-	// 2. Under --apply, persist the imports to canonical (same outcomes as
-	// simulated), then propagate, all under one exclusive lock.
+	// WHY: under --apply, the imports persist with the simulated outcomes and
+	// propagation follows, all under one exclusive lock.
 	if e.apply {
 		if e.beforeApplyLock != nil {
 			e.beforeApplyLock()
 		}
-		absent := rootAbsent(root) // before the lock creates it
+		absent := rootAbsent(root) // WHY: before the lock creates it
 		release, lerr := canonLock(root)
 		if lerr != nil {
 			e.emit(name, false, nil, warns, lerr, nil)
 			return exitError
 		}
-		// Held through propagation: no writer lands between the read below and
+		// WHY: Held through propagation: no writer lands between the read below and
 		// the last render written from it.
 		defer release()
-		// Re-read the tombstones under the lock: a forget that landed since the
+		// WHY: Re-read the tombstones under the lock: a forget that landed since the
 		// simulation must still keep its memory out.
 		tombs, terr = tombstone.Load(root)
 		if terr != nil {
@@ -136,7 +135,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 		for _, imp := range imports {
 			for _, m := range imp.result.Memories {
 				if tombs.Blocks(m) || m.Validate() != nil {
-					continue // forgotten, or already counted as invalid in the simulation
+					continue // WHY: forgotten, or already counted as invalid in the simulation
 				}
 				if _, _, serr := store.Save(root, m, false); serr != nil {
 					e.emit(name, false, nil, warns, &RespError{Code: "save", Message: serr.Error()}, nil)
@@ -148,7 +147,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 			e.emit(name, false, nil, warns, &RespError{Code: "save", Message: serr.Error()}, nil)
 			return exitError
 		}
-		// Propagate canonical as it is now, not the simulated set: what the
+		// WHY: Propagate canonical as it is now, not the simulated set: what the
 		// imports wrote, a skipped shared-edit fast-forward, and whatever
 		// another writer changed since the simulation (a removal, a content or
 		// scope edit, a file that no longer parses, which holds removals).
@@ -166,8 +165,8 @@ func cmdReconcile(e *env, name string, _ []string) int {
 			importEntries[sharedEntry]["results"] = sharedEditRows(sharedPlans)
 		}
 	}
-	// 3. Review + propagate against the merged set (as simulated; under
-	// --apply, canonical as written).
+	// WHY: under --apply, merged now holds canonical as written, not the
+	// simulated set.
 	findings := review.Analyze(merged)
 	reviewItems := make([]map[string]any, 0, len(findings))
 	var next []NextStep
@@ -178,7 +177,7 @@ func cmdReconcile(e *env, name string, _ []string) int {
 
 	next = append(next, orphanNext...)
 	next = append(next, sharedEditNextSteps(sharedPlans)...)
-	// sync's generic lead for a held edit defers to the specific ones above.
+	// WHY: sync's generic lead for a held edit defers to the specific ones above.
 	planned := map[string]bool{}
 	for _, p := range sharedPlans {
 		planned[p.edit.Name] = true
@@ -260,19 +259,19 @@ func mergeImports(existing []*schema.CanonicalMemory, imports []importGather, wi
 	for _, imp := range imports {
 		outcomes := make([]map[string]string, 0, len(imp.result.Memories))
 		for _, m := range imp.result.Memories {
-			// A forgotten memory stays forgotten while its native lives on.
+			// WHY: A forgotten memory stays forgotten while its native lives on.
 			if tombs.Blocks(m) {
 				outcomes = append(outcomes, forgottenRow(m.Name))
 				continue
 			}
-			// A withheld canonical file still owns its name; store.Save refuses it,
+			// WHY: A withheld canonical file still owns its name; store.Save refuses it,
 			// so the preview must too, and it must not join the merged set.
 			if reason, ok := withheld[m.Name]; ok {
 				outcomes = append(outcomes, map[string]string{"name": m.Name, "outcome": string(store.Conflict), "withheld": reason})
 				hadConflict = true
 				continue
 			}
-			// Resolve scope against existing canonical before simulating the save, so
+			// WHY: Resolve scope against existing canonical before simulating the save, so
 			// a reconstructed-path import never silently re-scopes a memory and the
 			// preview matches what apply (which reuses these candidates) will do.
 			scp, _, note := decideImportScope(byName[m.Name], m, imp.result.ScopeAuthoritative)
@@ -289,7 +288,7 @@ func mergeImports(existing []*schema.CanonicalMemory, imports []importGather, wi
 			outcome, planned := store.Plan(stored, m)
 			switch outcome {
 			case store.Created, store.Updated:
-				add(planned) // Updated carries the backfilled provenance apply will write
+				add(planned) // WHY: Updated carries the backfilled provenance apply will write
 			case store.Conflict:
 				hadConflict = true
 			}
@@ -363,7 +362,7 @@ func outcomeEntry(name string, outcome store.Outcome, stored, cand *schema.Canon
 	case store.Conflict, store.CanonicalAhead:
 		entry["differs"] = strings.Join(store.Diff(stored, cand), ",")
 	case store.Updated:
-		// A fast-forward names what it took from the native (description, type,
+		// WHY: A fast-forward names what it took from the native (description, type,
 		// body); a provenance backfill has nothing to name.
 		var d []string
 		for _, f := range store.Diff(stored, cand) {

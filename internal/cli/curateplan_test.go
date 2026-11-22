@@ -760,7 +760,7 @@ func TestCurateSavePlanRefusesAnUnsafeOutputPath(t *testing.T) {
 		{"existing file", f.plan, "plan_exists"},
 		{"inside the store", filepath.Join(f.canon, "plan.json"), "plan_path"},
 		{"through a link into the store", filepath.Join(link, "plan.json"), "plan_path"},
-		// Lexically this is f.dir/up.json, but the kernel resolves the ".."
+		// WHY: Lexically this is f.dir/up.json, but the kernel resolves the ".."
 		// from the link's target, which is in the store.
 		{"up from a link into the store", subLink + sep + ".." + sep + "up.json", "plan_path"},
 		{"not a file name", f.dir + sep, "plan_path"},

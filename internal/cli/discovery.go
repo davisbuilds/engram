@@ -37,7 +37,7 @@ func commandMetadata() []commandInfo {
 	for _, c := range commands() {
 		spec := c.args
 		if spec == nil {
-			// remember uses FlagSet; inspect its actual registrations. Do not
+			// WHY: remember uses FlagSet; inspect its actual registrations. Do not
 			// maintain an independent list that can drift from authoring.
 			fs, _ := rememberFlags()
 			spec = &argSpec{}

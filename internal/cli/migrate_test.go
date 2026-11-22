@@ -17,10 +17,8 @@ func TestRunMigrateRoundTrip(t *testing.T) {
 	canon := filepath.Join(dir, "canonical")
 	claude := filepath.Join(dir, "claude")
 	slugMem := filepath.Join(claude, "projects", "-work-x", "memory")
-	// Hand-authored: free-text name, filename differs from the canonical name.
 	writeFile(t, filepath.Join(slugMem, "obsidian_vault.md"),
 		"---\nname: Obsidian vault location\ndescription: where\nmetadata:\n  type: reference\n---\nvault body\n")
-	// A hand-authored MEMORY.md index line pointing at the original file.
 	writeFile(t, filepath.Join(slugMem, "MEMORY.md"),
 		"- [Obsidian vault location](obsidian_vault.md) — where\n")
 	cfg := filepath.Join(dir, "c.yaml")
@@ -28,12 +26,10 @@ func TestRunMigrateRoundTrip(t *testing.T) {
 	defer silenceStdout(t)()
 	c := []string{"--config", cfg, "--cwd", "/work/x", "--json"}
 
-	// 1) Import → canonical obsidian-vault-location.md (normalized).
 	if code := Run(append([]string{"import", "claude-code", "--apply"}, c...)); code != exitOK {
 		t.Fatalf("import exit = %d", code)
 	}
 
-	// 2) Migrate dry-run classifies the original as ADOPT.
 	out := captureStdout(t, func() {
 		if code := Run(append([]string{"migrate", "claude-code"}, c...)); code != exitOK {
 			t.Fatalf("migrate dry-run exit = %d", code)
@@ -42,12 +38,10 @@ func TestRunMigrateRoundTrip(t *testing.T) {
 	if !strings.Contains(out, "\"ADOPT\"") || !strings.Contains(out, "obsidian_vault") {
 		t.Fatalf("migrate dry-run should classify obsidian_vault as ADOPT; got:\n%s", out)
 	}
-	// Dry-run wrote nothing: the original file is still there.
 	if _, err := os.Stat(filepath.Join(slugMem, "obsidian_vault.md")); err != nil {
 		t.Fatalf("dry-run must not modify the slug: %v", err)
 	}
 
-	// 3) Migrate --apply adopts the original in place.
 	if code := Run(append([]string{"migrate", "claude-code", "--apply"}, c...)); code != exitOK {
 		t.Fatalf("migrate --apply exit = %d", code)
 	}
@@ -63,7 +57,6 @@ func TestRunMigrateRoundTrip(t *testing.T) {
 		t.Errorf("adopted file is not engram-owned:\n%s", got)
 	}
 
-	// 4) A subsequent sync into the same slug is clean — no CONFLICT, no duplicate.
 	out = captureStdout(t, func() {
 		if code := Run(append([]string{"sync"}, c...)); code != exitOK {
 			t.Fatalf("post-migrate sync exit = %d", code)

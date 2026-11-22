@@ -45,15 +45,12 @@ func TestRunReconcileApplyCrossPropagates(t *testing.T) {
 		t.Fatalf("reconcile --apply exit = %d, want %d (origin filter should avoid self-conflict)", code, exitOK)
 	}
 
-	// Both native memories are now in canonical.
 	for _, n := range []string{"claude-lesson", "codex-lesson"} {
 		if _, err := os.Stat(filepath.Join(canon, n+".md")); err != nil {
 			t.Errorf("canonical missing %s: %v", n, err)
 		}
 	}
 
-	// Codex's lesson (global) propagated INTO Claude's shared dir as an
-	// engram-owned file...
 	got, err := os.ReadFile(filepath.Join(sharedDirOf(claudeMem), "codex-lesson.md"))
 	if err != nil {
 		t.Fatalf("codex lesson not propagated into Claude's shared dir: %v", err)
@@ -61,13 +58,11 @@ func TestRunReconcileApplyCrossPropagates(t *testing.T) {
 	if !strings.Contains(string(got), "origin: engram-sync") {
 		t.Errorf("propagated file not engram-owned:\n%s", got)
 	}
-	// ...while Claude's own native lesson is untouched (not re-rendered, no marker).
 	orig, err := os.ReadFile(filepath.Join(claudeMem, "lesson-a.md"))
 	if err != nil || strings.Contains(string(orig), "origin: engram-sync") {
 		t.Errorf("Claude's native lesson-a.md should be untouched; err=%v content=%s", err, orig)
 	}
 
-	// Claude's lesson propagated INTO Codex as a note.
 	entries, _ := os.ReadDir(codexNotes)
 	found := false
 	for _, e := range entries {
@@ -91,8 +86,6 @@ func TestRunReconcileDryRunPreviewsPostImportPropagation(t *testing.T) {
 			t.Fatalf("dry-run exit = %d", code)
 		}
 	})
-	// Codex's lesson would be CREATE-d into Claude, and Claude's into Codex —
-	// both must appear in the dry-run sync preview.
 	for _, want := range []string{"\"CREATE\"", "codex-lesson", "claude-lesson"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("dry-run preview missing %q (post-import propagation not simulated):\n%s", want, out)
@@ -112,7 +105,6 @@ func TestRunReconcileDryRunWritesNothing(t *testing.T) {
 	if entries, err := os.ReadDir(canon); err == nil && len(entries) > 0 {
 		t.Errorf("dry-run wrote to canonical: %v", entries)
 	}
-	// It still previews what it would import.
 	if !strings.Contains(out, "claude-lesson") || !strings.Contains(out, "codex-lesson") {
 		t.Errorf("dry-run should preview both imports; output:\n%s", out)
 	}

@@ -77,7 +77,7 @@ func cmdRemember(e *env, name string, args []string) int {
 	if m.Provenance.Origin == "" {
 		m.Provenance.Origin = "remember"
 	}
-	// The merge base is import's to record; an authored memory never carries
+	// WHY: The merge base is import's to record; an authored memory never carries
 	// one, so remember cannot fast-forward past a differing memory (see
 	// store.Plan) and still needs --force to overwrite it.
 	m.Provenance.ImportHash, m.Provenance.ImportSource = "", ""
@@ -146,7 +146,7 @@ func cmdShare(e *env, name string, args []string) int {
 		e.emit(name, false, nil, nil, &RespError{Code: "config_load", Message: err.Error()}, nil)
 		return exitError
 	}
-	// Lock across load-modify-save so a concurrent writer cannot slip between
+	// WHY: Lock across load-modify-save so a concurrent writer cannot slip between
 	// reading the current scope and writing the moved one.
 	release, lerr := canonLock(cfg.CanonicalRoot)
 	if lerr != nil {
@@ -177,7 +177,7 @@ func cmdShare(e *env, name string, args []string) int {
 		e.emit(name, false, nil, nil, &RespError{Code: "invalid_scope", Message: err.Error()}, nil)
 		return exitUsage
 	}
-	// Sharing is a deliberate edit, so it overwrites its own canonical file.
+	// WHY: Sharing is a deliberate edit, so it overwrites its own canonical file.
 	outcome, path, err := store.Save(cfg.CanonicalRoot, m, true)
 	if err != nil {
 		e.emit(name, false, nil, nil, &RespError{Code: "save", Message: err.Error()}, nil)
@@ -243,7 +243,6 @@ func cmdImport(e *env, name string, args []string) int {
 			return exitUsage
 		}
 		if all {
-			// Sweep every project slug, not just the current cwd's.
 			res, err = importer.ImportClaudeAll(h.Home)
 		} else {
 			res, err = importer.ImportClaude(claudeMemoryDir(h.Home, s.claudeRoot), s.cwd)
@@ -254,7 +253,7 @@ func cmdImport(e *env, name string, args []string) int {
 			e.emit(name, false, nil, nil, &RespError{Code: "harness_disabled", Message: "codex is disabled; cannot import from it"}, nil)
 			return exitUsage
 		}
-		// Codex keeps a single consolidated MEMORY.md, so --all imports the same
+		// WHY: Codex keeps a single consolidated MEMORY.md, so --all imports the same
 		// source as a plain import; it is accepted but has no additional effect.
 		res, err = importer.ImportCodex(filepath.Join(h.Home, "memories", "MEMORY.md"))
 	default:
@@ -283,7 +282,7 @@ func cmdImport(e *env, name string, args []string) int {
 		warns = append(warns, fmt.Sprintf("%d name(s) are claimed by more than one source in this import; see data.collisions", len(res.Collisions)))
 	}
 
-	// Orphan detection needs the whole native source: Codex always has it, Claude
+	// WHY: Orphan detection needs the whole native source: Codex always has it, Claude
 	// only on the all-slug scan (one slug cannot tell a deleted native from one
 	// that lives in another slug).
 	var next []NextStep
@@ -301,7 +300,7 @@ func cmdImport(e *env, name string, args []string) int {
 		next = orphanNextSteps(harness, orphans)
 	}
 
-	// A --refresh name that matches no candidate is a typo or a stale plan; refusing
+	// WHY: A --refresh name that matches no candidate is a typo or a stale plan; refusing
 	// it beats silently refreshing nothing. Checked before any write.
 	if missing := unmatchedRefresh(refresh, res.Memories); len(missing) > 0 {
 		e.emit(name, false, base, warns, &RespError{
@@ -319,11 +318,11 @@ func cmdImport(e *env, name string, args []string) int {
 	}
 
 	if !e.apply {
-		// Dry-run: resolve scope against current canonical (unlocked — this is a
+		// WHY: Dry-run: resolve scope against current canonical (unlocked — this is a
 		// projection, not a write) so the preview shows the scope apply will land on
 		// and any preservation notes. See decideImportScope.
 		items := make([]map[string]string, 0, len(res.Memories))
-		// Apply saves candidates in order, so a later candidate sharing a name
+		// WHY: Apply saves candidates in order, so a later candidate sharing a name
 		// meets what an earlier one wrote; the preview threads the same state.
 		batch := map[string]*schema.CanonicalMemory{}
 		tombs, terr := tombstone.Load(s.cfg.CanonicalRoot)
@@ -348,13 +347,13 @@ func cmdImport(e *env, name string, args []string) int {
 			if note != "" {
 				warns = append(warns, note)
 			}
-			// The gates apply in one order on every surface (importoutcome.go),
+			// WHY: The gates apply in one order on every surface (importoutcome.go),
 			// so the preview reports what apply will.
 			if verr := m.Validate(); verr != nil {
 				items = append(items, invalidRow(m.Name, verr))
 				continue
 			}
-			// Say what apply would do with each candidate, not just that it exists.
+			// WHY: Say what apply would do with each candidate, not just that it exists.
 			// The row is built after scope resolution so it carries the scope apply
 			// lands on, and `force` is honored so a scope-only revision that apply
 			// forces is previewed as `updated`, not a conflict.
@@ -370,7 +369,7 @@ func cmdImport(e *env, name string, args []string) int {
 			overridable := outcome == store.Conflict || outcome == store.CanonicalAhead
 			if outcome == store.Created || outcome == store.Updated || (overridable && (force || refresh[m.Name])) {
 				if overridable {
-					planned = m // a forced or refreshed save writes the candidate
+					planned = m // WHY: a forced or refreshed save writes the candidate
 				}
 				batch[m.Name] = planned
 			}
@@ -413,7 +412,7 @@ func cmdImport(e *env, name string, args []string) int {
 	outcomes := make([]map[string]string, 0, len(res.Memories))
 	conflicts := 0
 	for _, m := range res.Memories {
-		// A forgotten memory stays forgotten; --force and --refresh do not
+		// WHY: A forgotten memory stays forgotten; --force and --refresh do not
 		// override a tombstone (forget --restore does).
 		if tombs.Blocks(m) {
 			outcomes = append(outcomes, forgottenRow(m.Name))
@@ -424,7 +423,7 @@ func cmdImport(e *env, name string, args []string) int {
 			conflicts++
 			continue
 		}
-		// Resolve scope per candidate *inside* the lock so a forced scope-only
+		// WHY: Resolve scope per candidate *inside* the lock so a forced scope-only
 		// revision decides against the serialized current state, never a stale read a
 		// concurrent writer has since superseded. Per-candidate (not name-keyed) so
 		// two natives normalizing to one name don't cross force decisions.
@@ -438,7 +437,7 @@ func cmdImport(e *env, name string, args []string) int {
 		}
 		if verr := m.Validate(); verr != nil {
 			outcomes = append(outcomes, invalidRow(m.Name, verr))
-			conflicts++ // not written: the native needs fixing, as reconcile reports
+			conflicts++ // WHY: not written: the native needs fixing, as reconcile reports
 			continue
 		}
 		stored, _, _, lerr := store.Load(s.cfg.CanonicalRoot, m.Name)
@@ -446,7 +445,7 @@ func cmdImport(e *env, name string, args []string) int {
 			e.emit(name, false, base, warns, &RespError{Code: "load", Message: lerr.Error()}, nil)
 			return exitError
 		}
-		// --refresh names memories whose canonical content the operator has chosen
+		// WHY: --refresh names memories whose canonical content the operator has chosen
 		// to replace with the native's; only those are forced, and only if they
 		// actually conflict (the plan is taken before the write to record why).
 		// --keep settles a conflict for canonical: keep its content and take the

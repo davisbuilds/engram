@@ -227,7 +227,7 @@ func applySharedEdits(root string, plans []sharedEditPlan, tombs tombstone.Set, 
 		next := *cur
 		next.Description, next.Type, next.Body = p.edit.Description, p.edit.Type, p.edit.Body
 		if schema.NativeHash(cur) == schema.NativeHash(&next) {
-			// Canonical moved to what the edit says: nothing left to take.
+			// WHY: Canonical moved to what the edit says: nothing left to take.
 			plans[i].outcome, plans[i].memory, plans[i].differs = editUnchanged, nil, nil
 			continue
 		}
@@ -318,7 +318,7 @@ func cmdImportShared(e *env, name string, s *session, refresh, keep map[string]b
 	edited := map[string]bool{}
 	for i, p := range plans {
 		edited[p.edit.Name] = true
-		// A kept edit is never taken, even one canonical could fast-forward
+		// WHY: A kept edit is never taken, even one canonical could fast-forward
 		// to; one whose canonical is withheld is never discarded either.
 		if keep[p.edit.Name] && p.discardable() {
 			plans[i] = sharedEditPlan{edit: p.edit, outcome: editKept}
@@ -338,13 +338,13 @@ func cmdImportShared(e *env, name string, s *session, refresh, keep map[string]b
 			e.beforeApplyLock()
 		}
 		root := s.cfg.CanonicalRoot
-		absent := rootAbsent(root) // before the lock creates it
+		absent := rootAbsent(root) // WHY: before the lock creates it
 		release, lerr := canonLock(root)
 		if lerr != nil {
 			e.emit(name, false, data, warns, lerr, nil)
 			return exitError
 		}
-		// Held through the re-sync, so it renders canonical as the saves left
+		// WHY: Held through the re-sync, so it renders canonical as the saves left
 		// it, with no writer landing between that read and the render.
 		defer release()
 		if tombs, terr = tombstone.Load(root); terr != nil {
@@ -365,7 +365,7 @@ func cmdImportShared(e *env, name string, s *session, refresh, keep map[string]b
 		}
 		warns = now.warns
 		_, tg := s.claudeSplit(h, now.mems, s.agentFor("claude"), now.keepStale)
-		// Discard only what the locked read still vouches for: a kept edit
+		// WHY: Discard only what the locked read still vouches for: a kept edit
 		// whose canonical memory this read lacks is re-planned, and is held
 		// if that read was incomplete.
 		live := map[string]bool{}
@@ -395,7 +395,7 @@ func cmdImportShared(e *env, name string, s *session, refresh, keep map[string]b
 		}
 		data["sync"] = res
 	}
-	// Rows and held edits come after the apply, which marks an edit whose
+	// WHY: Rows and held edits come after the apply, which marks an edit whose
 	// fast-forward failed its recheck as a conflict.
 	data["results"] = sharedEditRows(plans)
 	var held []sharedEditPlan

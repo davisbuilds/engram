@@ -282,7 +282,7 @@ func cmdSync(e *env, name string, args []string) int {
 		e.emit(name, false, nil, nil, &RespError{Code: "harness_disabled", Message: sel.harness + " is disabled; nothing was delivered"}, nil)
 		return exitUsage
 	}
-	// Under --apply every render is written from this one read, all of it
+	// WHY: Under --apply every render is written from this one read, all of it
 	// holding the canonical lock shared, so a forget or curate removal either
 	// lands before the read or is refused until the last render is written:
 	// none can have its render re-created from an older read.

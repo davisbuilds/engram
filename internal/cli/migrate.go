@@ -63,7 +63,7 @@ func cmdMigrate(e *env, name string, args []string) int {
 		return cmdMigrateShared(e, name, s, h.Home)
 	}
 
-	// An adopted original becomes engram's render of canonical, so --apply
+	// WHY: An adopted original becomes engram's render of canonical, so --apply
 	// adopts from a read made, like sync's, holding the canonical lock shared
 	// until the last adoption.
 	v, release, rerr := e.readCanonFor(s.cfg.CanonicalRoot)
@@ -150,7 +150,7 @@ func plural(n int, noun string) string {
 // and left byte-for-byte; reconcile imports their edits first.
 func cmdMigrateShared(e *env, name string, s *session, claudeHome string) int {
 	if e.apply {
-		// The detach writes canonical, so --apply takes the canonical lock
+		// WHY: The detach writes canonical, so --apply takes the canonical lock
 		// before any render dir's lock and holds it from the read through the
 		// detach: a refused lock removes no original, and each original is
 		// judged against the canonical memory it detaches.
@@ -205,7 +205,7 @@ func cmdMigrateShared(e *env, name string, s *session, claudeHome string) int {
 		e.emit(name, false, base, warns, &RespError{Code: "migrate", Message: aerr.Error()}, nil)
 		return exitError
 	}
-	// The originals are gone: detach each adopted memory so it is neither kept
+	// WHY: The originals are gone: detach each adopted memory so it is neither kept
 	// out of Claude as Claude-imported nor reported as an orphan.
 	for _, a := range res.Adopted {
 		m, _, found, lerr := store.Load(s.cfg.CanonicalRoot, a.Name)

@@ -22,7 +22,7 @@ func staleHoldFixture(t *testing.T) (canon string, base []string, rendered strin
 	if code := Run(append([]string{"sync", "--apply"}, base...)); code != exitOK {
 		t.Fatalf("initial apply exit = %d", code)
 	}
-	// A global memory renders into the shared dir, which the hold covers too.
+	// WHY: A global memory renders into the shared dir, which the hold covers too.
 	rendered = filepath.Join(dir, "claude", "engram", "memory", "keep-me.md")
 	if _, err := os.Stat(rendered); err != nil {
 		t.Fatal(err)
