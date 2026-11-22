@@ -124,11 +124,11 @@ func TestSuppliedProposalRejectsFlagsBeforeInput(t *testing.T) {
 		{"--save-plan", "a.json", "--save-plan", "b.json"},
 	} {
 		f := newPlanFixture(t, "a")
-		// The missing file proves flag rejection precedes any input read.
+		// WHY: The missing file proves flag rejection precedes any input read.
 		args := append([]string{"--proposal", filepath.Join(f.dir, "missing.json")}, flags...)
 		e := curateEnv(f.cfg, false, noAgent(t))
 		if flags[0] == "--apply" {
-			// runCurate bypasses global parsing.
+			// WHY: runCurate bypasses global parsing.
 			e.apply = true
 			args = args[:2]
 		}

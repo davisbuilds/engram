@@ -34,19 +34,16 @@ func TestClaudeContentPreservesUnknownKeys(t *testing.T) {
 		t.Fatalf("claudeContent: %v", err)
 	}
 	s := string(got)
-	// Managed fields are set from canonical.
 	for _, want := range []string{"name: new-name", "description: new desc", "type: lesson", "origin: engram-sync"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("managed field %q missing:\n%s", want, s)
 		}
 	}
-	// Unmanaged keys survive, top-level and nested.
 	for _, keep := range []string{"node_type: memory", "originSessionId: abc-123", "custom_top: keepme"} {
 		if !strings.Contains(s, keep) {
 			t.Errorf("unmanaged key %q was dropped:\n%s", keep, s)
 		}
 	}
-	// The stale native name/desc must be gone (replaced, not duplicated).
 	if strings.Contains(s, "old-free-text") || strings.Contains(s, "stale desc") {
 		t.Errorf("stale managed values not replaced:\n%s", s)
 	}
@@ -119,7 +116,6 @@ func TestMigrateAdoptPreservesNativeFrontmatter(t *testing.T) {
 		}
 	}
 
-	// And a subsequent sync sees it as in-sync: preservation must not break idempotency.
 	assertSyncClean(t, dir, m)
 }
 
@@ -128,7 +124,7 @@ func TestMigrateAdoptPreservesNativeFrontmatter(t *testing.T) {
 func TestSyncPreservesUnknownKeysAndStaysIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	m := memBody("kept-mem", "b\n")
-	// Seed an engram-owned file (in canonical form) that also carries an unmanaged
+	// WHY: Seed an engram-owned file (in canonical form) that also carries an unmanaged
 	// key, by running it through claudeContent — the same path sync writes — so the
 	// idempotency check reflects a real steady-state file, not hand-written YAML.
 	rawWithExtra := []byte("---\nname: kept-mem\nmetadata:\n  origin: engram-sync\n  node_type: memory\n---\nb\n")
@@ -142,7 +138,7 @@ func TestSyncPreservesUnknownKeysAndStaysIdempotent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "kept-mem.md"), seed, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Index line must exist and be marked, or sync flags an index UPDATE.
+	// WHY: Index line must exist and be marked, or sync flags an index UPDATE.
 	rr, err := render.ClaudeRenderer{}.Render(m)
 	if err != nil {
 		t.Fatal(err)
@@ -151,12 +147,10 @@ func TestSyncPreservesUnknownKeysAndStaysIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Idempotent: no action despite the extra node_type key.
 	if acts := mustPlan(t, target(dir, m)); len(acts) != 0 {
 		t.Fatalf("expected no actions (idempotent), got %+v", acts)
 	}
 
-	// Change canonical → UPDATE, and the extra key must survive the rewrite.
 	m2 := memBody("kept-mem", "b\n")
 	m2.Description = "changed description"
 	if _, err := target(dir, m2).Apply(); err != nil {
@@ -184,7 +178,6 @@ func TestClaudeContentKeepsManagedValuesAsStrings(t *testing.T) {
 		if err != nil {
 			t.Fatalf("claudeContent: %v", err)
 		}
-		// Re-parse via the ownership path's frontmatter and assert string identity.
 		var fm struct {
 			Name        string `yaml:"name"`
 			Description string `yaml:"description"`
@@ -210,7 +203,6 @@ func TestClaudeContentReplacesNonMappingMetadata(t *testing.T) {
 	if !IsEngramOwned(got) {
 		t.Errorf("result not parseable/engram-owned (duplicate metadata key?):\n%s", got)
 	}
-	// The unrelated top-level key still survives the metadata replacement.
 	if !strings.Contains(string(got), "top_keep: v") {
 		t.Errorf("unrelated key dropped:\n%s", got)
 	}

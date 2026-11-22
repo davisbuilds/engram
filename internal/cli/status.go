@@ -232,7 +232,7 @@ func (h *harnessInventory) finish(mems []*schema.CanonicalMemory, s *session, ca
 	for n, paths := range h.native {
 		h.Counts.NativeEntries += len(paths)
 		names[n] = true
-		// Judge the merged scan, not each slug separately: two independent
+		// WHY: Judge the merged scan, not each slug separately: two independent
 		// project directories may normalize different native sources to one name.
 		if len(paths) > 1 {
 			sources := append([]string{}, paths...)

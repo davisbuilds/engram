@@ -23,7 +23,7 @@ func TestForCwd(t *testing.T) {
 }
 
 func TestForCwdIsIdempotent(t *testing.T) {
-	// A slug fed back through the encoder is unchanged: every slug character is a
+	// WHY: A slug fed back through the encoder is unchanged: every slug character is a
 	// letter, digit, or '-', and '-' maps to '-'. This is the property renderers
 	// rely on when they re-encode an already-encoded target.
 	s := ForCwd("/Users/alice/Dev")

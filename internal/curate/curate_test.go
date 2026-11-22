@@ -109,7 +109,6 @@ func TestValidateRejectsBadOps(t *testing.T) {
 func TestApplyFailsClosedOnInvalidBatch(t *testing.T) {
 	root := t.TempDir()
 	seed(t, root, mem("real"))
-	// One good op, one bad op: nothing should be applied.
 	ops := []Operation{
 		{Op: OpRemove, Name: "real"},
 		{Op: OpRemove, Name: "ghost"},
@@ -150,7 +149,6 @@ func TestApplyMergeKeepsSourceReusedAsTarget(t *testing.T) {
 	root := t.TempDir()
 	c := corpus("a", "b")
 	seed(t, root, c...)
-	// Merged memory reuses source name "a": a stays, b is deleted.
 	ops := []Operation{
 		{Op: OpMerge, Sources: []string{"a", "b"}, Memory: mem("a")},
 	}
@@ -183,7 +181,6 @@ func TestApplyBlocksWhenLockHeld(t *testing.T) {
 	root := t.TempDir()
 	c := corpus("victim")
 	seed(t, root, c...)
-	// A concurrent apply already holds the lock on the canonical root.
 	release, err := lock.Acquire(root)
 	if err != nil {
 		t.Fatal(err)
@@ -193,7 +190,6 @@ func TestApplyBlocksWhenLockHeld(t *testing.T) {
 	if _, err := Apply(root, ops); err == nil {
 		t.Fatal("Apply should fail while the canonical lock is held")
 	}
-	// The batch must not have run: victim survives.
 	if _, _, found, _ := store.Load(root, "victim"); !found {
 		t.Error("victim was deleted despite a held lock")
 	}
@@ -207,7 +203,6 @@ func TestValidateRejectsMergeOntoUnrelatedTarget(t *testing.T) {
 	if Validate(ops, c)[0].Valid {
 		t.Error("merge onto an existing unrelated memory must be invalid")
 	}
-	// But merging into a brand-new name, or reusing a source name, is fine.
 	for _, target := range []string{"a", "brand-new"} {
 		ops := []Operation{{Op: OpMerge, Sources: []string{"a", "b"}, Memory: mem(target)}}
 		if !Validate(ops, c)[0].Valid {
@@ -220,7 +215,6 @@ func TestValidateRejectsMergeOntoUnrelatedTarget(t *testing.T) {
 // would produce, so two adds of the same new name cannot both pass.
 func TestValidateCatchesIntraBatchConflicts(t *testing.T) {
 	c := corpus("existing")
-	// Two adds of the same previously-absent name.
 	dup := []Operation{
 		{Op: OpAdd, Memory: mem("new-one")},
 		{Op: OpAdd, Memory: mem("new-one")},
@@ -229,7 +223,6 @@ func TestValidateCatchesIntraBatchConflicts(t *testing.T) {
 	if !res[0].Valid || res[1].Valid {
 		t.Errorf("first add should pass, second (duplicate) should fail: %+v", res)
 	}
-	// Remove a memory, then update the same name: the update must fail closed.
 	ro := []Operation{
 		{Op: OpRemove, Name: "existing"},
 		{Op: OpUpdate, Name: "existing", Memory: mem("existing")},
@@ -246,9 +239,7 @@ func TestValidateCatchesIntraBatchConflicts(t *testing.T) {
 func TestApplyRevalidatesAgainstCurrentDisk(t *testing.T) {
 	root := t.TempDir()
 	seed(t, root, mem("target"))
-	// The agent proposed a rescope of "target" against the snapshot it saw...
 	ops := []Operation{{Op: OpRescope, Name: "target", ToScope: "project:acme"}}
-	// ...but another writer removed "target" before we apply.
 	if _, err := store.Delete(root, "target"); err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +277,6 @@ func TestApplyUpdateThenRescopeKeepsUpdatedContent(t *testing.T) {
 func TestApplyRefusesWhenCanonicalHasParseError(t *testing.T) {
 	root := t.TempDir()
 	seed(t, root, mem("ok"))
-	// A malformed memory file (no frontmatter) sits in the canonical root.
 	if err := os.WriteFile(root+"/broken.md", []byte("no frontmatter here\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +296,6 @@ func seed(t *testing.T, root string, mems ...*schema.CanonicalMemory) {
 			t.Fatalf("seed %s: %v", m.Name, err)
 		}
 	}
-	// sanity: files exist
 	if entries, _ := os.ReadDir(root); len(entries) != len(mems) {
 		t.Fatalf("seed wrote %d files, want %d", len(entries), len(mems))
 	}
@@ -351,7 +340,7 @@ func TestApplyTombstonesWhatItRemoves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string][2]string{ // name -> reason, successor
+	want := map[string][2]string{ // WHY: name -> reason, successor
 		"b":  {"same lesson", "a"},
 		"c":  {"overlap", "cd"},
 		"d":  {"overlap", "cd"},
@@ -380,7 +369,7 @@ func TestApplyKeepsStoredProvenanceOnUpdateAndMerge(t *testing.T) {
 	seed(t, root, a, b, mem("c"))
 	upd, merged := mem("a"), mem("b")
 	upd.Body, merged.Body = "curated\n", "merged\n"
-	// An agent may emit a partial provenance; it still must not replace lineage.
+	// WHY: An agent may emit a partial provenance; it still must not replace lineage.
 	upd.Provenance = schema.Provenance{Author: "agent"}
 	ops := []Operation{
 		{Op: OpUpdate, Name: "a", Memory: upd, Reason: "tighten"},

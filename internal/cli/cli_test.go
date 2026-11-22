@@ -60,7 +60,7 @@ func TestRunSyncLifecycle(t *testing.T) {
 	writeFile(t, filepath.Join(canon, "m.md"),
 		"---\nname: a-mem\ndescription: d\ntype: lesson\nscope: global\n---\nbody\n")
 	cfg := filepath.Join(dir, "c.yaml")
-	// Every enabled harness needs an explicit home: an unset one defaults to the
+	// WHY: Every enabled harness needs an explicit home: an unset one defaults to the
 	// real ~/.codex, where this apply once deleted the user's engram notes.
 	writeFile(t, cfg,
 		"canonical_root: "+canon+"\nharnesses:\n  claude-code:\n    home: "+claude+
@@ -72,7 +72,7 @@ func TestRunSyncLifecycle(t *testing.T) {
 	if code := Run(append([]string{"sync", "--apply"}, base...)); code != exitOK {
 		t.Fatalf("apply exit = %d, want %d", code, exitOK)
 	}
-	// A global memory renders once into the shared dir every project loads.
+	// WHY: A global memory renders once into the shared dir every project loads.
 	memFile := filepath.Join(claude, "engram", "memory", "a-mem.md")
 	if _, err := os.Stat(memFile); err != nil {
 		t.Fatalf("rendered memory file missing: %v", err)
@@ -82,7 +82,6 @@ func TestRunSyncLifecycle(t *testing.T) {
 		t.Errorf("idempotent audit exit = %d, want %d", code, exitOK)
 	}
 
-	// A hand-authored file colliding with the desired name forces a conflict.
 	writeFile(t, memFile, "---\nname: a-mem\ndescription: hand\n---\nmine\n")
 	if code := Run(append([]string{"sync", "--apply"}, base...)); code != exitConflicts {
 		t.Errorf("conflict apply exit = %d, want %d", code, exitConflicts)
@@ -115,7 +114,6 @@ func TestRunRememberAndShare(t *testing.T) {
 		t.Errorf("idempotent remember exit = %d, want %d", code, exitOK)
 	}
 
-	// Hand-edit to differing content, then remember without --force must conflict.
 	writeFile(t, memFile, "---\nname: a-mem\ndescription: HAND\ntype: lesson\nscope: global\n---\nx\n")
 	if code := Run(append(memArgs, c...)); code != exitConflicts {
 		t.Errorf("conflict remember exit = %d, want %d", code, exitConflicts)
@@ -205,7 +203,7 @@ func TestRunImportAllSweepsSlugs(t *testing.T) {
 	cfg := filepath.Join(dir, "c.yaml")
 	writeFile(t, cfg, "canonical_root: "+canon+"\nharnesses:\n  claude-code:\n    home: "+claude+"\n")
 	defer silenceStdout(t)()
-	// cwd points at only one slug's project, proving --all reaches beyond it.
+	// WHY: cwd points at only one slug's project, proving --all reaches beyond it.
 	c := []string{"--config", cfg, "--cwd", "/work/alpha", "--json"}
 	if code := Run(append([]string{"import", "claude-code", "--all", "--apply"}, c...)); code != exitOK {
 		t.Fatalf("import --all exit = %d, want %d", code, exitOK)
@@ -298,16 +296,13 @@ func TestCanonicalMutatorsBlockUnderHeldLock(t *testing.T) {
 	dir := t.TempDir()
 	canon := filepath.Join(dir, "canonical")
 	claude := filepath.Join(dir, "claude")
-	// Seed one canonical memory so share has a target.
 	writeFile(t, filepath.Join(canon, "a-mem.md"),
 		"---\nname: a-mem\ndescription: d\ntype: lesson\nscope: global\n---\nb\n")
-	// A hand-authored native Claude memory so import has something to write.
 	writeFile(t, filepath.Join(claude, "projects", "-work-x", "memory", "human.md"),
 		"---\nname: human-lesson\ndescription: d\nmetadata:\n  type: lesson\n---\nb\n")
 	cfg := filepath.Join(dir, "c.yaml")
 	writeFile(t, cfg, "canonical_root: "+canon+"\nharnesses:\n  claude-code:\n    home: "+claude+"\n")
 
-	// A concurrent apply already holds the canonical lock.
 	release, err := lock.Acquire(canon)
 	if err != nil {
 		t.Fatal(err)
@@ -326,7 +321,6 @@ func TestCanonicalMutatorsBlockUnderHeldLock(t *testing.T) {
 			t.Errorf("%s under held lock: exit = %d, want %d", args[0], code, exitError)
 		}
 	}
-	// Nothing should have been written: new-mem absent, a-mem scope unchanged.
 	if _, err := os.Stat(filepath.Join(canon, "new-mem.md")); !os.IsNotExist(err) {
 		t.Error("remember wrote new-mem.md despite the held lock")
 	}

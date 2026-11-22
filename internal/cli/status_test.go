@@ -306,7 +306,6 @@ func TestStatusPlainShowsValuesAndPartialEvidence(t *testing.T) {
 			t.Errorf("plain exit %d, want %d", code, wantCode)
 		}
 		for _, want := range []string{"Canonical: count=5", "claude-code:", "codex:", "native_entries=", filepath.Join(filepath.Dir(canon), "claude", "projects", "-work-x", "memory"), "old-group", "source_suppressed"} {
-			// With an unrecognized native source, absence must stay unknown.
 			if broken && want == "source_suppressed" {
 				want = "unknown_incomplete_scan"
 			}

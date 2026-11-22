@@ -71,7 +71,7 @@ func TestApplyRollsBackAFailedBatch(t *testing.T) {
 	if err := os.Chmod(filepath.Join(root, "a.md"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// A file where the tombstone directory belongs makes the merge's forget fail
+	// WHY: A file where the tombstone directory belongs makes the merge's forget fail
 	// after the merged memory is written.
 	if err := os.WriteFile(filepath.Join(root, ".forgotten"), []byte("in the way\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ func TestApplyReportsARollbackThatFails(t *testing.T) {
 		if op.Op == OpUpdate {
 			return applyOne(root, op)
 		}
-		// Leave a.md where no file can be written back.
+		// WHY: Leave a.md where no file can be written back.
 		if err := os.Remove(filepath.Join(root, "a.md")); err != nil {
 			return Applied{}, err
 		}

@@ -40,7 +40,7 @@ func Save(root string, m *schema.CanonicalMemory, force bool) (Outcome, string, 
 	}
 	existing, path, found, err := Load(root, m.Name)
 	if errors.Is(err, ErrWithheld) {
-		// A file claims this name but discovery withheld it: refuse, even
+		// WHY: A file claims this name but discovery withheld it: refuse, even
 		// with force, rather than overwrite or add another copy.
 		return Conflict, path, nil
 	}
@@ -50,7 +50,7 @@ func Save(root string, m *schema.CanonicalMemory, force bool) (Outcome, string, 
 	if !found {
 		p := filepath.Join(root, m.Name+".md")
 		if _, serr := os.Lstat(p); serr == nil {
-			// Something already occupies the path discovery did not index.
+			// WHY: Something already occupies the path discovery did not index.
 			return Conflict, p, nil
 		}
 		if err := writeAtomic(p, rendered); err != nil {
@@ -67,7 +67,7 @@ func Save(root string, m *schema.CanonicalMemory, force bool) (Outcome, string, 
 		if err != nil {
 			return "", path, err
 		}
-	default: // Conflict or CanonicalAhead: only a forced save takes the candidate
+	default: // WHY: Conflict or CanonicalAhead: only a forced save takes the candidate
 		if !force {
 			return outcome, path, nil
 		}
@@ -110,15 +110,15 @@ func Plan(existing, cand *schema.CanonicalMemory) (Outcome, *schema.CanonicalMem
 		}
 		return Updated, &merged
 	}
-	// The content differs. An import candidate against a memory with a recorded
-	// merge base can tell which side moved since the two last agreed.
+	// WHY: an import candidate against a memory with a recorded merge base can
+	// tell which side moved since the two last agreed.
 	base := existing.Provenance.ImportHash
 	if base != "" && cp.ImportHash != "" && SameLineage(existing.Provenance, cp) {
 		switch {
 		case cp.ImportHash == base:
 			return CanonicalAhead, existing
 		case schema.NativeHash(existing) == base:
-			// Fast-forward: take what the native authors, keep what canonical owns.
+			// WHY: Fast-forward: take what the native authors, keep what canonical owns.
 			merged := *existing
 			merged.Description, merged.Type, merged.Body = cand.Description, cand.Type, cand.Body
 			merged.Provenance = fillProvenance(existing.Provenance, cp)
@@ -168,7 +168,7 @@ func Diff(existing, cand *schema.CanonicalMemory) []string {
 		!sameStrings(existing.AppliesTo.Agents, cand.AppliesTo.Agents) ||
 		!sameStrings(existing.AppliesTo.Hosts, cand.AppliesTo.Hosts), "applies_to")
 	add(!sameStrings(existing.Related, cand.Related), "related")
-	// The merge base differs whenever the content does; it is not a finding.
+	// WHY: The merge base differs whenever the content does; it is not a finding.
 	ep, cp := existing.Provenance, cand.Provenance
 	ep.ImportHash, cp.ImportHash, ep.ImportSource, cp.ImportSource = "", "", "", ""
 	add(ep != cp, "provenance")

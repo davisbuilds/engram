@@ -69,12 +69,12 @@ class ReleaseHistoryTest(unittest.TestCase):
                 git("tag", "-a", "v0.1.0", "-m", "Actual release boundary", failed_head)
                 manifest.write_text(json.dumps({".": "0.1.0"}))
                 self.assertEqual(run(failed_head, good_head).returncode, 0)
-                # Tagged heads may have no unreleased commits; the push itself
+                # WHY: Tagged heads may have no unreleased commits; the push itself
                 # still needs a nonempty forward range.
                 git("tag", "v0.2.0", good_head)
                 manifest.write_text(json.dumps({".": "0.2.0"}))
                 self.assertEqual(run(failed_head, good_head).returncode, 0)
-                # Proposed manifest versions without a tag use bootstrap.
+                # WHY: Proposed manifest versions without a tag use bootstrap.
                 manifest.write_text(json.dumps({".": "0.3.0"}))
                 self.assertNotEqual(run(failed_head, good_head).returncode, 0)
                 for malformed in ["invalid", "01.2.3", "1.02.3", "1.2.03", "1.2.3-01", "1.2.3-alpha..beta", "1.2.3+build..id", "1.2.3-", "1.2.3+", "1.2.3\n", None]:

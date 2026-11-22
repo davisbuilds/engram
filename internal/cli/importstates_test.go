@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// These tests pin the import outcome vocabulary as one state machine shared by
+// WHY: These tests pin the import outcome vocabulary as one state machine shared by
 // every import source (a native harness, Claude's shared renders) and every
 // surface (import dry-run, import --apply, reconcile): the same candidate state
 // reads the same everywhere, and `differs` only ever names fields.
@@ -91,10 +91,10 @@ func TestSharedEditOfAForgottenMemoryIsForgotten(t *testing.T) {
 	if code, env := runEnvelope(t, append([]string{"forget", "g-mem", "--apply", "--cwd", "/work/x"}, c...)...); code != exitOK {
 		t.Fatalf("forget exit = %d: %v", code, env["error"])
 	}
-	// The edit reappears after the forget (an editor saving a stale buffer).
+	// WHY: The edit reappears after the forget (an editor saving a stale buffer).
 	writeFile(t, render, string(edited))
 	code, env := runEnvelope(t, append([]string{"reconcile", "--cwd", "/work/x"}, c...)...)
-	// Not a conflict in canonical, but the render still waits on the operator.
+	// WHY: Not a conflict in canonical, but the render still waits on the operator.
 	if code != exitConflicts {
 		t.Errorf("exit = %d, want %d (render held)", code, exitConflicts)
 	}
@@ -111,7 +111,6 @@ func TestSharedEditOfAForgottenMemoryIsForgotten(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(canon, "g-mem.md")); err == nil {
 		t.Error("forgotten memory came back into canonical")
 	}
-	// --keep settles it for canonical: the memory stays forgotten, the render goes.
 	if code, env := runEnvelope(t, append([]string{"import", "claude-code", "--shared", "--keep", "g-mem", "--apply", "--cwd", "/work/x"}, c...)...); code != exitOK {
 		t.Fatalf("--keep exit = %d: %s", code, stringify(env))
 	}
@@ -130,7 +129,7 @@ func TestImportDryRunReportsAnInvalidCandidate(t *testing.T) {
 	args := append([]string{"import", "claude-code", "--cwd", "/work/x"}, c...)
 	_, dry := runEnvelope(t, args...)
 	code, applied := runEnvelope(t, append(args, "--apply")...)
-	// Nothing was imported for it: like reconcile, apply asks for resolution.
+	// WHY: Nothing was imported for it: like reconcile, apply asks for resolution.
 	if code != exitConflicts {
 		t.Errorf("apply exit = %d, want %d", code, exitConflicts)
 	}

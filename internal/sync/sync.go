@@ -149,13 +149,13 @@ func (t ClaudeTarget) Plan() ([]Action, error) {
 		}
 		switch {
 		case !exists && fileExists(path):
-			// The name matched neither map, yet the path resolves to a file: a
+			// WHY: The name matched neither map, yet the path resolves to a file: a
 			// case-folding filesystem is aliasing a hand-authored case variant.
 			actions = append(actions, Action{Conflict, m.Name, path, "target exists (as a case variant) and is not engram-owned"})
 		case !exists:
 			actions = append(actions, Action{Create, m.Name, path, ""})
 		default:
-			// Desired content is derived from the existing file so unmanaged
+			// WHY: Desired content is derived from the existing file so unmanaged
 			// frontmatter keys are preserved; a file already in that shape is a no-op.
 			want, cerr := t.content(cur.content, m)
 			if cerr != nil {
@@ -169,11 +169,11 @@ func (t ClaudeTarget) Plan() ([]Action, error) {
 	for name, cur := range owned {
 		switch {
 		case t.Names != nil:
-			// A delivery selection never authorizes removal, even when a
+			// WHY: A delivery selection never authorizes removal, even when a
 			// selected name no longer belongs in this target.
 		case desired[name]:
 		case t.KeepStale && !t.Discard[name]:
-			// Held while canonical may be incomplete, unless the operator named
+			// WHY: Held while canonical may be incomplete, unless the operator named
 			// this render for discarding.
 		case t.held(name, cur.content, t.Known[name]):
 			actions = append(actions, Action{Conflict, name, cur.path, HeldEditNote + "; it no longer renders here"})
@@ -231,7 +231,7 @@ func (t ClaudeTarget) applyLocked() (Result, error) {
 		case Conflict:
 			res.Conflicts = append(res.Conflicts, a)
 		case Create, Update:
-			// Merge onto the existing file (if any) so unmanaged frontmatter keys survive.
+			// WHY: Merge onto the existing file (if any) so unmanaged frontmatter keys survive.
 			content, cerr := t.content(owned[a.Name].content, byName[a.Name])
 			if cerr != nil {
 				return res, cerr
@@ -355,7 +355,7 @@ func IsEngramOwned(content []byte) bool {
 // frontmatterBytes returns the YAML between the opening and closing --- fences,
 // or nil when the content has no frontmatter.
 func frontmatterBytes(content []byte) []byte {
-	// Line endings and a BOM are cosmetic; an editor or git autocrlf changing
+	// WHY: Line endings and a BOM are cosmetic; an editor or git autocrlf changing
 	// them must not flip an engram render to hand-authored.
 	s := strings.ReplaceAll(strings.TrimPrefix(string(content), "\ufeff"), "\r\n", "\n")
 	if !strings.HasPrefix(s, "---\n") {

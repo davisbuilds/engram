@@ -20,16 +20,14 @@ func byName(mems []*schema.CanonicalMemory) map[string]*schema.CanonicalMemory {
 
 func TestImportClaudeMapsNativeFrontmatter(t *testing.T) {
 	dir := t.TempDir()
-	// A hand-authored native Claude memory (type under metadata, no origin).
 	native := "---\nname: rg-gotcha\ndescription: never rg -r\nmetadata:\n  type: lesson\n---\nBody stays.\n"
 	if err := os.WriteFile(filepath.Join(dir, "rg-gotcha.md"), []byte(native), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// MEMORY.md index must be ignored.
 	if err := os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("- [x](x.md)\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// cwd is a bare temp dir with no .git above it → global scope.
+	// WHY: cwd is a bare temp dir with no .git above it → global scope.
 	res, err := ImportClaude(dir, dir)
 	if err != nil {
 		t.Fatalf("ImportClaude: %v", err)
@@ -47,7 +45,7 @@ func TestImportClaudeMapsNativeFrontmatter(t *testing.T) {
 	if m.Body != "Body stays.\n" {
 		t.Errorf("body not preserved: %q", m.Body)
 	}
-	// provenance.source records the native filename so migrate can match this
+	// WHY: provenance.source records the native filename so migrate can match this
 	// memory back to the exact hand-authored file even after name normalization.
 	if m.Provenance.Source != "rg-gotcha.md" {
 		t.Errorf("provenance.source = %q, want rg-gotcha.md", m.Provenance.Source)
@@ -76,7 +74,7 @@ func TestImportScopeAuthoritativeFlag(t *testing.T) {
 		t.Error("single ImportClaude from a live cwd should be scope-authoritative")
 	}
 
-	// A single import whose cwd does not exist on this machine (a deleted or
+	// WHY: A single import whose cwd does not exist on this machine (a deleted or
 	// unmounted project) must NOT be authoritative: the repo probe would yield
 	// global without erroring, and an authoritative global would force-widen an
 	// existing project-scoped memory. Read the same memory dir, bogus cwd.
@@ -167,12 +165,11 @@ func TestImportClaudeRecoversFrontmatterlessFile(t *testing.T) {
 // the metadata.origin loop guard for CRLF engram output). Codex PR #3 P2.
 func TestImportClaudeDropsMalformedFrontmatter(t *testing.T) {
 	dir := t.TempDir()
-	// Opening fence, no closing fence.
 	if err := os.WriteFile(filepath.Join(dir, "truncated.md"),
 		[]byte("---\nname: foo\ndescription: bar\nno closing fence here\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// CRLF frontmatter: the fences are there but not in the LF form we split on.
+	// WHY: CRLF frontmatter: the fences are there but not in the LF form we split on.
 	if err := os.WriteFile(filepath.Join(dir, "crlf.md"),
 		[]byte("---\r\nname: baz\r\n---\r\nbody\r\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -222,7 +219,7 @@ func TestImportClaudeAccountsForEveryFile(t *testing.T) {
 	write("ours.md", "---\nname: ours\ndescription: d\nmetadata:\n  type: lesson\n  origin: engram-sync\n---\nx\n")
 	write("no-frontmatter.md", "# Heading\n\ntext\n")
 	write("broken.md", "---\nname: [unclosed\n---\nb\n")
-	write("MEMORY.md", "- index\n") // ignored, not a candidate
+	write("MEMORY.md", "- index\n")
 	res, err := ImportClaude(dir, dir)
 	if err != nil {
 		t.Fatal(err)
@@ -245,7 +242,7 @@ func TestResolveSlugMatchesHyphenatedComponents(t *testing.T) {
 	if err := os.MkdirAll(full, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Slug for base/my-user/code/web-app-ios, relative to base: every separator and
+	// WHY: Slug for base/my-user/code/web-app-ios, relative to base: every separator and
 	// every literal '-' becomes '-'.
 	got := resolveSlugMatches(base, "-my-user-code-web-app-ios")
 	if len(got) != 1 || got[0] != full {
@@ -262,7 +259,7 @@ func TestResolveSlugMatchesNonHyphenChars(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(base, real), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		// All three encode to the same shape "<sep>my-project" etc.
+		// WHY: All three encode to the same shape "<sep>my-project" etc.
 		enc := "-" + strings.Map(func(r rune) rune {
 			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
 				return r
@@ -305,7 +302,7 @@ func TestResolveSlugNoMatchIsEmpty(t *testing.T) {
 // resolves to a real repo carries its project scope, and MEMORY.md is ignored.
 func TestImportClaudeAllSweepsAllSlugs(t *testing.T) {
 	home := t.TempDir()
-	// Two project slugs, each with one native memory. Scope resolution walks from
+	// WHY: Two project slugs, each with one native memory. Scope resolution walks from
 	// the real root and won't find these temp paths, so both resolve to global —
 	// the sweep/merge behavior is what this pins (scope resolution is covered by
 	// the resolveTokens tests).
@@ -329,7 +326,7 @@ func TestImportClaudeAllSweepsAllSlugs(t *testing.T) {
 }
 
 func TestImportClaudeAllMissingProjectsDirIsEmpty(t *testing.T) {
-	res, err := ImportClaudeAll(t.TempDir()) // no projects/ subdir
+	res, err := ImportClaudeAll(t.TempDir())
 	if err != nil {
 		t.Fatalf("a missing projects dir must not error: %v", err)
 	}
@@ -389,7 +386,6 @@ func TestImportCodexSplitsTaskGroups(t *testing.T) {
 
 func TestImportCodexSkipsEngramGroups(t *testing.T) {
 	dir := t.TempDir()
-	// A consolidated Task Group carrying engram's own marker must be skipped.
 	mem := "# Task Group: real user lesson\n\ndetails\n\n" +
 		"# Task Group: engram note fold-in\n\n<!-- engram-sync canonical=x scope=global extension=engram -->\nfolded\n"
 	path := filepath.Join(dir, "MEMORY.md")
@@ -442,13 +438,12 @@ func TestSlugify(t *testing.T) {
 		}
 	}
 
-	// The 60-char cap must never exceed the cap and must not leave a trailing dash.
 	long := Slugify(strings.Repeat("a", 65))
 	if len(long) != 60 || strings.HasSuffix(long, "-") {
 		t.Errorf("over-cap slug = %q (len %d), want <=60 with no trailing dash", long, len(long))
 	}
 
-	// Distinguishability: two long titles that share every token before the cap
+	// WHY: Distinguishability: two long titles that share every token before the cap
 	// but differ afterwards must slugify to DISTINCT names. A mid-token cut keeps
 	// the distinguishing fragment; trimming back to a token boundary would collapse
 	// both to one slug and lose the second memory to an import name-collision.
@@ -480,12 +475,11 @@ func TestDeriveClaudeScopeRepoRootBecomesProject(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(mdir, "repo-lesson.md"), []byte(native), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// cwd is a subdirectory inside the repo: scope resolves to the repo's base.
 	res, err := ImportClaude(mdir, filepath.Join(repo, "src", "pkg"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The subdir does not exist on disk, but the walk finds .git at repo root.
+	// WHY: The subdir does not exist on disk, but the walk finds .git at repo root.
 	want := "project:" + filepath.Base(repo)
 	if len(res.Memories) != 1 || res.Memories[0].Scope != want {
 		t.Errorf("scope = %q, want %q", res.Memories[0].Scope, want)
@@ -509,7 +503,6 @@ func TestDeriveCodexScopeFromRealRepo(t *testing.T) {
 	if got != "project:dotfiles" {
 		t.Errorf("got %q, want project:dotfiles", got)
 	}
-	// Only the base name enters the scope; the full path never does.
 	if strings.Contains(got, string(filepath.Separator)) {
 		t.Errorf("scope %q leaked a path separator", got)
 	}
@@ -540,9 +533,7 @@ func TestDeriveCodexScopeFromLinkedWorktree(t *testing.T) {
 }
 
 func TestDeriveCodexScopeNonRepoPathStaysGlobal(t *testing.T) {
-	// A container directory (no .git) must not become a project scope, and a
-	// group with no applies_to line stays global.
-	container := t.TempDir() // exists but has no .git
+	container := t.TempDir()
 	if got := deriveCodexScope("applies_to: cwd=" + container + "\n"); got != "global" {
 		t.Errorf("non-repo cwd: got %q, want global", got)
 	}
@@ -552,7 +543,7 @@ func TestDeriveCodexScopeNonRepoPathStaysGlobal(t *testing.T) {
 }
 
 func TestProjectScopeFromRepoGuardsDegenerate(t *testing.T) {
-	// "." is not degenerate — it resolves to the real cwd (covered separately);
+	// WHY: "." is not degenerate — it resolves to the real cwd (covered separately);
 	// these are the paths that must always yield global.
 	for _, p := range []string{"", "/", "  "} {
 		if got := projectScopeFromRepo(p); got != "global" {
@@ -581,8 +572,7 @@ func TestImportCodexDerivesProjectScope(t *testing.T) {
 
 func TestProjectScopeFromRepoResolvesRelativeCwd(t *testing.T) {
 	repo := mkRepo(t, "myrepo")
-	t.Chdir(repo) // run as if invoked from inside the repo
-	// A relative "." must resolve to the absolute repo root, not "project:.".
+	t.Chdir(repo)
 	if got := projectScopeFromRepo("."); got != "project:myrepo" {
 		t.Errorf("projectScopeFromRepo(\".\") = %q, want project:myrepo", got)
 	}

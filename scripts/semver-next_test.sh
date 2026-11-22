@@ -6,7 +6,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 script="$here/semver-next.sh"
 fails=0
 
-check() { # desc, expected, actual
+check() {
 	if [ "$2" = "$3" ]; then
 		echo "ok   - $1"
 	else
@@ -26,20 +26,17 @@ newrepo() {
 	printf '%s' "$d"
 }
 
-# Version math from no tags.
 r="$(newrepo)"
 trap 'rm -rf "$r"' EXIT
 check "no-tag patch" v0.0.1 "$(cd "$r" && ./semver-next.sh patch)"
 check "no-tag minor" v0.1.0 "$(cd "$r" && ./semver-next.sh minor)"
 check "no-tag major" v1.0.0 "$(cd "$r" && ./semver-next.sh major)"
 
-# Version math from an existing tag.
 git -C "$r" tag -a v1.2.3 -m v1.2.3
 check "bump patch" v1.2.4 "$(cd "$r" && ./semver-next.sh patch)"
 check "bump minor" v1.3.0 "$(cd "$r" && ./semver-next.sh minor)"
 check "bump major" v2.0.0 "$(cd "$r" && ./semver-next.sh major)"
 
-# Extra arguments are rejected; neither valid nor invalid previews create tags.
 rc=0
 (cd "$r" && ./semver-next.sh patch --print) >/dev/null 2>&1 || rc=$?
 check "extra argument exits 2" 2 "$rc"
@@ -49,7 +46,6 @@ rc=0
 (cd "$r" && ./semver-next.sh bogus) >/dev/null 2>&1 || rc=$?
 check "bad level exits 2" 2 "$rc"
 
-# A dirty checkout can be previewed safely, and only exact semver tags count.
 echo x >"$r/dirty"
 git -C "$r" tag v2.0.0-rc.1
 check "dirty preview ignores prerelease tag" v1.2.4 "$(cd "$r" && ./semver-next.sh patch)"

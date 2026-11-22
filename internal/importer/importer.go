@@ -124,7 +124,7 @@ func projectScopeFromRepo(path string) string {
 	if path == "" {
 		return "global"
 	}
-	// Resolve a relative cwd (e.g. "." or "src/pkg") to an absolute, cleaned path
+	// WHY: Resolve a relative cwd (e.g. "." or "src/pkg") to an absolute, cleaned path
 	// so the walk finds the real repo root and the scope carries its base name,
 	// not "." — otherwise "--cwd ." would yield "project:." or a wrong "global".
 	if abs, err := filepath.Abs(path); err == nil {
@@ -134,7 +134,7 @@ func projectScopeFromRepo(path string) string {
 	if path == "" {
 		return "global"
 	}
-	// A linked worktree resolves to the repository it was added from. A repo at
+	// WHY: A linked worktree resolves to the repository it was added from. A repo at
 	// (or above) the home directory is not a project: it would claim every
 	// path beneath it.
 	root, ok := gitroot.Main(path)
@@ -200,7 +200,7 @@ func resolveSlugMatches(base, slug string) []string {
 		return []string{base}
 	}
 	if slug[0] != '-' {
-		return nil // a component must be introduced by its encoded separator
+		return nil // WHY: a component must be introduced by its encoded separator
 	}
 	rest := slug[1:]
 	entries, err := os.ReadDir(base)
@@ -216,7 +216,7 @@ func resolveSlugMatches(base, slug string) []string {
 		if !strings.HasPrefix(rest, enc) {
 			continue
 		}
-		// enc must be a whole component: the slug ends here, or the next character
+		// WHY: enc must be a whole component: the slug ends here, or the next character
 		// is the '-' that encodes the following separator.
 		tail := rest[len(enc):]
 		if tail != "" && tail[0] != '-' {
@@ -276,7 +276,7 @@ func Slugify(s string) string {
 	}
 	out := strings.Trim(b.String(), "-")
 	if len(out) > 60 {
-		// Hard-cap at 60 chars (trailing dash trimmed). The cut is deliberately
+		// WHY: Hard-cap at 60 chars (trailing dash trimmed). The cut is deliberately
 		// left mid-token when it lands there: the slug is an identity, and the
 		// trailing partial token is exactly what keeps two long titles sharing
 		// their leading tokens distinct. Trimming back to a token boundary would
@@ -308,9 +308,9 @@ func splitTaskGroups(s string) []taskGroup {
 		}
 		buf = nil
 	}
-	fence := "" // the open fence's full marker run (e.g. ```` ````), or "" outside one
+	fence := "" // WHY: the open fence's full marker run (e.g. ```` ````), or "" outside one
 	for _, ln := range strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n") {
-		// A heading quoted inside a code fence is content, not a new group.
+		// WHY: A heading quoted inside a code fence is content, not a new group.
 		fence = nextFence(fence, strings.TrimSpace(ln))
 		if fence == "" && strings.HasPrefix(ln, hdr) {
 			flush()
@@ -348,13 +348,13 @@ var echoLabel = regexp.MustCompile(`(?i)^[-*] +curated engram update \(\d{4}-\d{
 func withoutEchoes(body string) string {
 	lines := strings.Split(body, "\n")
 	kept := lines[:0:0]
-	fence, echoIndent := "", -1 // echoIndent: the open echo bullet's indent, or -1
+	fence, echoIndent := "", -1 // WHY: echoIndent: the open echo bullet's indent, or -1
 	for _, ln := range lines {
 		t := strings.TrimSpace(ln)
 		indent := len(ln) - len(strings.TrimLeft(ln, " \t"))
 		if echoIndent >= 0 {
 			if t != "" && indent > echoIndent {
-				continue // an indented line continues the echo bullet
+				continue // WHY: an indented line continues the echo bullet
 			}
 			echoIndent = -1
 		}

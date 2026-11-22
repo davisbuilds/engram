@@ -12,7 +12,7 @@ import (
 	"github.com/davisbuilds/engram/internal/sync"
 )
 
-// These tests pin the ordering between canonical writers and the commands that
+// WHY: These tests pin the ordering between canonical writers and the commands that
 // render from canonical: a render apply reads canonical and writes every render
 // from that one read while holding the canonical lock (shared, or exclusive if
 // it also writes canonical), so a writer lands wholly before the read or is

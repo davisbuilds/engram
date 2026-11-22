@@ -60,7 +60,7 @@ func (t ClaudeSharedTarget) Plan() ([]Action, error) {
 		if a, ok, err := t.planRules(); err != nil {
 			return nil, err
 		} else if ok && a.Kind == Conflict {
-			// Selected delivery must not write a memory behind wiring that
+			// WHY: Selected delivery must not write a memory behind wiring that
 			// cannot load it and that engram cannot safely repair.
 			return []Action{a}, nil
 		}

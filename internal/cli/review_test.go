@@ -34,7 +34,7 @@ func TestReviewLeadsUseReadOnlyCuration(t *testing.T) {
 			if !strings.HasPrefix(command, "engram ") {
 				t.Fatalf("lead bypasses engram's validated proposer: %q", command)
 			}
-			// Parse the actual emitted shell command without running an agent.
+			// WHY: Parse the actual emitted shell command without running an agent.
 			out, err := exec.Command("sh", "-c", "printf '%s\\000'"+strings.TrimPrefix(command, "engram")).Output()
 			if err != nil {
 				t.Fatal(err)

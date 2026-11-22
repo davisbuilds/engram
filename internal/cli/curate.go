@@ -50,7 +50,7 @@ func cmdCurate(e *env, name string, args []string) int {
 		e.emit(name, false, nil, nil, &RespError{Code: "config_load", Message: err.Error()}, nil)
 		return exitError
 	}
-	// A plan is bound to the store the agent is shown, so --save-plan checks
+	// WHY: A plan is bound to the store the agent is shown, so --save-plan checks
 	// its output path and binds the store before the (slow) agent runs.
 	if planOut != "" {
 		if _, rerr := checkPlanOut(planOut, cfg.CanonicalRoot); rerr != nil {
@@ -65,7 +65,6 @@ func cmdCurate(e *env, name string, args []string) int {
 	}
 	mems, binding := captured.mems, captured.binding
 
-	// Resolve the model/effort: config default, overridden per-run by flags.
 	choice := cfg.CurateModel(harness)
 	if modelOverride != "" {
 		choice.Model = modelOverride
@@ -75,7 +74,6 @@ func cmdCurate(e *env, name string, args []string) int {
 	}
 	opts := agentexec.Options{Model: choice.Model, Effort: choice.Effort}
 
-	// Resolve the deadline: --timeout, else config, else the built-in default.
 	timeout, terr := cfg.CurateTimeout()
 	if t := pa.last("--timeout"); t != "" {
 		timeout, terr = config.ParseTimeout(t, 0)
@@ -152,7 +150,7 @@ func cmdCurate(e *env, name string, args []string) int {
 			return e.savePlan(name, planOut, cfg.CanonicalRoot, binding, proposer, results, data, warns)
 		}
 		if len(results) > 0 {
-			// This run kept no plan, and the agent is not deterministic: no
+			// WHY: This run kept no plan, and the agent is not deterministic: no
 			// later command applies exactly these operations.
 			e.emit(name, true, data, warns, nil, []NextStep{{
 				Reason: "the proposed operations validated cleanly, but this dry run kept no plan and another run can propose differently; " +
@@ -165,7 +163,6 @@ func cmdCurate(e *env, name string, args []string) int {
 		return exitOK
 	}
 
-	// --apply: fail closed unless the entire batch is valid.
 	if !curate.AllValid(results) {
 		e.emit(name, false, data, warns,
 			&RespError{Code: "invalid_proposal", Message: "refusing to apply: the batch contains invalid operations"},
@@ -233,7 +230,7 @@ func opResultItems(results []curate.OpResult) []map[string]any {
 			item["to_scope"] = r.Op.ToScope
 		}
 		if r.Op.Memory != nil {
-			// Surface the full proposed memory so a dry-run reviewer can judge
+			// WHY: Surface the full proposed memory so a dry-run reviewer can judge
 			// the content an add/update/merge would write, not just its name.
 			item["memory_name"] = r.Op.Memory.Name
 			item["memory"] = r.Op.Memory

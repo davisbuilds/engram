@@ -177,7 +177,7 @@ func Run(args []string) int {
 			case "--version":
 				return cmdVersion(e, "version", nil)
 			case "-h", "--help":
-				// Help wins wherever it appears; it never runs the command.
+				// WHY: Help wins wherever it appears; it never runs the command.
 				help = true
 			}
 		case slices.Contains(globalArgs.values, flagName):

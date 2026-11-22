@@ -124,7 +124,7 @@ func TestReconcileApplyHonorsAForgetThatLandsMidRun(t *testing.T) {
 	}()
 	render := filepath.Join(sharedDirOf(claudeMem), "codex-lesson.md")
 	e := &env{jsonMode: true, apply: true, config: args[1], cwd: args[3], beforeApplyLock: func() {
-		// What a concurrent `forget codex-lesson --apply` does: tombstone the
+		// WHY: What a concurrent `forget codex-lesson --apply` does: tombstone the
 		// memory and purge its render.
 		if _, err := tombstone.Forget(canon, "codex-lesson", tombstone.Note{}, time.Now()); err != nil {
 			t.Fatal(err)

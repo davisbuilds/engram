@@ -80,7 +80,6 @@ func TestForgetApplyRetiresTheMemoryAndItsRenders(t *testing.T) {
 		t.Errorf("tombstones = %+v (err %v)", set, err)
 	}
 
-	// Every engram-owned render is gone, index lines included...
 	for _, p := range []string{
 		filepath.Join(sharedDirOf(claudeMem), "codex-lesson.md"),
 		filepath.Join(projects, "-work-y", "memory", "codex-lesson.md"),
@@ -98,7 +97,6 @@ func TestForgetApplyRetiresTheMemoryAndItsRenders(t *testing.T) {
 	if notes := codexNotesFor(t, filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(codexNotes))))); notes["claude-lesson"] {
 		t.Error("claude-lesson's Codex note should be removed")
 	}
-	// ...while hand-authored files and lines are untouched.
 	if !exists(filepath.Join(projects, "-work-z", "memory", "codex-lesson.md")) {
 		t.Error("a hand-authored file sharing the name must never be removed")
 	}
@@ -110,7 +108,6 @@ func TestForgetApplyRetiresTheMemoryAndItsRenders(t *testing.T) {
 		t.Fatal("the Claude native source must never be removed")
 	}
 
-	// The surviving native sources are reported, and the Claude one gets a lead.
 	data, _ := env["data"].(map[string]any)
 	natives := map[string][]any{}
 	for _, m := range data["memories"].([]any) {
@@ -178,7 +175,6 @@ func TestForgetRestore(t *testing.T) {
 		t.Error("restore should remove the tombstone")
 	}
 
-	// A name taken again since the forget is refused, and nothing is written.
 	if code, _ := run("forget", "codex-lesson", "--apply"); code != exitOK {
 		t.Fatal("re-forget failed")
 	}

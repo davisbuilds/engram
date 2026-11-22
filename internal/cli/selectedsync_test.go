@@ -117,7 +117,6 @@ func TestSelectedSyncClaudePreservesOtherIndexEntries(t *testing.T) {
 			if !strings.Contains(after[index], "selected corrected") {
 				t.Error("selected index entry did not receive its corrected description")
 			}
-			// Existing index order, native prose, and every other owned entry survive.
 			wantIndex := strings.Replace(before[index], "— selected old ", "— selected corrected ", 1)
 			if after[index] != wantIndex {
 				t.Errorf("unselected index content changed:\ngot: %s\nwant: %s", after[index], wantIndex)

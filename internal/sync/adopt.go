@@ -79,7 +79,7 @@ func (a ClaudeSharedAdopt) Apply() (MigrateResult, error) {
 
 func (a ClaudeSharedAdopt) applyDir(dir string, ms []*schema.CanonicalMemory, res *MigrateResult) error {
 	if dir == "" {
-		// No usable original to lock or remove: every one is a skip.
+		// WHY: No usable original to lock or remove: every one is a skip.
 		actions, err := a.planDir(dir, ms)
 		res.Skipped = append(res.Skipped, actions...)
 		return err
@@ -125,7 +125,7 @@ func (a ClaudeSharedAdopt) byDir() map[string][]*schema.CanonicalMemory {
 }
 
 func (a ClaudeSharedAdopt) planDir(dir string, ms []*schema.CanonicalMemory) ([]MigrateAction, error) {
-	var hashes map[string]string // import source -> NativeHash of the original
+	var hashes map[string]string // WHY: import source -> NativeHash of the original
 	var actions []MigrateAction
 	for _, m := range ms {
 		_, file, ok := a.original(m)

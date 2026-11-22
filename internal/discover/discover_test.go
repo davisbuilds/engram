@@ -21,7 +21,6 @@ func TestDiscoverParsesAllRecursively(t *testing.T) {
 	root := t.TempDir()
 	writeMem(t, filepath.Join(root, "a.md"), "a-mem")
 	writeMem(t, filepath.Join(root, "sub", "b.md"), "b-mem")
-	// a non-markdown file must be ignored
 	if err := os.WriteFile(filepath.Join(root, "notes.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +39,6 @@ func TestDiscoverParsesAllRecursively(t *testing.T) {
 func TestDiscoverCollectsParseErrorsWithoutAborting(t *testing.T) {
 	root := t.TempDir()
 	writeMem(t, filepath.Join(root, "good.md"), "good-mem")
-	// a git-conflicted file: parse must fail for this one only
 	bad := "---\nname: x\ndescription: y\ntype: lesson\nscope: global\n---\n<<<<<<< HEAD\na\n=======\nb\n>>>>>>> z\n"
 	if err := os.WriteFile(filepath.Join(root, "bad.md"), []byte(bad), 0o644); err != nil {
 		t.Fatal(err)

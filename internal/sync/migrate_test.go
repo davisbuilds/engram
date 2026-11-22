@@ -57,13 +57,11 @@ func migrateActions(t *testing.T, dir string, mems ...*schema.CanonicalMemory) m
 	return out
 }
 
-// --- EV-01: normalized-name adoption via slug-equality ------------------------
-
 func TestMigrateEV01NormalizedNameAdoption(t *testing.T) {
 	dir := t.TempDir()
 	body := "the rust gotcha body\n"
 	writeHand(t, dir, "rust_gotchas", "Rust gotchas", body)
-	m := memBody("rust-gotchas", body) // no provenance: exercises the slug tier
+	m := memBody("rust-gotchas", body) // WHY: no provenance: exercises the slug tier
 
 	plan := migrateActions(t, dir, m)
 	if len(plan[Adopt]) != 1 || plan[Adopt][0].Source != "rust_gotchas" || plan[Adopt][0].Name != "rust-gotchas" {
@@ -84,11 +82,8 @@ func TestMigrateEV01NormalizedNameAdoption(t *testing.T) {
 	assertIndexHasMarked(t, dir, "rust-gotchas")
 	assertIndexNoTarget(t, dir, "rust_gotchas.md")
 
-	// EV-07 (per-memory): post-adopt sync is duplicate/conflict-free and idempotent.
 	assertSyncClean(t, dir, m)
 }
-
-// --- EV-02: exact-name adoption in place --------------------------------------
 
 func TestMigrateEV02ExactNameAdoption(t *testing.T) {
 	dir := t.TempDir()
@@ -104,7 +99,6 @@ func TestMigrateEV02ExactNameAdoption(t *testing.T) {
 		t.Fatalf("adopted %d, want 1", len(res.Adopted))
 	}
 	assertEngramOwned(t, dir, "alpha")
-	// Exactly one index line for alpha, and it is engram-marked (no leftover unmarked).
 	if got := countIndexTarget(t, dir, "alpha.md"); got != 1 {
 		t.Errorf("index lines for alpha.md = %d, want 1", got)
 	}
@@ -115,7 +109,7 @@ func TestMigrateEV02ExactNameAdoption(t *testing.T) {
 func TestMigrateProvenanceTier(t *testing.T) {
 	dir := t.TempDir()
 	body := "provenance body\n"
-	// Native name slugifies to something unrelated to the canonical name; only the
+	// WHY: Native name slugifies to something unrelated to the canonical name; only the
 	// recorded provenance source ("orig.md") can link them.
 	writeHand(t, dir, "orig", "Totally Different Title", body)
 	m := memProv("renamed-thing", body, "orig.md")
@@ -133,8 +127,6 @@ func TestMigrateProvenanceTier(t *testing.T) {
 		t.Errorf("orig.md should be gone after rename-adopt")
 	}
 }
-
-// --- EV-03: diverged body is untouched ----------------------------------------
 
 func TestMigrateEV03DivergedUntouched(t *testing.T) {
 	dir := t.TempDir()
@@ -158,20 +150,17 @@ func TestMigrateEV03DivergedUntouched(t *testing.T) {
 	}
 }
 
-// --- EV-04: ambiguous matches, both directions --------------------------------
-
 func TestMigrateEV04AmbiguousTwoFilesOneMemory(t *testing.T) {
 	dir := t.TempDir()
 	body := "shared body\n"
-	writeHand(t, dir, "a-b", "A B", body) // slugify -> a-b
-	writeHand(t, dir, "a_b", "A_B", body) // slugify -> a-b
+	writeHand(t, dir, "a-b", "A B", body)
+	writeHand(t, dir, "a_b", "A_B", body)
 	m := memBody("a-b", body)
 
 	plan := migrateActions(t, dir, m)
 	if len(plan[Ambiguous]) != 2 || len(plan[Adopt]) != 0 {
 		t.Fatalf("want 2 ambiguous 0 adopt, got %+v", plan)
 	}
-	// Neither file is touched on apply.
 	if _, err := (ClaudeMigrateTarget{MemoryDir: dir, Desired: []*schema.CanonicalMemory{m}}).Apply(); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
@@ -185,9 +174,9 @@ func TestMigrateEV04AmbiguousTwoFilesOneMemory(t *testing.T) {
 func TestMigrateEV04AmbiguousOneFileTwoMemories(t *testing.T) {
 	dir := t.TempDir()
 	body := "dup body\n"
-	writeHand(t, dir, "dup", "shared", body) // slugify -> shared
-	m1 := memBody("shared", body)            // matches by slug
-	m2 := memProv("other", body, "dup.md")   // matches by provenance source
+	writeHand(t, dir, "dup", "shared", body)
+	m1 := memBody("shared", body)          // WHY: matches by slug
+	m2 := memProv("other", body, "dup.md") // WHY: matches by provenance source
 
 	plan := migrateActions(t, dir, m1, m2)
 	if len(plan[Ambiguous]) != 1 || len(plan[Adopt]) != 0 {
@@ -195,14 +184,10 @@ func TestMigrateEV04AmbiguousOneFileTwoMemories(t *testing.T) {
 	}
 }
 
-// --- destination-collision guard (P1): never clobber an unrelated file --------
-
 func TestMigrateDestinationOccupiedIsAmbiguous(t *testing.T) {
 	dir := t.TempDir()
 	body := "shared body\n"
-	// Source normalizes to "foo-bar"; a *different* hand-authored foo-bar.md
-	// already occupies that destination name with unrelated content.
-	writeHand(t, dir, "foo_bar", "Foo bar", body) // slugify -> foo-bar
+	writeHand(t, dir, "foo_bar", "Foo bar", body)
 	writeHand(t, dir, "foo-bar", "unrelated other lesson", "totally different body\n")
 	m := memBody("foo-bar", body)
 
@@ -210,7 +195,6 @@ func TestMigrateDestinationOccupiedIsAmbiguous(t *testing.T) {
 	if len(plan[Adopt]) != 0 {
 		t.Fatalf("must not adopt when destination is occupied by a different file: %+v", plan)
 	}
-	// Apply must leave the unrelated foo-bar.md byte-for-byte intact.
 	unrelated := filepath.Join(dir, "foo-bar.md")
 	before, _ := os.ReadFile(unrelated)
 	if _, err := (ClaudeMigrateTarget{MemoryDir: dir, Desired: []*schema.CanonicalMemory{m}}).Apply(); err != nil {
@@ -220,21 +204,17 @@ func TestMigrateDestinationOccupiedIsAmbiguous(t *testing.T) {
 	if string(before) != string(after) {
 		t.Errorf("unrelated foo-bar.md was clobbered:\nbefore=%q\nafter=%q", before, after)
 	}
-	// The source file is also left untouched (not deleted).
 	if _, err := os.Stat(filepath.Join(dir, "foo_bar.md")); err != nil {
 		t.Errorf("source foo_bar.md should remain: %v", err)
 	}
 }
 
-// --- EV-05: no local original -> not a migrate candidate ----------------------
-
 func TestMigrateEV05NoLocalOriginSkipped(t *testing.T) {
 	dir := t.TempDir()
 	writeHand(t, dir, "unrelated", "unrelated", "unrelated body\n")
-	codexOnly := memBody("codex-only-lesson", "codex body\n") // no file for it
+	codexOnly := memBody("codex-only-lesson", "codex body\n")
 
 	plan := migrateActions(t, dir, codexOnly)
-	// The canonical memory with no local file produces no migrate action at all.
 	for _, k := range []MigrateActionKind{Adopt, Diverged, Ambiguous} {
 		for _, a := range plan[k] {
 			if a.Name == "codex-only-lesson" {
@@ -242,13 +222,10 @@ func TestMigrateEV05NoLocalOriginSkipped(t *testing.T) {
 			}
 		}
 	}
-	// The unrelated hand-authored file is a SKIP (nothing supersedes it).
 	if len(plan[Skip]) != 1 || plan[Skip][0].Source != "unrelated" {
 		t.Fatalf("want unrelated skipped, got %+v", plan[Skip])
 	}
 }
-
-// --- EV-06: idempotency -------------------------------------------------------
 
 func TestMigrateEV06Idempotent(t *testing.T) {
 	dir := t.TempDir()
@@ -269,20 +246,18 @@ func TestMigrateEV06Idempotent(t *testing.T) {
 	}
 }
 
-// --- EV-07: steady-state convergence on a mixed slug --------------------------
-
 func TestMigrateEV07SteadyStateConvergence(t *testing.T) {
 	dir := t.TempDir()
 	nb := "normalized body\n"
 	eb := "exact body\n"
-	writeHand(t, dir, "norm_case", "Norm case", nb)   // normalized-name conflict
-	writeHand(t, dir, "exact-case", "exact-case", eb) // exact-name conflict
+	writeHand(t, dir, "norm_case", "Norm case", nb)
+	writeHand(t, dir, "exact-case", "exact-case", eb)
 	norm := memBody("norm-case", nb)
 	exact := memBody("exact-case", eb)
-	codexOnly := memBody("codex-only", "new knowledge\n") // no local original
+	codexOnly := memBody("codex-only", "new knowledge\n")
 	desired := []*schema.CanonicalMemory{norm, exact, codexOnly}
 
-	// Before migrate: sync sees at least one CONFLICT (exact-name) and the
+	// WHY: Before migrate: sync sees at least one CONFLICT (exact-name) and the
 	// normalized case would render as a duplicate CREATE. Non-degenerate start.
 	before := kinds(mustPlan(t, target(dir, desired...)))
 	if before[Conflict] < 1 {
@@ -303,7 +278,6 @@ func TestMigrateEV07SteadyStateConvergence(t *testing.T) {
 			t.Errorf("post-migrate duplicate CREATE for adopted %s", a.Name)
 		}
 	}
-	// The genuinely-new memory still renders as a legitimate CREATE.
 	sawCodexCreate := false
 	for _, a := range after {
 		if a.Kind == Create && a.Name == "codex-only" {

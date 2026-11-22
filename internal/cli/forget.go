@@ -163,7 +163,7 @@ func (s *session) forget(e *env, name string, names []string, note tombstone.Not
 		return exitOK
 	}
 
-	// The canonical lock is taken before any render dir's and held through the
+	// WHY: The canonical lock is taken before any render dir's and held through the
 	// purge, so no render apply runs between the tombstones and the purge, and
 	// a refused lock leaves canonical and every render as they were.
 	release, lerr := canonLock(root)
@@ -172,7 +172,7 @@ func (s *session) forget(e *env, name string, names []string, note tombstone.Not
 		return exitError
 	}
 	defer release()
-	// Re-check under the lock, so the batch forgets whole or not at all.
+	// WHY: Re-check under the lock, so the batch forgets whole or not at all.
 	for _, m := range mems {
 		if _, _, found, lerr := store.Load(root, m.Name); lerr != nil || !found {
 			e.emit(name, false, data, warns, &RespError{Code: "changed", Message: m.Name + " changed since it was read; nothing was forgotten"}, nil)
@@ -204,7 +204,7 @@ func (s *session) restore(e *env, name string, names []string) int {
 	root := s.cfg.CanonicalRoot
 	release := func() {}
 	if e.apply {
-		// Check and write under one lock, so the batch restores whole or not at all.
+		// WHY: Check and write under one lock, so the batch restores whole or not at all.
 		r, lerr := canonLock(root)
 		if lerr != nil {
 			e.emit(name, false, nil, nil, lerr, nil)
@@ -291,7 +291,7 @@ func (s *session) nativeSources() (nativeIndex, error) {
 		if err != nil {
 			return idx, err
 		}
-		// Key each hand-authored file by the memory it holds (the name import
+		// WHY: Key each hand-authored file by the memory it holds (the name import
 		// gives it), so a same-named file holding another memory never matches.
 		for _, dir := range dirs {
 			res, err := importer.ImportClaude(dir, "")

@@ -46,7 +46,7 @@ func decideImportScope(existing, cand *schema.CanonicalMemory, authoritative boo
 		return cand.Scope, false, ""
 	}
 	if !authoritative {
-		// An import that brings no change has nothing to decide: the stored
+		// WHY: An import that brings no change has nothing to decide: the stored
 		// scope was settled before (by share, or an earlier import), so saying
 		// so on every run is noise.
 		if schema.NativeHash(existing) == schema.NativeHash(cand) {
@@ -61,7 +61,7 @@ func decideImportScope(existing, cand *schema.CanonicalMemory, authoritative boo
 	if scopeIsSoleDiff(existing, cand) {
 		return cand.Scope, true, ""
 	}
-	// Scope differs but so does the body/metadata: a real content conflict, not a
+	// WHY: Scope differs but so does the body/metadata: a real content conflict, not a
 	// rename. Keep the derived scope and let the save path report the conflict.
 	return cand.Scope, false, ""
 }

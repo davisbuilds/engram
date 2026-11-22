@@ -45,17 +45,14 @@ func TestHostAxisFailsClosedForUnknownHost(t *testing.T) {
 	agnostic := mem("a", "global", schema.AppliesTo{})
 	all := []*schema.CanonicalMemory{hostScoped, agnostic}
 
-	// Known, matching host: both render.
 	known := names(RelevantFor(all, "/x", "claude", "host-a"))
 	if !known["h"] || !known["a"] {
 		t.Errorf("known host should get both; got %v", known)
 	}
-	// Known, non-matching host: only the agnostic one.
 	other := names(RelevantFor(all, "/x", "claude", "host-b"))
 	if other["h"] || !other["a"] {
 		t.Errorf("non-matching host should exclude host-scoped; got %v", other)
 	}
-	// Unknown host (""): host-scoped fails closed, agnostic still renders.
 	unknown := names(RelevantFor(all, "/x", "claude", ""))
 	if unknown["h"] {
 		t.Error("unknown host must not receive a host-scoped memory (fail-closed)")

@@ -85,7 +85,7 @@ func TestDataNeverCarriesNull(t *testing.T) {
 func TestHarnessFailureSetsTopLevelError(t *testing.T) {
 	dir := t.TempDir()
 	cfg := scratchConfig(t, dir)
-	// A file where the Codex notes directory belongs makes the Codex plan fail.
+	// WHY: A file where the Codex notes directory belongs makes the Codex plan fail.
 	writeFile(t, filepath.Join(dir, "codex", "memories", "extensions", "engram", "notes"), "not a dir\n")
 	for _, c := range [][]string{{"sync"}, {"sync", "--apply"}, {"audit"}, {"diff"}, {"reconcile"}} {
 		code, env := runEnvelope(t, append(c, "--config", cfg, "--cwd", dir)...)

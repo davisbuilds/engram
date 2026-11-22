@@ -34,7 +34,7 @@ func claudeContent(existing []byte, m *schema.CanonicalMemory) ([]byte, error) {
 
 	var doc yaml.Node
 	if err := yaml.Unmarshal(front, &doc); err != nil || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
-		// Existing frontmatter is unparseable as a mapping; do not risk mangling
+		// WHY: Existing frontmatter is unparseable as a mapping; do not risk mangling
 		// it — fall back to the schema-only render.
 		rr, rerr := render.ClaudeRenderer{}.Render(m)
 		if rerr != nil {

@@ -148,7 +148,7 @@ func runWithTimeout(inv Invocation, d time.Duration) ([]byte, error) {
 		defer cancel()
 	}
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // argv is engram-built, not user-injected
-	// Run the agent in its own process group and kill the whole group on the
+	// WHY: Run the agent in its own process group and kill the whole group on the
 	// deadline: an agent CLI spawns helpers that would otherwise outlive it and
 	// hold its output pipes open.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -211,18 +211,18 @@ type codexEvent struct {
 // an empty proposal.
 func ExtractCodexText(stdout []byte) (string, error) {
 	sc := bufio.NewScanner(bytes.NewReader(stdout))
-	// A proposal over the full corpus can exceed the 64KB default line cap.
+	// WHY: A proposal over the full corpus can exceed the 64KB default line cap.
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	var last string
 	found := false
 	for sc.Scan() {
 		line := bytes.TrimSpace(sc.Bytes())
 		if len(line) == 0 || line[0] != '{' {
-			// A blank line or non-JSON banner is not an event and can never be the
+			// WHY: A blank line or non-JSON banner is not an event and can never be the
 			// final agent_message, so skipping it cannot hide the model's answer.
 			continue
 		}
-		// A line that looks like a JSON event but does not parse is corruption — a
+		// WHY: A line that looks like a JSON event but does not parse is corruption — a
 		// truncated final message, say. Failing closed here is load-bearing: were we
 		// to skip it, a valid *earlier* agent_message would survive as `last` and
 		// curate --apply could execute a superseded, potentially destructive

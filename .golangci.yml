@@ -1,8 +1,7 @@
 version: "2"
 
-# Go lint stack for engram. Defaults already enable errcheck, govet,
-# ineffassign, staticcheck, and unused; the extras below add style and
-# correctness checks that fit a small, deterministic, agent-operated CLI.
+# WHY: the defaults already enable errcheck, govet, ineffassign, staticcheck,
+# and unused, so only the extras are listed.
 linters:
   enable:
     - misspell
@@ -15,7 +14,7 @@ linters:
         - name: exported
           disabled: true
     errcheck:
-      # Writes to stdout/stderr (help text, diagnostics, JSON envelopes) have
+      # WHY: Writes to stdout/stderr (help text, diagnostics, JSON envelopes) have
       # nothing useful to do with a returned error in a CLI; don't require it.
       exclude-functions:
         - fmt.Fprint

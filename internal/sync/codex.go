@@ -140,7 +140,7 @@ func (t CodexTarget) Apply() (Result, error) {
 	}
 	defer unlock()
 	if t.Names != nil {
-		// Plan and apply address the same filename even across a second
+		// WHY: Plan and apply address the same filename even across a second
 		// boundary, so a selected create cannot evade its collision check.
 		now := t.now()
 		t.Now = func() time.Time { return now }

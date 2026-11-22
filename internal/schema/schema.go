@@ -151,7 +151,7 @@ func (m *CanonicalMemory) Render() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal frontmatter: %w", err)
 	}
-	// yaml.Marshal ends front with a newline, so front + fence yields the
+	// WHY: yaml.Marshal ends front with a newline, so front + fence yields the
 	// "\n---\n" delimiter Parse splits on.
 	return []byte(fence + string(front) + fence + m.Body), nil
 }
@@ -180,7 +180,7 @@ func (m *CanonicalMemory) Validate() error {
 	case !validScope(m.Scope):
 		issues = append(issues, "scope must be 'global' or 'project:<repo>'")
 	}
-	// A cwd is always matched as an absolute, cleaned path, so a relative glob
+	// WHY: A cwd is always matched as an absolute, cleaned path, so a relative glob
 	// (or an unexpanded ~), or one spelled unclean ("/work/", "/a/../b"), could
 	// never match and would hide the memory everywhere.
 	for _, g := range m.AppliesTo.Cwd {

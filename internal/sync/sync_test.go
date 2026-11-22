@@ -61,7 +61,6 @@ func TestApplyCreatesFiles(t *testing.T) {
 			t.Errorf("expected %s.md to exist: %v", name, err)
 		}
 	}
-	// index carries both anchored lines
 	idx, err := os.ReadFile(filepath.Join(dir, "MEMORY.md"))
 	if err != nil {
 		t.Fatalf("read index: %v", err)
@@ -98,7 +97,6 @@ func TestApplyPreservesUnmarkedFile(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// A hand-authored file that collides with a desired memory name.
 	unmarked := []byte("---\nname: alpha-lesson\ndescription: hand written\n---\nmine\n")
 	path := filepath.Join(dir, "alpha-lesson.md")
 	if err := os.WriteFile(path, unmarked, 0o644); err != nil {
@@ -132,15 +130,12 @@ func TestApplyPreservesUnmarkedFile(t *testing.T) {
 
 func TestStaleRemovesOwnedOrphanOnly(t *testing.T) {
 	dir := t.TempDir()
-	// An engram-owned file with no corresponding desired memory -> STALE.
 	writeOwned(t, dir, mem("orphan-lesson"))
-	// A hand-authored orphan -> must be left untouched.
 	handPath := filepath.Join(dir, "hand-orphan.md")
 	if err := os.WriteFile(handPath, []byte("---\nname: hand-orphan\ndescription: mine\n---\nx\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Desired set is empty except a new memory, so both orphans are "not desired".
 	tg := target(dir, mem("keeper-lesson"))
 	res, err := tg.Apply()
 	if err != nil {
@@ -197,7 +192,6 @@ func TestApplyWritesSelfDocumentingHeader(t *testing.T) {
 	if n := strings.Count(string(idx), marker.ClaudeIndexHeader); n != 1 {
 		t.Errorf("header appears %d times, want exactly 1:\n%s", n, idx)
 	}
-	// The header is a plain comment, never mistaken for an index entry.
 	if _, ok := marker.ClaudeIndexName(marker.ClaudeIndexHeader); ok {
 		t.Error("header line matches ClaudeIndexName; it must not be parsed as an entry")
 	}
@@ -208,7 +202,6 @@ func TestHeaderNotDuplicatedAcrossSyncs(t *testing.T) {
 	if _, err := target(dir, mem("alpha-lesson"), mem("beta-lesson")).Apply(); err != nil {
 		t.Fatalf("first apply: %v", err)
 	}
-	// Adding a memory re-runs upsert; the header must not stack.
 	if _, err := target(dir, mem("alpha-lesson"), mem("beta-lesson"), mem("gamma-lesson")).Apply(); err != nil {
 		t.Fatalf("second apply: %v", err)
 	}
@@ -226,8 +219,6 @@ func TestApplyPreservesForeignEngramMentioningComment(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// A hand-authored comment that merely mentions engram must survive apply — it
-	// is not the reserved generated header and ensureIndexHeader must not drop it.
 	foreign := "<!-- engram: local note, human-written -->"
 	seed := "# Memory Index\n\n" + foreign + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(seed), 0o644); err != nil {
@@ -254,7 +245,6 @@ func TestHeaderRemovedWhenNoEntriesRemain(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(foreign+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// An engram entry brings the header in alongside the foreign line.
 	if _, err := target(dir, mem("alpha-lesson")).Apply(); err != nil {
 		t.Fatalf("apply with entry: %v", err)
 	}
@@ -262,8 +252,6 @@ func TestHeaderRemovedWhenNoEntriesRemain(t *testing.T) {
 	if !strings.Contains(string(idx), marker.ClaudeIndexHeader) {
 		t.Fatalf("header should be present while an entry exists:\n%s", idx)
 	}
-	// Empty desired set stales the owned entry; the header goes with it, the
-	// foreign line stays.
 	if _, err := target(dir).Apply(); err != nil {
 		t.Fatalf("apply empty: %v", err)
 	}
@@ -284,7 +272,6 @@ func TestConcurrentApplyIsMutuallyExclusive(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Simulate a concurrent apply already holding the lock.
 	release, err := lock.Acquire(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -296,7 +283,6 @@ func TestConcurrentApplyIsMutuallyExclusive(t *testing.T) {
 }
 
 func containsLineFor(index, name string) bool {
-	// an engram index line embeds the name anchor
 	return strings.Contains(index, "engram name="+name+" -->")
 }
 

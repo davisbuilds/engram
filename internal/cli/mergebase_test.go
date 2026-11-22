@@ -63,7 +63,6 @@ func TestCanonicalOnlyEditIsNotAConflict(t *testing.T) {
 	if after, _ := os.ReadFile(file); string(after) != string(before) {
 		t.Error("canonical_ahead must not write")
 	}
-	// --refresh still lets the operator take the native deliberately.
 	if code, rows := importRows(t, append([]string{"import", "claude-code", "--apply", "--refresh", "claude-lesson"}, args...)...); code != exitOK || rows["claude-lesson"]["outcome"] != "updated" {
 		t.Errorf("--refresh over canonical_ahead: exit %d row %v", code, rows["claude-lesson"])
 	}

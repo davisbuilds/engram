@@ -379,7 +379,7 @@ func TestParsePlanIsStrict(t *testing.T) {
 			t.Errorf("%s: parsed, want refused", name)
 		}
 	}
-	// Paths are compared exactly: two files differing only in case are two files.
+	// WHY: Paths are compared exactly: two files differing only in case are two files.
 	twoFiles := strings.Replace(string(raw), `"a.md": "`+digest+`"`, `"a.md": "`+digest+`", "A.md": "`+digest+`"`, 1)
 	if _, err := ParsePlan([]byte(twoFiles)); err != nil {
 		t.Errorf("case-distinct corpus paths: %v", err)

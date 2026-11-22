@@ -132,7 +132,6 @@ func TestCurateFailsClosedOnInvalidOp(t *testing.T) {
 	cfg := filepath.Join(dir, "c.yaml")
 	writeFile(t, cfg, "canonical_root: "+canon+"\n")
 
-	// One valid remove, one remove of a nonexistent memory.
 	proposal := "```json\n" + `{"operations":[
 	  {"op":"remove","name":"real","reason":"ok"},
 	  {"op":"remove","name":"ghost","reason":"nope"}

@@ -136,7 +136,7 @@ func TestDeliveryAllProjectsAndDisabledHarnessRemainObservable(t *testing.T) {
 			t.Fatalf("status: %v", env)
 		}
 		d := statusHarness(t, env, "claude-code")["delivery"].(map[string]any)
-		want := 2 // current project plus shared
+		want := 2 // WHY: current project plus shared
 		if all {
 			want++
 		}
