@@ -77,7 +77,7 @@ type candidate struct {
 	base    string
 	path    string
 	content []byte
-	matches []string // canonical memory names this file corresponds to
+	matches []string // WHY: canonical memory names this file corresponds to
 }
 
 // Plan classifies every hand-authored file in the memory dir without writing.
@@ -94,9 +94,8 @@ func (t ClaudeMigrateTarget) Plan() ([]MigrateAction, error) {
 		byName[m.Name] = m
 	}
 
-	// Build the bidirectional match graph.
 	cands := make(map[string]*candidate, len(unmarked))
-	memMatches := map[string][]string{} // memory name -> matching file bases
+	memMatches := map[string][]string{} // WHY: memory name -> matching file bases
 	for base, path := range unmarked {
 		content, rerr := os.ReadFile(path)
 		if rerr != nil {
@@ -129,7 +128,7 @@ func (t ClaudeMigrateTarget) Plan() ([]MigrateAction, error) {
 				actions = append(actions, MigrateAction{Kind: Ambiguous, Source: base, Path: c.path, Name: name, Reason: "canonical " + name + " is matched by multiple files: " + strings.Join(others, ", ")})
 				continue
 			}
-			// Destination-collision guard: adopting normalizes the filename to
+			// WHY: Destination-collision guard: adopting normalizes the filename to
 			// <name>.md. If a *different* hand-authored file already occupies that
 			// name, the write would silently destroy it — refuse rather than clobber
 			// an unrelated file the matcher never linked to this memory.
@@ -178,7 +177,7 @@ func (t ClaudeMigrateTarget) Apply() (MigrateResult, error) {
 			if rerr != nil {
 				return res, rerr
 			}
-			// Preserve the native file's unmanaged frontmatter (Claude's node_type,
+			// WHY: Preserve the native file's unmanaged frontmatter (Claude's node_type,
 			// originSessionId, …) rather than replacing it with the schema-only render;
 			// engram sets only its managed fields + the ownership marker. Body-identity
 			// already holds, so no content is lost.
@@ -194,7 +193,7 @@ func (t ClaudeMigrateTarget) Apply() (MigrateResult, error) {
 			if werr := atomicWrite(newPath, content); werr != nil {
 				return res, werr
 			}
-			// If the canonical name normalized away from the original filename, the
+			// WHY: If the canonical name normalized away from the original filename, the
 			// old-named file and its (unmarked) index line must go, or the lesson
 			// duplicates. removeUnmarkedIndexLine handles the exact-name case too:
 			// the pre-adoption index line for this name is hand-authored, and the

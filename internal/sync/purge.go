@@ -177,7 +177,7 @@ func (p Purge) planClaude(dir string) ([]Action, error) {
 		if f, ok := owned[name]; ok {
 			note := purgeNote
 			if _, edited := editedRender(f.content); edited {
-				// Retirement still removes it, but never silently.
+				// WHY: Retirement still removes it, but never silently.
 				note += "; discards an in-place edit not yet imported"
 			}
 			actions = append(actions, Action{Stale, name, f.path, note})

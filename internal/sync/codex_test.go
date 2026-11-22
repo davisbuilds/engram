@@ -77,7 +77,6 @@ func TestCodexStaleRemovesOwnedNoteOnly(t *testing.T) {
 	if _, err := codexTarget(dir, mem("orphan-lesson")).Apply(); err != nil {
 		t.Fatal(err)
 	}
-	// A foreign (unmarked) file in the notes dir must be preserved.
 	foreign := filepath.Join(dir, "notes", "2020-01-01T00-00-00-foreign.md")
 	if err := os.WriteFile(foreign, []byte("# not an engram note\n"), 0o644); err != nil {
 		t.Fatal(err)
