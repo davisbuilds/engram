@@ -100,8 +100,6 @@ remain implicit:
 - **Curate meets an incompletely parsed corpus three ways.** `--proposal` and
   `--plan` refuse up front (`corpus_parse`); agent-driven `--apply` runs the
   agent first and then fails with `apply`. Refuse before invoking the agent.
-- **`forget --restore` checks the batch whole but writes per name**, so a
-  mid-batch write failure leaves a partial restore.
 - **Canonical root state is re-derived per command.** `rootAbsent`,
   `canonReadLock`'s missing flag, `discover.Locate` (missing reads as empty) and
   `status` each answer it, and a writer that renders must remember to capture

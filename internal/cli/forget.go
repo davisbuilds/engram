@@ -261,12 +261,13 @@ func (s *session) restore(e *env, name string, names []string) int {
 		}})
 		return exitOK
 	}
-	for _, item := range items {
-		path, rerr := tombstone.Restore(root, item["name"].(string))
-		if rerr != nil {
-			e.emit(name, false, data, nil, &RespError{Code: "restore", Message: rerr.Error()}, nil)
-			return exitError
-		}
+	paths, err := tombstone.RestoreBatch(root, names)
+	if err != nil {
+		e.emit(name, false, data, nil, &RespError{Code: "restore", Message: err.Error()}, nil)
+		return exitError
+	}
+	for i, path := range paths {
+		item := items[i]
 		item["path"], item["outcome"] = path, "restored"
 	}
 	e.emit(name, true, data, nil, nil, []NextStep{{
