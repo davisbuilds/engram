@@ -67,7 +67,7 @@ func Save(root string, m *schema.CanonicalMemory, force bool) (Outcome, string, 
 		if err != nil {
 			return "", path, err
 		}
-	default: // WHY: Conflict or CanonicalAhead: only a forced save takes the candidate
+	default:
 		if !force {
 			return outcome, path, nil
 		}

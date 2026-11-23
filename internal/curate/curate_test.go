@@ -340,7 +340,7 @@ func TestApplyTombstonesWhatItRemoves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string][2]string{ // WHY: name -> reason, successor
+	want := map[string][2]string{
 		"b":  {"same lesson", "a"},
 		"c":  {"overlap", "cd"},
 		"d":  {"overlap", "cd"},

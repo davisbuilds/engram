@@ -369,7 +369,7 @@ func cmdImport(e *env, name string, args []string) int {
 			overridable := outcome == store.Conflict || outcome == store.CanonicalAhead
 			if outcome == store.Created || outcome == store.Updated || (overridable && (force || refresh[m.Name])) {
 				if overridable {
-					planned = m // WHY: a forced or refreshed save writes the candidate
+					planned = m
 				}
 				batch[m.Name] = planned
 			}
