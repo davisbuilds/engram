@@ -187,6 +187,91 @@ func TestForgetRestore(t *testing.T) {
 	}
 }
 
+func TestForgetRestoreRollsBackOnBatchWriteFailure(t *testing.T) {
+	canon, _, _, args := forgetFixture(t)
+	run := func(argv ...string) (int, map[string]any) {
+		return runEnvelope(t, append(argv, args...)...)
+	}
+	firstDir := filepath.Join(canon, "recreated")
+	first := filepath.Join(firstDir, "codex-lesson.md")
+	secondDir := filepath.Join(canon, "nested")
+	second := filepath.Join(secondDir, "claude-lesson.md")
+	for _, path := range []string{first, second} {
+		if err := os.Mkdir(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(filepath.Join(canon, filepath.Base(path)), path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read := func(path string) string {
+		t.Helper()
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	originalFirst, originalSecond := read(first), read(second)
+	if code, env := run("forget", "codex-lesson", "--reason", "earlier", "--apply"); code != exitOK {
+		t.Fatalf("first forget exit = %d: %v", code, env["error"])
+	}
+	writeFile(t, first, originalFirst)
+	if code, env := run("forget", "codex-lesson", "claude-lesson", "--apply"); code != exitOK {
+		t.Fatalf("batch forget exit = %d: %v", code, env["error"])
+	}
+	firstRecord := tombstone.Path(canon, "codex-lesson")
+	secondRecord := tombstone.Path(canon, "claude-lesson")
+	archive := filepath.Join(filepath.Dir(firstRecord), "codex-lesson.1.yaml")
+	history := []string{firstRecord, secondRecord, archive}
+	before := []string{read(firstRecord), read(secondRecord), read(archive)}
+	for _, dir := range []string{firstDir, secondDir} {
+		if err := os.Remove(dir); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFile(t, secondDir, "blocks the second write")
+
+	restore := func() (int, map[string]any) {
+		return run("forget", "--restore", "codex-lesson", "claude-lesson", "--apply")
+	}
+	code, env := restore()
+	failure, _ := env["error"].(map[string]any)
+	if code != exitError || failure["code"] != "restore" || !strings.Contains(failure["message"].(string), secondDir) {
+		t.Fatalf("want restore write error at the second target, got exit %d: %v", code, failure)
+	}
+	if _, err := os.Lstat(first); !os.IsNotExist(err) {
+		t.Errorf("first memory remains restored after the second write failed (stat error: %v)", err)
+	}
+	if _, err := os.Lstat(firstDir); !os.IsNotExist(err) {
+		t.Errorf("newly created restore directory remains after rollback (stat error: %v)", err)
+	}
+	for i, path := range history {
+		got, err := os.ReadFile(path)
+		if err != nil || string(got) != before[i] {
+			t.Errorf("tombstone %s changed after failed restore (read error: %v)", filepath.Base(path), err)
+		}
+	}
+	if t.Failed() {
+		return
+	}
+
+	if err := os.Remove(secondDir); err != nil {
+		t.Fatal(err)
+	}
+	if code, env := restore(); code != exitOK {
+		t.Fatalf("retry exit = %d: %v", code, env["error"])
+	}
+	if read(first) != originalFirst || read(second) != originalSecond || read(firstRecord) != before[2] {
+		t.Error("retry should restore both original memories and promote the earlier tombstone")
+	}
+	for _, path := range []string{secondRecord, archive} {
+		if _, err := os.Lstat(path); !os.IsNotExist(err) {
+			t.Errorf("consumed tombstone %s still exists (stat error: %v)", filepath.Base(path), err)
+		}
+	}
+}
+
 func TestForgetArgumentErrors(t *testing.T) {
 	_, _, _, args := forgetFixture(t)
 	for _, argv := range [][]string{

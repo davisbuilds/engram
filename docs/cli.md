@@ -550,9 +550,12 @@ not harness support, readiness, installation elsewhere or consumption.
   each row's `natives` lists where the memory's source still lives (a Claude file,
   which gets an `rm` lead because Claude keeps loading it, or a Codex Task Group,
   which the tombstone keeps out of canonical). `--restore <name>...` writes
-  forgotten memories back byte for byte and removes their tombstones; a name held
-  by a canonical memory again is refused (exit `3`, `name_taken`), and an unknown
-  one exits `2`. Dry-run by default.
+  forgotten memories back byte for byte and consumes their latest tombstones.
+  An earlier tombstone, if present, becomes the latest. A name held by a
+  canonical memory again is refused (exit `3`, `name_taken`), and an unknown
+  one exits `2`. If a batch write fails, engram rolls back restored files and
+  tombstone changes under the canonical lock. Any rollback failure is included
+  in the restore error. Dry-run by default.
 - **`detach <name>...`** — keeps an orphan: prefixes an imported memory's
   `provenance.origin` with `detached:`, so orphan detection passes it by. A
   detached memory is an ordinary canonical memory to `reconcile`, which then

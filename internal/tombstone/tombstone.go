@@ -108,22 +108,117 @@ func Forget(root, name string, note Note, now time.Time) (Tombstone, error) {
 // tombstone, returning the restored path. A name or path taken again since is
 // refused (ErrTaken) and the tombstone kept. The caller holds the canonical lock.
 func Restore(root, name string) (string, error) {
+	paths, err := RestoreBatch(root, []string{name})
+	if err != nil {
+		return "", err
+	}
+	return paths[0], nil
+}
+
+func RestoreBatch(root string, names []string) (_ []string, err error) {
+	var undo []func() error
+	var staging string
+	defer func() {
+		if err != nil {
+			var failures []error
+			for i := len(undo) - 1; i >= 0; i-- {
+				if rollbackErr := undo[i](); rollbackErr != nil {
+					failures = append(failures, rollbackErr)
+				}
+			}
+			if rollbackErr := errors.Join(failures...); rollbackErr != nil {
+				err = fmt.Errorf("%w; restore rollback failed: %w", err, rollbackErr)
+				return
+			}
+		}
+		if staging != "" {
+			_ = os.RemoveAll(staging)
+		}
+	}()
+
+	paths := make([]string, 0, len(names))
+	for _, name := range names {
+		path, memory, err := restoreTarget(root, name)
+		if err != nil {
+			return nil, err
+		}
+		if err := restoreMkdir(filepath.Dir(path), &undo); err != nil {
+			return nil, err
+		}
+		if err := writeAtomic(path, []byte(memory)); err != nil {
+			return nil, err
+		}
+		undo = append(undo, func() error { return os.Remove(path) })
+
+		latest := Path(root, name)
+		if staging == "" {
+			staging, err = os.MkdirTemp(filepath.Dir(latest), ".engram-restore-*")
+			if err != nil {
+				return nil, err
+			}
+		}
+		saved := filepath.Join(staging, name+".tmp")
+		if err := os.Rename(latest, saved); err != nil {
+			return nil, err
+		}
+		var promoted string
+		undo = append(undo, func() error {
+			if promoted != "" {
+				if err := os.Rename(latest, promoted); err != nil {
+					return err
+				}
+			}
+			return os.Rename(saved, latest)
+		})
+		// WHY: The newest earlier record keeps blocking its origin and becomes
+		// the record a subsequent restore would bring back.
+		if n := archives(root, name); n > 0 {
+			earlier := archivePath(root, name, n)
+			if err := os.Rename(earlier, latest); err != nil {
+				return nil, err
+			}
+			promoted = earlier
+		}
+		paths = append(paths, path)
+	}
+	return paths, nil
+}
+
+func restoreMkdir(dir string, undo *[]func() error) error {
+	info, err := os.Stat(dir)
+	if err == nil && info.IsDir() {
+		return nil
+	}
+	if !errors.Is(err, os.ErrNotExist) || filepath.Dir(dir) == dir {
+		return os.MkdirAll(dir, 0o755)
+	}
+	if err := restoreMkdir(filepath.Dir(dir), undo); err != nil {
+		return err
+	}
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		return err
+	}
+	*undo = append(*undo, func() error { return os.Remove(dir) })
+	return nil
+}
+
+func restoreTarget(root, name string) (string, string, error) {
 	if !schema.ValidName(name) {
-		return "", fmt.Errorf("invalid memory name %q", name)
+		return "", "", fmt.Errorf("invalid memory name %q", name)
 	}
 	ts, err := read(Path(root, name))
 	if errors.Is(err, os.ErrNotExist) {
-		return "", fmt.Errorf("%w for %s", ErrNotFound, name)
+		return "", "", fmt.Errorf("%w for %s", ErrNotFound, name)
 	}
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	_, taken, found, err := store.Load(root, name)
 	if errors.Is(err, store.ErrWithheld) || found {
-		return "", fmt.Errorf("%w: %s (%s)", ErrTaken, name, taken)
+		return "", "", fmt.Errorf("%w: %s (%s)", ErrTaken, name, taken)
 	}
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	// WHY: The recorded text is written back as canonical, so it must be a valid
 	// memory of this very name: a corrupt or mismatched record would otherwise
@@ -133,32 +228,19 @@ func Restore(root, name string) (string, error) {
 		perr = m.Validate()
 	}
 	if perr != nil {
-		return "", fmt.Errorf("tombstone for %s does not hold a valid memory: %w", name, perr)
+		return "", "", fmt.Errorf("tombstone for %s does not hold a valid memory: %w", name, perr)
 	}
 	if m.Name != name {
-		return "", fmt.Errorf("tombstone for %s holds memory %q", name, m.Name)
+		return "", "", fmt.Errorf("tombstone for %s holds memory %q", name, m.Name)
 	}
 	path := filepath.Join(root, filepath.FromSlash(ts.Path))
 	if !filepath.IsLocal(filepath.FromSlash(ts.Path)) || !contained(root, filepath.Dir(path)) {
-		return "", fmt.Errorf("tombstone for %s records a path outside the canonical root: %q", name, ts.Path)
+		return "", "", fmt.Errorf("tombstone for %s records a path outside the canonical root: %q", name, ts.Path)
 	}
 	if _, err := os.Lstat(path); err == nil {
-		return "", fmt.Errorf("%w: %s is occupied", ErrTaken, path)
+		return "", "", fmt.Errorf("%w: %s is occupied", ErrTaken, path)
 	}
-	if err := writeAtomic(path, []byte(ts.Memory)); err != nil {
-		return "", err
-	}
-	if err := os.Remove(Path(root, name)); err != nil {
-		return path, err
-	}
-	// WHY: The newest earlier record, if any, becomes the latest: it keeps blocking
-	// its origin and is what a later restore would bring back.
-	if n := archives(root, name); n > 0 {
-		if err := os.Rename(archivePath(root, name, n), Path(root, name)); err != nil {
-			return path, err
-		}
-	}
-	return path, nil
+	return path, ts.Memory, nil
 }
 
 // archivePath is where the i-th earlier record for name is kept.
