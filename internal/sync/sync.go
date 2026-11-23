@@ -231,7 +231,6 @@ func (t ClaudeTarget) applyLocked() (Result, error) {
 		case Conflict:
 			res.Conflicts = append(res.Conflicts, a)
 		case Create, Update:
-			// WHY: Merge onto the existing file (if any) so unmanaged frontmatter keys survive.
 			content, cerr := t.content(owned[a.Name].content, byName[a.Name])
 			if cerr != nil {
 				return res, cerr

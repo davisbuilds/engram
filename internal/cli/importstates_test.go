@@ -129,7 +129,6 @@ func TestImportDryRunReportsAnInvalidCandidate(t *testing.T) {
 	args := append([]string{"import", "claude-code", "--cwd", "/work/x"}, c...)
 	_, dry := runEnvelope(t, args...)
 	code, applied := runEnvelope(t, append(args, "--apply")...)
-	// WHY: Nothing was imported for it: like reconcile, apply asks for resolution.
 	if code != exitConflicts {
 		t.Errorf("apply exit = %d, want %d", code, exitConflicts)
 	}

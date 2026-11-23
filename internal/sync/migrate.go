@@ -77,7 +77,7 @@ type candidate struct {
 	base    string
 	path    string
 	content []byte
-	matches []string // WHY: canonical memory names this file corresponds to
+	matches []string
 }
 
 // Plan classifies every hand-authored file in the memory dir without writing.
@@ -95,7 +95,7 @@ func (t ClaudeMigrateTarget) Plan() ([]MigrateAction, error) {
 	}
 
 	cands := make(map[string]*candidate, len(unmarked))
-	memMatches := map[string][]string{} // WHY: memory name -> matching file bases
+	memMatches := map[string][]string{}
 	for base, path := range unmarked {
 		content, rerr := os.ReadFile(path)
 		if rerr != nil {

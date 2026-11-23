@@ -125,7 +125,7 @@ func (a ClaudeSharedAdopt) byDir() map[string][]*schema.CanonicalMemory {
 }
 
 func (a ClaudeSharedAdopt) planDir(dir string, ms []*schema.CanonicalMemory) ([]MigrateAction, error) {
-	var hashes map[string]string // WHY: import source -> NativeHash of the original
+	var hashes map[string]string
 	var actions []MigrateAction
 	for _, m := range ms {
 		_, file, ok := a.original(m)

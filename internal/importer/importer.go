@@ -308,7 +308,7 @@ func splitTaskGroups(s string) []taskGroup {
 		}
 		buf = nil
 	}
-	fence := "" // WHY: the open fence's full marker run (e.g. ```` ````), or "" outside one
+	fence := ""
 	for _, ln := range strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n") {
 		// WHY: A heading quoted inside a code fence is content, not a new group.
 		fence = nextFence(fence, strings.TrimSpace(ln))
@@ -348,13 +348,13 @@ var echoLabel = regexp.MustCompile(`(?i)^[-*] +curated engram update \(\d{4}-\d{
 func withoutEchoes(body string) string {
 	lines := strings.Split(body, "\n")
 	kept := lines[:0:0]
-	fence, echoIndent := "", -1 // WHY: echoIndent: the open echo bullet's indent, or -1
+	fence, echoIndent := "", -1
 	for _, ln := range lines {
 		t := strings.TrimSpace(ln)
 		indent := len(ln) - len(strings.TrimLeft(ln, " \t"))
 		if echoIndent >= 0 {
 			if t != "" && indent > echoIndent {
-				continue // WHY: an indented line continues the echo bullet
+				continue
 			}
 			echoIndent = -1
 		}

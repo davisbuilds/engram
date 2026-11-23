@@ -414,7 +414,7 @@ func applyOne(root string, op Operation) (Applied, error) {
 		var removed []string
 		for _, s := range op.Sources {
 			if s == op.Memory.Name {
-				continue // WHY: the merged memory reuses this name; keep it
+				continue
 			}
 			if err := forget(root, s, tombstone.Note{Reason: op.Reason, Successor: op.Memory.Name}); err != nil {
 				return Applied{}, err

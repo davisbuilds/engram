@@ -165,8 +165,6 @@ func cmdReconcile(e *env, name string, _ []string) int {
 			importEntries[sharedEntry]["results"] = sharedEditRows(sharedPlans)
 		}
 	}
-	// WHY: under --apply, merged now holds canonical as written, not the
-	// simulated set.
 	findings := review.Analyze(merged)
 	reviewItems := make([]map[string]any, 0, len(findings))
 	var next []NextStep
@@ -259,7 +257,6 @@ func mergeImports(existing []*schema.CanonicalMemory, imports []importGather, wi
 	for _, imp := range imports {
 		outcomes := make([]map[string]string, 0, len(imp.result.Memories))
 		for _, m := range imp.result.Memories {
-			// WHY: A forgotten memory stays forgotten while its native lives on.
 			if tombs.Blocks(m) {
 				outcomes = append(outcomes, forgottenRow(m.Name))
 				continue

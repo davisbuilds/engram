@@ -227,7 +227,6 @@ func applySharedEdits(root string, plans []sharedEditPlan, tombs tombstone.Set, 
 		next := *cur
 		next.Description, next.Type, next.Body = p.edit.Description, p.edit.Type, p.edit.Body
 		if schema.NativeHash(cur) == schema.NativeHash(&next) {
-			// WHY: Canonical moved to what the edit says: nothing left to take.
 			plans[i].outcome, plans[i].memory, plans[i].differs = editUnchanged, nil, nil
 			continue
 		}

@@ -50,8 +50,6 @@ func cmdDetach(e *env, name string, args []string) int {
 			continue
 		}
 		item := map[string]any{"name": n, "path": path, "origin": m.Provenance.Origin, "outcome": "unchanged"}
-		// WHY: Only an imported memory tracks a source; one already detached, or authored
-		// directly, has nothing to detach.
 		if originHarness(m) != "" {
 			m.Provenance.Origin = schema.DetachedPrefix + m.Provenance.Origin
 			item["origin"], item["outcome"] = m.Provenance.Origin, "detached"
