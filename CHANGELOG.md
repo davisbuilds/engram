@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/davisbuilds/engram/compare/v0.8.0...v0.8.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* roll back failed batch memory restores ([#77](https://github.com/davisbuilds/engram/issues/77)) ([a3c4041](https://github.com/davisbuilds/engram/commit/a3c4041c78c40eeb14e9477c1a9acc8a14a05672))
+
 ## [0.8.0](https://github.com/davisbuilds/engram/compare/v0.7.0...v0.8.0) (2026-11-11)
 
 
