@@ -137,6 +137,23 @@ YAML_BLOCK = re.compile(r"^(\s*)(?:-\s+)?(?:([\w.-]+)\s*:\s*)?[|>][-+0-9]*\s*(#.
 YAML_SCRIPT_KEYS = {"run", "script", "before_script", "after_script", "command"}
 PEP263 = re.compile(r"#.*?coding[:=][ \t]*[-_.a-zA-Z0-9]+")
 EMBEDDED = re.compile(r"<(script|style)\b[^>]*>", re.IGNORECASE)
+GO_NAME = re.compile(
+    r"^\s*(?:(?:func|type|var|const)\s+)?(?:\([^)]*\)\s*)?([A-Za-z_]\w*)"
+)
+GO_NON_CODE = re.compile(
+    r"//[^\n]*|/\*[\s\S]*?(?:\*/|\Z)|`[^`]*(?:`|\Z)"
+    r"""|"(?:[^"\\\n]|\\[^\n])*"|'(?:[^'\\\n]|\\[^\n])*'"""
+)
+GO_DECL_SCOPE = re.compile(
+    r"\b(?:struct|interface)\s*\{|^[ \t]*(?:const|var|type)\s*\(", re.MULTILINE
+)
+GO_DELIMITER = re.compile(r"[()\[\]{}]")
+GO_CLOSE = {"(": ")", "[": "]", "{": "}"}
+GO_SEMICOLON_END = re.compile(r"(?:\w+|[)\]};]|\+\+|--|(?<![\w.])[0-9][0-9_]*\.)$")
+GO_CONTINUATION_KEYWORDS = {
+    "case", "chan", "const", "default", "defer", "else", "for", "func", "go", "goto", "if",
+    "import", "interface", "map", "package", "range", "select", "struct", "switch", "type", "var",
+}
 GO_DECL = re.compile(r"(func|type|var|const|package)\b|import\s+\"C\"")
 HEREDOC = re.compile(r'<<-?\s*([\'"]?)([A-Za-z_][A-Za-z0-9_]*)\1')
 
@@ -661,17 +678,86 @@ def c_comments(
         i += 1
 
 
-def go_doc_rows(text: str, comments: list[Raw]) -> set[int]:
+def go_names_doc(comment: str, code: str) -> bool:
+    name = GO_NAME.match(code)
+    words = re.findall(r"[A-Za-z_]\w*", comment.lstrip("/ \t"))[:2]
+    if not name or not words:
+        return False
+    if words[0] in ("A", "An", "The") and len(words) > 1:
+        return bool(name.group(1) in words[:2])
+    return bool(words[0] == name.group(1))
+
+
+def go_decl_regions(text: str) -> tuple[set[int], set[int]]:
+    code = GO_NON_CODE.sub(
+        lambda match: " " + "\n" * match[0].count("\n") + ("_ " if match[0][0] in "\"'`" else " "),
+        text,
+    )
+    declarations = {match.end() - 1 for match in GO_DECL_SCOPE.finditer(code)}
+    scopes: list[tuple[str, bool]] = []
+    member_starts: set[int] = set()
+    member_ends: set[int] = set()
+    offset = 0
+    can_start_member = True
+    for index, line in enumerate(code.split("\n")):
+        if scopes and scopes[-1][1] and can_start_member:
+            member_starts.add(index)
+        for match in GO_DELIMITER.finditer(line):
+            token = match[0]
+            if token in GO_CLOSE:
+                declaration = (
+                    offset + match.start() in declarations and (token == "{" or not scopes)
+                )
+                scopes.append((GO_CLOSE[token], declaration))
+            elif scopes and scopes[-1][0] == token:
+                scopes.pop()
+        if code_end := line.rstrip():
+            terminal = GO_SEMICOLON_END.search(code_end)
+            terminates = terminal is not None and terminal[0] not in GO_CONTINUATION_KEYWORDS
+            can_start_member = code_end.endswith(("(", "{")) or terminates
+            if terminates and scopes and scopes[-1][1]:
+                member_ends.add(index)
+        offset += len(line) + 1
+    return member_starts, member_ends
+
+
+def go_names_trailing_doc(raw: str, line: str) -> bool:
+    raw = raw.strip()
+    offset = line.find(raw)
+    if offset < 0 or not go_names_doc(raw, line[:offset]):
+        return False
+    tail = GO_NON_CODE.sub(
+        lambda match: "" if match[0].startswith(("//", "/*")) else "_",
+        line[offset + len(raw):],
+    )
+    return not tail.strip()
+
+
+def go_doc_indices(text: str, comments: list[Raw]) -> set[int]:
     lines = text.split("\n")
+    member_starts, member_ends = go_decl_regions(text)
     doc = set()
-    for start, end, _raw, full, _doc in comments:
+    for index, (start, end, raw, full, _doc) in enumerate(comments):
         if not full:
+            row = start - 1
+            if (
+                row in member_starts
+                and row in member_ends
+                and go_names_trailing_doc(raw, lines[row])
+            ):
+                doc.add(index)
             continue
         nxt = end
         while nxt < len(lines) and lines[nxt].lstrip().startswith("//"):
             nxt += 1
-        if nxt < len(lines) and GO_DECL.match(lines[nxt]):
-            doc.add(start)
+        if nxt >= len(lines):
+            continue
+        first = start - 1
+        while first > 0 and lines[first - 1].lstrip().startswith("//"):
+            first -= 1
+        named = nxt in member_starts and go_names_doc(lines[first].strip(), lines[nxt])
+        if GO_DECL.match(lines[nxt]) or named:
+            doc.add(index)
     return doc
 
 
@@ -711,8 +797,10 @@ def raw_comments(path: str, text: str) -> list[Raw]:
             )
         )
         if lang == "go":
-            doc = go_doc_rows(text, found)
-            found = [(*c[:4], c[4] or c[0] in doc) for c in found]
+            doc = go_doc_indices(text, found)
+            found = [
+                (*comment[:4], comment[4] or index in doc) for index, comment in enumerate(found)
+            ]
         return found
     return []
 
