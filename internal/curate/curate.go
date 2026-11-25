@@ -302,9 +302,10 @@ func validateOne(op Operation, existing map[string]*schema.CanonicalMemory) erro
 
 // Applied records what one applied operation did.
 type Applied struct {
-	Op      string   `json:"op"`
-	Name    string   `json:"name"`
-	Removed []string `json:"removed,omitempty"`
+	Op                  string   `json:"op"`
+	Name                string   `json:"name"`
+	Removed             []string `json:"removed,omitempty"`
+	ReusedForgottenName bool     `json:"-"`
 }
 
 // Apply executes a batch against the canonical root. It acquires the exclusive
@@ -402,7 +403,10 @@ func applyOne(root string, op Operation) (Applied, error) {
 		if err := save(root, m); err != nil {
 			return Applied{}, err
 		}
-		return Applied{Op: op.Op, Name: op.Memory.Name}, nil
+		return Applied{
+			Op: op.Op, Name: m.Name,
+			ReusedForgottenName: op.Op == OpAdd && tombstone.Has(root, m.Name),
+		}, nil
 	case OpMerge:
 		m, err := keepProvenance(root, op.Memory)
 		if err != nil {

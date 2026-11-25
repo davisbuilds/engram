@@ -54,12 +54,6 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
   PID 1, without `--init`) keeps them as zombies, one batch per timed-out run. On
   Linux, marking engram a child subreaper (`PR_SET_CHILD_SUBREAPER`) and reaping
   after the kill would keep them; macOS has no equivalent and launchd reaps.
-- **Unknown frontmatter keys are dropped on re-save.** `schema.Parse` (and
-  `remember --from-json`) silently ignore unmapped keys, so one Parse→Render round
-  trip (share, a forced remember) strips a hand-added field, and a typo'd
-  optional key vanishes instead of erroring. Decide between strict decoding
-  (existing files with extra keys would then be withheld) and preserving unknown
-  keys through render.
 - **`scopeIsSoleDiff` is stricter than `store.Plan`.** It requires a full-render
   match including provenance, so an authoritative scope-only rename is refused
   when the stored memory carries one more provenance field than the candidate.
@@ -85,11 +79,6 @@ remain implicit:
   sync.HeldEditNote)` in `conflictNextSteps` and in reconcile's held-edit
   check. An additive typed `reason` on
   `Action` would let agents branch without parsing prose.
-- **A forgotten name can be live again with its tombstone kept.** `remember` and
-  a curate `add` do not consult tombstones, so a re-authored memory coexists
-  with the tombstone that still blocks the original native family (reported
-  `forgotten`, not a conflict with the new memory). Decide whether that is the
-  intended "retired native stays retired" or should warn.
 - **Canonical root state is re-derived per command.** `rootAbsent`,
   `canonReadLock`'s missing flag, `discover.Locate` (missing reads as empty) and
   `status` each answer it, and a writer that renders must remember to capture
@@ -108,6 +97,8 @@ remain implicit:
   and reverted; see `Slugify`). The right fix is to derive the name from a
   shorter signal than the full title, not to trim the title. Surfaced by a
   read-only import dry-run against the real Codex MEMORY.md (36 Task Groups).
+  Deferred by Davis on 2026-11-25. Revisit when a shorter naming signal can
+  preserve the distinction between titles with the same leading tokens.
 
 ## Modelling
 
@@ -136,8 +127,9 @@ remain implicit:
   establish whether external maintained guidance supersedes a prescription.
   Explore optional, operator-selected references with explicit scope and
   provenance. Keep semantic judgment in agents and distinguish reference evidence
-  from mutation authority. Work through preservation and conflict cases before
-  selecting an interface; avoid assumptions about workspace layout or harness.
+  from mutation authority. Deferred by Davis on 2026-11-25. Revisit when a design
+  addresses preservation and conflicts without assuming a workspace layout or
+  harness.
 - **Observed session consumption.** Inventory deliberately reports consumption
   as unknown under the [CLI contract](../cli.md#operations). Stored renders,
   loader wiring and timestamps describe delivery evidence.
@@ -155,6 +147,8 @@ remain implicit:
   content-hash loop-guard item above).
 - Skills are project-scoped only (in-repo symlinks). Global install via the
   workspace `~/.agents/skills` + skill-standardizer flow is a later promotion.
+  Deferred by Davis on 2026-11-25. Revisit when the memory skills are ready for
+  use outside this repository.
 
 ## CLI contract
 

@@ -11,10 +11,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/davisbuilds/engram/internal/agentexec"
 	"github.com/davisbuilds/engram/internal/lock"
 	"github.com/davisbuilds/engram/internal/schema"
+	"github.com/davisbuilds/engram/internal/tombstone"
 )
 
 // runCurate runs cmdCurate and returns its exit code and its JSON envelope.
@@ -128,6 +130,38 @@ func (f planFixture) save(t *testing.T, proposal string) map[string]any {
 func (f planFixture) apply(t *testing.T) (int, map[string]any) {
 	t.Helper()
 	return runCurate(t, curateEnv(f.cfg, true, noAgent(t)), "--plan", f.plan)
+}
+
+func TestCurateWarnsOnceWhenAddingAForgottenName(t *testing.T) {
+	const add = `{"op":"add","memory":{"name":"retired-lesson","description":"New lesson","type":"lesson","scope":"global"},"reason":"new guidance"}`
+	proposal := fenced(add, `{"op":"remove","name":"retired-lesson","reason":"superseded"}`, add,
+		`{"op":"add","memory":{"name":"fresh-lesson","description":"Fresh lesson","type":"lesson","scope":"global"},"reason":"new guidance"}`)
+	for _, mode := range []string{"agent", "saved-plan"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newPlanFixture(t, "retired-lesson")
+			if _, err := tombstone.Forget(f.canon, "retired-lesson", tombstone.Note{}, time.Now()); err != nil {
+				t.Fatal(err)
+			}
+			var code int
+			var resp map[string]any
+			if mode == "saved-plan" {
+				preview := f.save(t, proposal)
+				if preview["warnings"] != nil {
+					t.Errorf("save-plan warnings = %v, want none before applying", preview["warnings"])
+				}
+				code, resp = f.apply(t)
+			} else {
+				code, resp = runCurate(t, curateEnv(f.cfg, true, fakeClaudeRunner(proposal)))
+			}
+			if code != exitOK || !exists(filepath.Join(f.canon, "retired-lesson.md")) || !exists(tombstone.Path(f.canon, "retired-lesson")) {
+				t.Fatalf("curate did not write the memory with its tombstone kept: exit %d: %v", code, resp)
+			}
+			warnings, _ := resp["warnings"].([]any)
+			if len(warnings) != 1 || !strings.Contains(warnings[0].(string), `"retired-lesson"`) || !strings.Contains(warnings[0].(string), "tombstone") {
+				t.Errorf("warnings = %v, want one tombstone warning for retired-lesson", warnings)
+			}
+		})
+	}
 }
 
 // readPlan decodes the saved plan as generic JSON, for tests that edit it.

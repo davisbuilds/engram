@@ -112,8 +112,16 @@ func cmdRemember(e *env, name string, args []string) int {
 			}})
 		return exitConflicts
 	}
-	e.emit(name, true, data, nil, nil, nil)
+	var warns []string
+	if (outcome == store.Created || outcome == store.Updated) && tombstone.Has(cfg.CanonicalRoot, m.Name) {
+		warns = append(warns, reauthoredNameWarning(m.Name))
+	}
+	e.emit(name, true, data, warns, nil, nil)
 	return exitOK
+}
+
+func reauthoredNameWarning(name string) string {
+	return fmt.Sprintf("wrote %q and kept its tombstone. Matching native imports remain blocked", name)
 }
 
 func cmdShare(e *env, name string, args []string) int {

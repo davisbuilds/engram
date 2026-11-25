@@ -181,6 +181,13 @@ func cmdCurate(e *env, name string, args []string) int {
 func (e *env) emitApplied(name string, data map[string]any, warns []string, applied []curate.Applied, aerr error) int {
 	data["applied"] = orEmpty(applied)
 	if aerr == nil {
+		warned := make(map[string]bool)
+		for _, a := range applied {
+			if a.ReusedForgottenName && !warned[a.Name] {
+				warns = append(warns, reauthoredNameWarning(a.Name))
+				warned[a.Name] = true
+			}
+		}
 		e.emit(name, true, data, warns, nil, nil)
 		return exitOK
 	}
