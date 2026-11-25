@@ -218,7 +218,8 @@ not harness support, readiness, installation elsewhere or consumption.
   agree on origin, so `origin` and `source` never come from different harnesses), a
   populated field keeps its stored value (except import's merge base,
   `import_hash`, which moves forward on agreement), and incoming memory can never
-  strip provenance. Every
+  strip provenance. Writing a name that still has a tombstone emits one warning
+  and keeps the tombstone. Matching native imports remain blocked. Every
   canonical writer
   (`remember`, `share`, `import --apply`, `curate --apply`, `forget --apply`,
   `detach --apply`, `reconcile --apply`, `migrate --shared --apply`) takes the
@@ -810,7 +811,9 @@ not harness support, readiness, installation elsewhere or consumption.
   whatever the agent gives, so the next import sees canonical as ahead of its
   native, not in conflict. A `remove`, and each source a `merge` replaces, is
   tombstoned (as `forget` does, with the operation's reason), so a later import
-  does not bring it back. Merge sources must be distinct, and every target and
+  does not bring it back. A successful `add` can reuse a forgotten name. Apply
+  keeps the tombstone and warns once per reused name in the batch, including
+  when applying a saved plan. Merge sources must be distinct, and every target and
   source must be a valid memory name. The tombstone directory,
   `<canonical_root>/.forgotten`, is reserved: curate writes tombstones only into
   a real directory there (created if absent). If it is a symlink, whether to a

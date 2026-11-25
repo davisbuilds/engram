@@ -63,6 +63,15 @@ func Path(root, name string) string {
 	return filepath.Join(root, discover.ForgottenDir, name+".yaml")
 }
 
+func Has(root, name string) bool {
+	for _, path := range []string{Path(root, name), archivePath(root, name, 1)} {
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
 // Forget tombstones the canonical memory name, then removes its file. The
 // tombstone is written first, so a failure never loses the memory. The caller
 // holds the canonical lock.

@@ -42,6 +42,35 @@ func exists(path string) bool {
 	return err == nil
 }
 
+func TestRememberWarnsWhenReauthoringAForgottenName(t *testing.T) {
+	canon, _, _, args := forgetFixture(t)
+	if code, resp := runEnvelope(t, append([]string{"forget", "codex-lesson", "--apply"}, args...)...); code != exitOK {
+		t.Fatalf("forget exit = %d: %v", code, resp)
+	}
+	record := tombstone.Path(canon, "codex-lesson")
+	before, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remember := append([]string{"remember", "--name", "codex-lesson", "--description", "A new lesson", "--type", "lesson"}, args...)
+	code, resp := runEnvelope(t, remember...)
+	if code != exitOK || respData(resp)["outcome"] != "created" {
+		t.Fatalf("remember exit = %d: %v", code, resp)
+	}
+	warnings, _ := resp["warnings"].([]any)
+	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), `"codex-lesson"`) || !strings.Contains(warnings[0].(string), "tombstone") {
+		t.Errorf("warnings = %v, want one tombstone warning for codex-lesson", warnings)
+	}
+	after, err := os.ReadFile(record)
+	if err != nil || string(after) != string(before) {
+		t.Errorf("remember changed the tombstone: %v", err)
+	}
+	code, resp = runEnvelope(t, remember...)
+	if code != exitOK || respData(resp)["outcome"] != "unchanged" || resp["warnings"] != nil {
+		t.Errorf("unchanged remember exit = %d, want success without warnings: %v", code, resp)
+	}
+}
+
 func TestForgetDryRunWritesNothing(t *testing.T) {
 	canon, claudeMem, _, args := forgetFixture(t)
 	code, env := runEnvelope(t, append([]string{"forget", "codex-lesson"}, args...)...)
