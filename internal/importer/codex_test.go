@@ -131,6 +131,40 @@ A quoted marker with extension=engram
 	}
 }
 
+func TestImportCodexStripsBlankSeparatedCitationContinuations(t *testing.T) {
+	const lead = "# Task Group: Greenhouse readings\n\n- Record the noon reading.\n"
+	const tail = " - Record the evening reading.\n"
+	const echo = "- From extensions/engram/notes/calibration.md\n\n  Calibrate the humidity gauge.\n"
+
+	got, want := importOne(t, lead+echo+tail), importOne(t, lead+tail)
+	if len(got.Memories) != 1 || len(want.Memories) != 1 {
+		t.Fatalf("mixed group imported %d memories, native control imported %d", len(got.Memories), len(want.Memories))
+	}
+	if got.Memories[0].Body != want.Memories[0].Body {
+		t.Errorf("mixed body = %q, want native-only body %q", got.Memories[0].Body, want.Memories[0].Body)
+	}
+	if got.Memories[0].Provenance.ImportHash != want.Memories[0].Provenance.ImportHash {
+		t.Error("the citation bullet moved the group's import hash")
+	}
+}
+
+func TestImportCodexKeepsPaddedCitationSibling(t *testing.T) {
+	const md = `# Task Group: Greenhouse readings
+
+-  From extensions/engram/notes/calibration.md
+
+   Calibrate the humidity gauge.
+  - Record the evening reading.
+`
+	res := importOne(t, md)
+	if len(res.Memories) != 1 {
+		t.Fatalf("imported %d memories, want the native sibling of the padded list item", len(res.Memories))
+	}
+	if body := strings.TrimSpace(res.Memories[0].Body); body != "- Record the evening reading." {
+		t.Errorf("imported body %q, want only the native sibling", body)
+	}
+}
+
 // TestImportCodexEchoDoesNotMoveImportHash pins why stripping matters: when the
 // consolidator re-folds a changed note, the group's own content has not moved,
 // so its merge base must not move either.

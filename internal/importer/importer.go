@@ -339,25 +339,72 @@ var listItem = regexp.MustCompile(`^(?:[-*+]|[0-9]{1,9}[.)])[ \t]`)
 func withoutEchoes(body string) string {
 	lines := strings.Split(body, "\n")
 	kept := lines[:0:0]
-	fence, echoIndent := "", -1
-	for _, ln := range lines {
+	fence, datedEchoIndent := "", -1
+	for i := 0; i < len(lines); i++ {
+		ln := lines[i]
 		t := strings.TrimSpace(ln)
 		indent := len(ln) - len(strings.TrimLeft(ln, " \t"))
-		if echoIndent >= 0 {
-			if t != "" && indent > echoIndent {
+		if datedEchoIndent >= 0 {
+			if t != "" && indent > datedEchoIndent {
 				continue
 			}
-			echoIndent = -1
+			datedEchoIndent = -1
 		}
-		if fence = nextFence(fence, t); fence == "" && (isEchoBullet(t) || hasEngramSignal(t)) {
-			if listItem.MatchString(t) {
-				echoIndent = indent
+		if fence = nextFence(fence, t); fence == "" {
+			switch {
+			case isEchoBullet(t):
+				datedEchoIndent = indent
+				continue
+			case hasEngramSignal(t):
+				if prefix := listItem.FindString(ln[indent:]); prefix != "" {
+					markerEnd := indent + len(prefix) - 1
+					i += markedBulletContinuation(lines[i+1:], listItemTextIndent(ln, markerEnd))
+				}
+				continue
 			}
-			continue
 		}
 		kept = append(kept, ln)
 	}
 	return strings.Join(kept, "\n")
+}
+
+func listItemTextIndent(line string, markerEnd int) int {
+	const maxMarkerPadding = 4
+
+	content := strings.TrimLeft(line[markerEnd:], " \t")
+	markerWidth := tabExpandedWidth(line[:markerEnd])
+	textWidth := tabExpandedWidth(line[:len(line)-len(content)])
+	if textWidth-markerWidth > maxMarkerPadding {
+		return markerWidth + 1
+	}
+	return textWidth
+}
+
+func markedBulletContinuation(lines []string, textIndent int) int {
+	count := 0
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, " \t"))
+		if tabExpandedWidth(line[:indent]) < textIndent {
+			break
+		}
+		count = i + 1
+	}
+	return count
+}
+
+func tabExpandedWidth(text string) int {
+	width := 0
+	for _, ch := range text {
+		if ch == '\t' {
+			width += 4 - width%4
+		} else {
+			width++
+		}
+	}
+	return width
 }
 
 // isEchoBullet reports whether a trimmed line is a list item carrying echoLabel.
