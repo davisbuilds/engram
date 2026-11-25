@@ -59,6 +59,9 @@ func cmdCurate(e *env, name string, args []string) int {
 		}
 	}
 	captured, warns, rerr := e.captureCorpus(cfg.CanonicalRoot, planOut != "")
+	if rerr == nil && e.apply && captured.parseErrors > 0 {
+		rerr = corpusParseError(captured.parseErrors)
+	}
 	if rerr != nil {
 		e.emit(name, false, nil, warns, rerr, nil)
 		return exitError

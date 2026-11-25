@@ -326,8 +326,8 @@ not harness support, readiness, installation elsewhere or consumption.
   deliberately retired, so it is not written, even with `--force` or `--refresh`,
   and it is not a conflict. `invalid` means the candidate fails validation; its
   row carries `error`, nothing is written, and, as for a conflict, `--apply`
-  exits `3` so the native gets fixed. Each `conflict`
-  result also carries `differs`, a comma-separated list of the fields that differ
+  exits `3` so the native gets fixed. When engram can compare both memories, a
+  `conflict` result carries `differs`, a comma-separated list of the fields that differ
   (`description`, `type`, `scope`, `applies_to`, `related`, `provenance`, `body`),
   so the cause is visible without diffing files. A `conflict` carrying `withheld`
   instead means a canonical file claims the name but discovery withheld it (it
@@ -515,10 +515,10 @@ not harness support, readiness, installation elsewhere or consumption.
 - **`reconcile`** — the on-demand cross-harness convenience: it runs the enricher
   flow — `import` every enabled harness into canonical, `review` for leads, then
   propagate canonical back into the harnesses — in one invocation. Dry-run by
-  default; `--apply` writes (all imports save under one canonical lock, then each
-  harness is synced from canonical as it is then, still under that lock: the
-  memories the imports wrote and any change another writer made since the
-  dry-run simulation, with `STALE` removal held if a file no longer parses). Two policies make it safe and useful: it **never runs
+  default. With `--apply`, engram reads canonical and saves imports under one
+  canonical lock, then syncs each harness from the resulting canonical store
+  while still holding the lock. Import rows reflect the locked decisions and
+  save outcomes. An incomplete canonical read holds `STALE` removals. Reconcile **never runs
   curate** (near-duplicate/overlap findings are emitted as `next_steps`, judgment
   left explicit), and propagation **never echoes a memory onto its source** — a
   memory imported from Codex is not rendered back into Codex (one store), and a
@@ -528,8 +528,9 @@ not harness support, readiness, installation elsewhere or consumption.
   projects' slugs, so a lesson written in one Claude project reaches the rest
   without conflicting on or overwriting native memory. (Plain `sync` still renders everything, for a fresh
   machine where a harness has no native originals.) Each `data.import[]` entry
-  carries the same `forgotten` rows, `orphaned` list and `collisions` as `import`. Exit follows the same codes as
-  `sync`: `3` if any propagation `CONFLICT` remains.
+  carries the same `forgotten` rows, `orphaned` list and `collisions` as `import`.
+  Reconcile exits `3` for import conflicts or invalid candidates, held shared
+  edits, or propagation conflicts.
 - **`forget <name>...`** — retires canonical memories deterministically. Every
   name must exist, or the batch stops before any write (exit `2`,
   `unknown_memory`). Under `--apply`, each memory is tombstoned, then its file
@@ -753,6 +754,8 @@ not harness support, readiness, installation elsewhere or consumption.
   `--apply` executes it through the same `store` write-path, holding the
   exclusive canonical-root lock so the multi-file batch is atomic against a
   concurrent apply (a held lock is `locked`, exit `1`, with nothing written).
+  If the canonical corpus does not fully parse, agent-driven `--apply`
+  returns `corpus_parse` (exit `1`) before invoking the agent.
 
   **Supplied operations:** `curate --proposal <file|->` validates a strict JSON
   object `{"operations":[...]}` against the current canonical corpus, running
