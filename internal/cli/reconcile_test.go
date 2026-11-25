@@ -75,6 +75,21 @@ func TestRunReconcileApplyCrossPropagates(t *testing.T) {
 	}
 }
 
+func TestReconcileApplyReportsSaveConflict(t *testing.T) {
+	canon, _, _, args := setupTwoHarnesses(t)
+	occupied := filepath.Join(canon, "claude-lesson.md")
+	if err := os.MkdirAll(occupied, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	code, rows := reconcileRows(t, append([]string{"--apply"}, args...)...)
+	if got := rows["claude-lesson"]["outcome"]; code != exitConflicts || got != "conflict" {
+		t.Errorf("occupied canonical path: exit = %d, outcome = %q; want %d, conflict", code, got, exitConflicts)
+	}
+	if got := rows["codex-lesson"]["outcome"]; got != "created" {
+		t.Errorf("unblocked import outcome = %q, want created", got)
+	}
+}
+
 // Preview parity (regression for the dry-run-vs-apply gap): on a first run with
 // empty canonical, the dry-run must already show the cross-harness propagation
 // CREATEs that --apply will perform — computed from the merged (canonical +

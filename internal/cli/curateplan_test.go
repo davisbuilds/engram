@@ -867,6 +867,20 @@ func TestCurateSavePlanFollowsALinkOutsideTheStore(t *testing.T) {
 	}
 }
 
+func TestCurateApplyRefusesAnUnparsedCorpusBeforeRunningAgent(t *testing.T) {
+	f := newPlanFixture(t, "a")
+	writeFile(t, filepath.Join(f.canon, "broken.md"), "no frontmatter\n")
+	called := false
+	runner := func(inv agentexec.Invocation) ([]byte, error) {
+		called = true
+		return fakeClaudeRunner(fenced(`{"op":"remove","name":"a","reason":"old"}`))(inv)
+	}
+	code, resp := runCurate(t, curateEnv(f.cfg, true, runner))
+	if called || code != exitError || errCode(resp) != "corpus_parse" {
+		t.Errorf("agent called = %t, exit = %d, error = %q; want false, %d, corpus_parse", called, code, errCode(resp), exitError)
+	}
+}
+
 // A store that does not fully parse cannot be bound or applied, so --save-plan
 // refuses it before running the agent.
 func TestCurateSavePlanRefusesAnUnparsedCorpus(t *testing.T) {

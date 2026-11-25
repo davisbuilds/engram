@@ -6,6 +6,7 @@ import (
 
 	"github.com/davisbuilds/engram/internal/importer"
 	"github.com/davisbuilds/engram/internal/schema"
+	"github.com/davisbuilds/engram/internal/store"
 )
 
 // mem builds a single-memory fixture named "m" (these tests each exercise one
@@ -105,6 +106,31 @@ func TestDecideImportScope_AuthoritativeBodyDiffDoesNotForce(t *testing.T) {
 	}
 }
 
+func TestMergeImportsApplyHonorsAuthoritativeScopeRevision(t *testing.T) {
+	root := t.TempDir()
+	release, rerr := canonLock(root)
+	if rerr != nil {
+		t.Fatal(rerr)
+	}
+	defer release()
+	stored := mem("project:oldname", "d", "b")
+	if _, _, err := store.Save(root, stored, false); err != nil {
+		t.Fatal(err)
+	}
+	cand := mem("project:newname", "d", "b")
+	_, entries, hadConflict, _, err := mergeImports(root, []*schema.CanonicalMemory{stored}, claudeImport(cand), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := entries[0]["results"].([]map[string]string)[0]["outcome"]; hadConflict || got != "updated" {
+		t.Errorf("conflict = %t, outcome = %q; want false, updated", hadConflict, got)
+	}
+	got, _, found, err := store.Load(root, cand.Name)
+	if err != nil || !found || got.Scope != "project:newname" {
+		t.Errorf("saved memory = %+v, error = %v; want project:newname", got, err)
+	}
+}
+
 // mergeImports is the shared preview/apply seam for reconcile. A provisional
 // import (ScopeAuthoritative=false) that derives a different scope for an existing
 // memory must preserve the stored scope — so the simulated outcome is Unchanged,
@@ -121,7 +147,10 @@ func TestMergeImportsProvisionalPreservesScope(t *testing.T) {
 		result:  importer.Result{Memories: []*schema.CanonicalMemory{cand}, ScopeAuthoritative: false},
 	}}
 
-	merged, entries, hadConflict, notes := mergeImports(existing, imports, nil, nil)
+	merged, entries, hadConflict, notes, err := mergeImports("", existing, imports, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if hadConflict {
 		t.Errorf("preserving scope should not register a conflict")

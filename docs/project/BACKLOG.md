@@ -60,13 +60,6 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
   optional key vanishes instead of erroring. Decide between strict decoding
   (existing files with extra keys would then be withheld) and preserving unknown
   keys through render.
-- **`reconcile --apply` ignores the scope force and the Save outcome.** It calls
-  `store.Save(..., false)` and checks only the error, discarding the `force` that
-  `decideImportScope` computes and any `Conflict` outcome; its native import rows
-  and exit code come from the unlocked simulation (shared-edit rows are rebuilt
-  after the apply). Inert today (reconcile only runs provisional imports), but a
-  trap for an authoritative import path, and a concurrent writer between the
-  simulation and the lock can make the reported rows wrong.
 - **`scopeIsSoleDiff` is stricter than `store.Plan`.** It requires a full-render
   match including provenance, so an authoritative scope-only rename is refused
   when the stored memory carries one more provenance field than the candidate.
@@ -97,9 +90,6 @@ remain implicit:
   with the tombstone that still blocks the original native family (reported
   `forgotten`, not a conflict with the new memory). Decide whether that is the
   intended "retired native stays retired" or should warn.
-- **Curate meets an incompletely parsed corpus three ways.** `--proposal` and
-  `--plan` refuse up front (`corpus_parse`); agent-driven `--apply` runs the
-  agent first and then fails with `apply`. Refuse before invoking the agent.
 - **Canonical root state is re-derived per command.** `rootAbsent`,
   `canonReadLock`'s missing flag, `discover.Locate` (missing reads as empty) and
   `status` each answer it, and a writer that renders must remember to capture

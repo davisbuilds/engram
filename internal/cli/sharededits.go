@@ -246,6 +246,14 @@ func applySharedEdits(root string, plans []sharedEditPlan, tombs tombstone.Set, 
 // whether it was read whole) and the tombstones. Nothing to plan when Claude
 // is disabled.
 func (s *session) sharedEditPlans(v canonView, tombs tombstone.Set, refresh map[string]bool) ([]sharedEditPlan, *RespError) {
+	edits, rerr := s.scanSharedEdits()
+	if rerr != nil {
+		return nil, rerr
+	}
+	return planSharedEdits(edits, v.mems, withheldNames(v.perrs), tombs, v.keepStale, refresh), nil
+}
+
+func (s *session) scanSharedEdits() ([]sync.SharedEdit, *RespError) {
 	h := s.cfg.Harnesses[config.HarnessClaude]
 	if !h.Enabled() {
 		return nil, nil
@@ -255,7 +263,7 @@ func (s *session) sharedEditPlans(v canonView, tombs tombstone.Set, refresh map[
 		return nil, &RespError{Code: "import", Message: err.Error()}
 	}
 	sort.Slice(edits, func(i, j int) bool { return edits[i].Name < edits[j].Name })
-	return planSharedEdits(edits, v.mems, withheldNames(v.perrs), tombs, v.keepStale, refresh), nil
+	return edits, nil
 }
 
 // withSharedEdits replaces each memory a plan updates with its edited form.

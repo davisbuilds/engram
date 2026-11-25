@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -133,8 +134,11 @@ func TestReconcileApplyHonorsAForgetThatLandsMidRun(t *testing.T) {
 			t.Fatal(err)
 		}
 	}}
-	defer silenceStdout(t)()
-	cmdReconcile(e, "reconcile", nil)
+	var code int
+	out := captureStdout(t, func() { code = cmdReconcile(e, "reconcile", nil) })
+	if code != exitOK || !strings.Contains(out, `"outcome": "forgotten"`) {
+		t.Errorf("exit = %d, want %d and a forgotten row:\n%s", code, exitOK, out)
+	}
 	if _, err := os.Stat(render); !errors.Is(err, os.ErrNotExist) {
 		t.Error("reconcile re-created the render of a memory forgotten mid-run")
 	}
