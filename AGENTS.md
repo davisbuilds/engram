@@ -30,10 +30,11 @@ is the intelligence. See `README.md` for the user-facing overview.
   hold: apply is idempotent (a second apply on unchanged canonical is a no-op),
   and a file without an engram ownership marker is never modified or deleted.
 - **Marker discipline is the identity contract.** engram only ever rewrites or
-  removes files carrying its own marker; hand-authored files are inviolable, and
-  the reverse-sync importers loop-guard on the same signal (for Codex, also the
-  label its consolidator writes on a folded note) so engram never re-imports its
-  own rendered output. The one exception is `migrate --apply`,
+  removes files carrying its own marker. Reverse sync uses those markers to
+  filter generated material. Codex import filters each marked line or bullet in
+  a consolidated Task Group, including the dated labels requested by the
+  extension instructions. Unmarked prose remains eligible for import.
+  The exception to marker-based file ownership is `migrate --apply`,
   run explicitly after a dry-run: it adopts a hand-authored original only when
   canonical provably supersedes it (identical content, deterministic match), and
   `migrate --shared` additionally requires the memory's shared render to be

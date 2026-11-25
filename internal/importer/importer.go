@@ -1,7 +1,5 @@
 // Package importer reverse-syncs a harness's native memory back into canonical
-// form. Import is a one-shot migration on-ramp, not the steady-state path, and
-// every importer is loop-guarded so engram never re-imports its own rendered
-// output back into canonical.
+// form. Importers filter recognized engram signals from native sources.
 package importer
 
 import (

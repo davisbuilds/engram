@@ -358,14 +358,16 @@ not harness support, readiness, installation elsewhere or consumption.
   base, so the memory reads as `canonical_ahead` until the native moves again
   (then it conflicts again, as it should). Across two sources it declines with
   a warning and the conflict stands. An unknown name exits `2`
-  (`unknown_keep`), and one name cannot be given to both flags. The loop guard
-  keeps engram's own output from round-tripping. For Codex, import removes lines
-  containing `extension=engram` or an `extensions/engram/` citation. It also removes
-  bullets with the full `Curated Engram update (YYYY-MM-DD):` label that engram asks
-  the consolidator to write. Marked bullets are removed with their indented
-  continuations. Fenced examples and other unmarked content survive. If removing
-  echoes leaves only headings and blank lines, import reports the group as
-  skipped. The first import after upgrading to labeled-bullet filtering can
+  (`unknown_keep`), and one name cannot be given to both flags. For Codex,
+  import removes lines containing `extension=engram` or an `extensions/engram/`
+  citation. It also removes bullets with the full
+  `Curated Engram update (YYYY-MM-DD):` label that engram asks the consolidator to
+  write. Marked bullets are removed with their indented continuations. Fenced
+  examples and other unmarked content survive. A verbatim echo can import if
+  the consolidator copies unmarked prose after a standalone note marker. The
+  marker gives no end boundary for the quoted note inside the group. If
+  removing echoes leaves only headings and blank lines, import reports the
+  group as skipped. The first import after upgrading to labeled-bullet filtering can
   report a `3` conflict for a memory earlier settled with `--keep` whose Codex
   group carries such a bullet. `--keep` settles it again. `import` against a
   disabled harness exits `2`. **Scope is derived, not defaulted:** a memory's
