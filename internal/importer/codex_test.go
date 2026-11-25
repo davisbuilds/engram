@@ -96,6 +96,41 @@ func TestImportCodexStripsEchoBullets(t *testing.T) {
 	}
 }
 
+func TestImportCodexStripsMarkedLinesAndBullets(t *testing.T) {
+	md := `# Task Group: Garden sensor
+
+- Record the first reading.
+- Folded calibration note from extensions/engram/notes/calibration.md
+  Folded calibration details.
+- Use the shaded sensor.
+  Citation for an older procedure: extensions/engram/notes/older.md
+  Check the reading at noon.
+
+<!-- engram-sync canonical=calibration scope=global extension=engram -->
+    Preserve the recorded sample count.
+
+~~~md
+A quoted citation to extensions/engram/notes/example.md
+A quoted marker with extension=engram
+~~~
+`
+	res := importOne(t, md)
+	if len(res.Memories) != 1 || len(res.Skipped) != 0 {
+		t.Fatalf("imported %d memories, skipped %v; want the mixed group imported", len(res.Memories), res.Skipped)
+	}
+	body := res.Memories[0].Body
+	for _, unwanted := range []string{"Folded calibration note", "Folded calibration details", "Citation for an older procedure", "<!-- engram-sync"} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("marked content %q survived import:\n%s", unwanted, body)
+		}
+	}
+	for _, wanted := range []string{"Record the first reading.", "Use the shaded sensor.", "  Check the reading at noon.", "    Preserve the recorded sample count.", "A quoted citation to extensions/engram/notes/example.md", "A quoted marker with extension=engram"} {
+		if !strings.Contains(body, wanted) {
+			t.Errorf("genuine content %q was removed:\n%s", wanted, body)
+		}
+	}
+}
+
 // TestImportCodexEchoDoesNotMoveImportHash pins why stripping matters: when the
 // consolidator re-folds a changed note, the group's own content has not moved,
 // so its merge base must not move either.

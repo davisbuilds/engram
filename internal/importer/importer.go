@@ -325,14 +325,8 @@ func splitTaskGroups(s string) []taskGroup {
 	return groups
 }
 
-// isEngramOrigin reports whether a consolidated Task Group is engram's own output
-// rebounding through Codex's consolidator. The guard rests on signals engram
-// controls — its note marker text and its extension path — not on any single
-// consolidator-preserved field, so it holds even if the consolidator drops
-// rollout metadata (spec SC-06). In observed output the consolidator instead
-// folds notes into genuine groups as labeled bullets, which withoutEchoes strips.
-func isEngramOrigin(body string) bool {
-	return strings.Contains(body, "extension=engram") || strings.Contains(body, "extensions/engram/")
+func hasEngramSignal(line string) bool {
+	return strings.Contains(line, "extension=engram") || strings.Contains(line, "extensions/engram/")
 }
 
 // echoLabel matches how Codex's consolidator labels a bullet it folded from an
@@ -342,9 +336,8 @@ func isEngramOrigin(body string) bool {
 // with the same words is not an echo.
 var echoLabel = regexp.MustCompile(`(?i)^[-*] +curated engram update \(\d{4}-\d{2}-\d{2}\):`)
 
-// withoutEchoes returns a Task Group body with every engram echo bullet removed,
-// along with the indented lines that continue it. Code fences are content, so a
-// bullet quoted inside one is kept.
+var listItem = regexp.MustCompile(`^(?:[-*+]|[0-9]{1,9}[.)])[ \t]`)
+
 func withoutEchoes(body string) string {
 	lines := strings.Split(body, "\n")
 	kept := lines[:0:0]
@@ -358,8 +351,10 @@ func withoutEchoes(body string) string {
 			}
 			echoIndent = -1
 		}
-		if fence = nextFence(fence, t); fence == "" && isEchoBullet(t) {
-			echoIndent = indent
+		if fence = nextFence(fence, t); fence == "" && (isEchoBullet(t) || hasEngramSignal(t)) {
+			if listItem.MatchString(t) {
+				echoIndent = indent
+			}
 			continue
 		}
 		kept = append(kept, ln)

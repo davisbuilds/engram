@@ -358,19 +358,21 @@ not harness support, readiness, installation elsewhere or consumption.
   base, so the memory reads as `canonical_ahead` until the native moves again
   (then it conflicts again, as it should). Across two sources it declines with
   a warning and the conflict stands. An unknown name exits `2`
-  (`unknown_keep`), and one name cannot be given to both flags. Marker/loop-guarded
-  so engram's own output never round-trips. Codex's consolidator folds an engram
-  note into a Task Group as a bullet labeled `Curated Engram update (YYYY-MM-DD):`,
-  the label engram's extension instructions request; only that full dated label
-  counts. Import removes those bullets and their continuation lines from the
-  group, and skips a group left with nothing else. The first import after upgrading to this behavior can report a `3`
-  conflict for a memory earlier settled with `--keep` whose Codex group carries
-  such a bullet; `--keep` settles it again. `import` against a disabled harness
-  exits `2`. **Scope is derived, not defaulted:** a memory's scope resolves to
-  `project:<repo>` when its source cwd (Claude: the import cwd; Codex: the Task
-  Group's `applies_to: cwd=`) is a real git repository, else `global`. Only the
-  repo's base name enters the scope — the full path never does. A workspace
-  container (a non-repo parent of many projects) correctly stays `global`.
+  (`unknown_keep`), and one name cannot be given to both flags. The loop guard
+  keeps engram's own output from round-tripping. For Codex, import removes lines
+  containing `extension=engram` or an `extensions/engram/` citation. It also removes
+  bullets with the full `Curated Engram update (YYYY-MM-DD):` label that engram asks
+  the consolidator to write. Marked bullets are removed with their indented
+  continuations. Fenced examples and other unmarked content survive. If removing
+  echoes leaves only headings and blank lines, import reports the group as
+  skipped. The first import after upgrading to labeled-bullet filtering can
+  report a `3` conflict for a memory earlier settled with `--keep` whose Codex
+  group carries such a bullet. `--keep` settles it again. `import` against a
+  disabled harness exits `2`. **Scope is derived, not defaulted:** a memory's
+  scope resolves to `project:<repo>` when its source cwd (Claude: the import cwd;
+  Codex: the Task Group's `applies_to: cwd=`) is a real git repository, else
+  `global`. Only the repo's base name enters the scope. A workspace container
+  (a non-repo parent of many projects) correctly stays `global`.
   **A re-import never silently re-scopes an existing memory.** Because that repo
   probe reads the live filesystem, an `import --all` or Codex import run on a
   machine that lacks the repo would derive `global` for a memory that is really
@@ -442,8 +444,10 @@ not harness support, readiness, installation elsewhere or consumption.
   canonical); dry-run classifies every candidate (`adopt` / `diverged` /
   `ambiguous` / `skip`) and writes nothing. It emits a `curate` `next_step` for
   diverged files, whose reconciliation is a judgment call engram does not make
-  deterministically. Claude Code only — Codex keeps one consolidated `MEMORY.md`
-  folded by its own consolidator, a separate follow-up.
+  deterministically. This command applies to Claude Code. Codex stores native
+  memories in one consolidated `MEMORY.md` and receives engram renders as
+  separate extension notes. The two writes use different paths, so they cannot
+  produce the file collision that `migrate` resolves.
 - **`migrate claude-code --shared`** — retires the hand-authored originals of
   shared memories, so a session in the slug a memory was written in stops seeing
   it twice (its original in `MEMORY.md`, its shared render through the rules

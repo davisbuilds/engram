@@ -12,11 +12,7 @@ import (
 const staleAfter = 30 * 24 * time.Hour
 
 // ImportCodex reads a Codex MEMORY.md, splits it into Task Groups, and maps each
-// group to one canonical memory (the Task Group is the unit, preserving Codex's
-// own consolidator curation). Groups that are engram's own output rebounding
-// through the consolidator are skipped as the loop guard, and so is a group left
-// empty once its engram echo bullets are removed. A missing file yields an empty
-// result.
+// group to one canonical memory. A missing file yields an empty result.
 func ImportCodex(memoryFile string) (Result, error) {
 	// WHY: Scope derives from each Task Group's recorded `applies_to: cwd=<path>`, a
 	// historical path that may not resolve on this machine, so a Codex import is
@@ -35,7 +31,7 @@ func ImportCodex(memoryFile string) (Result, error) {
 	}
 	for _, g := range splitTaskGroups(string(data)) {
 		body := withoutEchoes(g.body)
-		if isEngramOrigin(g.body) || (body != g.body && !hasContent(body)) {
+		if body != g.body && !hasContent(body) {
 			res.Skipped = append(res.Skipped, g.title)
 			continue
 		}
