@@ -387,7 +387,6 @@ func TestImportCodexSplitsTaskGroups(t *testing.T) {
 func TestImportCodexSkipsAllMarkedGroup(t *testing.T) {
 	res := importOne(t, "# Task Group: Sensor settings\n\ndetails\n\n"+
 		"# Task Group: Folded calibration\n\n## References\n"+
-		"<!-- engram-sync canonical=calibration scope=global extension=engram -->\n"+
 		"- From extensions/engram/notes/calibration.md\n  Wrapped calibration procedure.\n")
 	if len(res.Memories) != 1 || res.Memories[0].Name != "sensor-settings" {
 		t.Errorf("imported %d memories, want only the sensor settings group", len(res.Memories))

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/davisbuilds/engram/internal/render"
+	"github.com/davisbuilds/engram/internal/schema"
 )
 
 // A lesson about Codex's memory format can quote a Task Group heading inside a
@@ -75,6 +76,21 @@ func importOne(t *testing.T, md string) Result {
 	return res
 }
 
+func TestImportCodexSkipsWholeNoteEcho(t *testing.T) {
+	note, err := (render.CodexRenderer{}).Render(&schema.CanonicalMemory{
+		Name: "calibration", Scope: "global", Description: "Calibrate the humidity gauge.",
+		Body: "Record the sample count before calibration.\n",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := importOne(t, "# Task Group: Folded calibration\n\n"+string(note.Content)+
+		"\n# Task Group: Sensor settings\n\nUse the shaded sensor.\n")
+	if len(res.Memories) != 1 || res.Memories[0].Name != "sensor-settings" || len(res.Skipped) != 1 || res.Skipped[0] != "Folded calibration" {
+		t.Fatalf("imported %d memories, skipped %v; want only the native group imported and the whole-note echo skipped", len(res.Memories), res.Skipped)
+	}
+}
+
 // TestImportCodexStripsEchoBullets pins the bullet-level loop guard: an engram
 // note the consolidator folded into a genuine group is not re-imported as part
 // of that group, while the group's own bullets survive.
@@ -106,12 +122,12 @@ func TestImportCodexStripsMarkedLinesAndBullets(t *testing.T) {
   Citation for an older procedure: extensions/engram/notes/older.md
   Check the reading at noon.
 
-<!-- engram-sync canonical=calibration scope=global extension=engram -->
+An inline example is <!-- engram-sync canonical=calibration scope=global extension=engram -->.
     Preserve the recorded sample count.
 
 ~~~md
 A quoted citation to extensions/engram/notes/example.md
-A quoted marker with extension=engram
+<!-- engram-sync canonical=example scope=global extension=engram -->
 ~~~
 `
 	res := importOne(t, md)
@@ -119,12 +135,12 @@ A quoted marker with extension=engram
 		t.Fatalf("imported %d memories, skipped %v; want the mixed group imported", len(res.Memories), res.Skipped)
 	}
 	body := res.Memories[0].Body
-	for _, unwanted := range []string{"Folded calibration note", "Folded calibration details", "Citation for an older procedure", "<!-- engram-sync"} {
+	for _, unwanted := range []string{"Folded calibration note", "Folded calibration details", "Citation for an older procedure"} {
 		if strings.Contains(body, unwanted) {
 			t.Errorf("marked content %q survived import:\n%s", unwanted, body)
 		}
 	}
-	for _, wanted := range []string{"Record the first reading.", "Use the shaded sensor.", "  Check the reading at noon.", "    Preserve the recorded sample count.", "A quoted citation to extensions/engram/notes/example.md", "A quoted marker with extension=engram"} {
+	for _, wanted := range []string{"Record the first reading.", "Use the shaded sensor.", "  Check the reading at noon.", "An inline example is <!-- engram-sync canonical=calibration scope=global extension=engram -->.", "    Preserve the recorded sample count.", "A quoted citation to extensions/engram/notes/example.md", "<!-- engram-sync canonical=example scope=global extension=engram -->"} {
 		if !strings.Contains(body, wanted) {
 			t.Errorf("genuine content %q was removed:\n%s", wanted, body)
 		}
@@ -145,6 +161,19 @@ func TestImportCodexStripsBlankSeparatedCitationContinuations(t *testing.T) {
 	}
 	if got.Memories[0].Provenance.ImportHash != want.Memories[0].Provenance.ImportHash {
 		t.Error("the citation bullet moved the group's import hash")
+	}
+}
+
+func TestImportCodexStripsBlankSeparatedDatedContinuations(t *testing.T) {
+	const lead = "# Task Group: Greenhouse readings\n\n- Record the noon reading.\n"
+	const echo = "- Curated Engram update (2026-10-02): Calibrate the humidity gauge.\n\n  Preserve the sample count.\n"
+	const tail = "- Record the evening reading.\n"
+	res := importOne(t, lead+echo+tail)
+	if len(res.Memories) != 1 {
+		t.Fatalf("imported %d memories, want the mixed group imported", len(res.Memories))
+	}
+	if got, want := strings.TrimSpace(res.Memories[0].Body), "- Record the noon reading.\n- Record the evening reading."; got != want {
+		t.Errorf("mixed body = %q, want %q", got, want)
 	}
 }
 

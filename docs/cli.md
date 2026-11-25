@@ -359,16 +359,15 @@ not harness support, readiness, installation elsewhere or consumption.
   (then it conflicts again, as it should). Across two sources it declines with
   a warning and the conflict stands. An unknown name exits `2`
   (`unknown_keep`), and one name cannot be given to both flags. For Codex,
-  import removes lines containing `extension=engram` or an `extensions/engram/`
-  citation. For list items marked this way, import removes indented
-  continuation paragraphs across blank lines. Import also removes bullets with
-  the full `Curated Engram update (YYYY-MM-DD):` label that engram asks the
-  consolidator to write, along with consecutive indented continuation lines.
-  Fenced examples and other unmarked content survive. A verbatim echo can
-  import if the consolidator copies unmarked prose after a standalone note
-  marker. The marker gives no end boundary for the copied note inside the
-  group. If removing echoes leaves only headings and blank lines, import
-  reports the group as skipped. The first import after upgrading to dated
+  import skips the whole Task Group when it contains a standalone rendered note
+  marker (`<!-- engram-sync canonical=<name> scope=<scope> extension=engram -->`)
+  outside a code fence. In other groups, import removes lines containing an
+  `extensions/engram/` citation and bullets with the full
+  `Curated Engram update (YYYY-MM-DD):` label requested by engram. For both
+  kinds of list item, import removes indented continuations across blank lines.
+  Fenced examples and the group's other content survive. If removing echoes
+  leaves only headings and blank lines, import reports the group as skipped.
+  The first import after upgrading to dated
   label filtering can report a `3` conflict for a memory earlier settled with
   `--keep` whose Codex group carries such a bullet. `--keep` settles it again.
   `import` against a disabled harness exits `2`.

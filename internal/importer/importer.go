@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/davisbuilds/engram/internal/gitroot"
+	"github.com/davisbuilds/engram/internal/marker"
 	"github.com/davisbuilds/engram/internal/schema"
 	slug2 "github.com/davisbuilds/engram/internal/slug"
 )
@@ -323,8 +324,18 @@ func splitTaskGroups(s string) []taskGroup {
 	return groups
 }
 
-func hasEngramSignal(line string) bool {
-	return strings.Contains(line, "extension=engram") || strings.Contains(line, "extensions/engram/")
+func hasStandaloneCodexNoteMarker(body string) bool {
+	fence := ""
+	for line := range strings.SplitSeq(body, "\n") {
+		line = strings.TrimSpace(line)
+		fence = nextFence(fence, line)
+		if fence == "" {
+			if name, scope, owned := marker.CodexNoteName(line); owned && line == marker.CodexNoteMarker(name, scope) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // echoLabel matches how Codex's consolidator labels a bullet it folded from an
@@ -339,29 +350,17 @@ var listItem = regexp.MustCompile(`^(?:[-*+]|[0-9]{1,9}[.)])[ \t]`)
 func withoutEchoes(body string) string {
 	lines := strings.Split(body, "\n")
 	kept := lines[:0:0]
-	fence, datedEchoIndent := "", -1
+	fence := ""
 	for i := 0; i < len(lines); i++ {
 		ln := lines[i]
 		t := strings.TrimSpace(ln)
 		indent := len(ln) - len(strings.TrimLeft(ln, " \t"))
-		if datedEchoIndent >= 0 {
-			if t != "" && indent > datedEchoIndent {
-				continue
+		if fence = nextFence(fence, t); fence == "" && (strings.Contains(t, "extensions/engram/") || isEchoBullet(t)) {
+			if prefix := listItem.FindString(ln[indent:]); prefix != "" {
+				markerEnd := indent + len(prefix) - 1
+				i += markedBulletContinuation(lines[i+1:], listItemTextIndent(ln, markerEnd))
 			}
-			datedEchoIndent = -1
-		}
-		if fence = nextFence(fence, t); fence == "" {
-			switch {
-			case isEchoBullet(t):
-				datedEchoIndent = indent
-				continue
-			case hasEngramSignal(t):
-				if prefix := listItem.FindString(ln[indent:]); prefix != "" {
-					markerEnd := indent + len(prefix) - 1
-					i += markedBulletContinuation(lines[i+1:], listItemTextIndent(ln, markerEnd))
-				}
-				continue
-			}
+			continue
 		}
 		kept = append(kept, ln)
 	}

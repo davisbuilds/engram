@@ -30,6 +30,10 @@ func ImportCodex(memoryFile string) (Result, error) {
 		res.StaleWarning = true
 	}
 	for _, g := range splitTaskGroups(string(data)) {
+		if hasStandaloneCodexNoteMarker(g.body) {
+			res.Skipped = append(res.Skipped, g.title)
+			continue
+		}
 		body := withoutEchoes(g.body)
 		if body != g.body && !hasContent(body) {
 			res.Skipped = append(res.Skipped, g.title)

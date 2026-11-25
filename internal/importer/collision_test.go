@@ -102,7 +102,7 @@ func TestImportCodexReportsTitleCollision(t *testing.T) {
 	res := importOne(t, "# Task Group: Fix: Build\n\nfirst body\n\n"+
 		"# Task Group: Other Work\n\nunrelated body\n\n"+
 		"# Task Group: fix build\n\nsecond body\n\n"+
-		"# Task Group: Fix build\n\nextension=engram echo\n")
+		"# Task Group: Fix build\n\n<!-- engram-sync canonical=fix-build scope=global extension=engram -->\nfolded body\n")
 	if len(res.Memories) != 3 || len(res.Skipped) != 1 {
 		t.Fatalf("memories %d, skipped %v; want 3 and the engram group", len(res.Memories), res.Skipped)
 	}

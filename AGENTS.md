@@ -31,9 +31,11 @@ is the intelligence. See `README.md` for the user-facing overview.
   and a file without an engram ownership marker is never modified or deleted.
 - **Marker discipline is the identity contract.** engram only ever rewrites or
   removes files carrying its own marker. Reverse sync uses those markers to
-  filter generated material. Codex import filters each marked line or bullet in
-  a consolidated Task Group, including the dated labels requested by the
-  extension instructions. Unmarked prose remains eligible for import.
+  filter generated material. Codex import skips a consolidated Task Group that
+  carries a standalone rendered note marker. In other groups it filters
+  extension citation lines and bullets with the dated label requested by the
+  extension instructions, including continuations of those list items. The
+  group's remaining prose remains eligible for import.
   The exception to marker-based file ownership is `migrate --apply`,
   run explicitly after a dry-run: it adopts a hand-authored original only when
   canonical provably supersedes it (identical content, deterministic match), and
