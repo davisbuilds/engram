@@ -127,6 +127,7 @@ An inline example is <!-- engram-sync canonical=calibration scope=global extensi
 
 ~~~md
 A quoted citation to extensions/engram/notes/example.md
+
 <!-- engram-sync canonical=example scope=global extension=engram -->
 ~~~
 `

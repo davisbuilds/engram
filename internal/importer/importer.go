@@ -427,7 +427,7 @@ func nextFence(fence, t string) string {
 	if fence == "" {
 		return fenceRun(t)
 	}
-	if run := fenceRun(t); run == t && run[0] == fence[0] && len(run) >= len(fence) {
+	if run := fenceRun(t); len(run) >= len(fence) && run == t && run[0] == fence[0] {
 		return ""
 	}
 	return fence
