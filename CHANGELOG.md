@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.2](https://github.com/davisbuilds/engram/compare/v0.8.1...v0.8.2) (2026-11-26)
+
+
+### Bug Fixes
+
+* guard curate and report reconcile apply outcomes ([#85](https://github.com/davisbuilds/engram/issues/85)) ([e92c963](https://github.com/davisbuilds/engram/commit/e92c9633aed44377f53fa6c7a7f6adce4eae2431))
+* preserve native content in mixed Codex Task Groups ([#88](https://github.com/davisbuilds/engram/issues/88)) ([5a51484](https://github.com/davisbuilds/engram/commit/5a51484fd33499243c482bf831a2d07a3b78fdb8))
+* warn when reusing a forgotten memory name ([#87](https://github.com/davisbuilds/engram/issues/87)) ([94fcb89](https://github.com/davisbuilds/engram/commit/94fcb8968bf4b58a30bbec649fad7def1ee9788c))
+
 ## [0.8.1](https://github.com/davisbuilds/engram/compare/v0.8.0...v0.8.1) (2026-11-23)
 
 
