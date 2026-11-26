@@ -384,23 +384,15 @@ func TestImportCodexSplitsTaskGroups(t *testing.T) {
 	}
 }
 
-func TestImportCodexSkipsEngramGroups(t *testing.T) {
-	dir := t.TempDir()
-	mem := "# Task Group: real user lesson\n\ndetails\n\n" +
-		"# Task Group: engram note fold-in\n\n<!-- engram-sync canonical=x scope=global extension=engram -->\nfolded\n"
-	path := filepath.Join(dir, "MEMORY.md")
-	if err := os.WriteFile(path, []byte(mem), 0o644); err != nil {
-		t.Fatal(err)
+func TestImportCodexSkipsAllMarkedGroup(t *testing.T) {
+	res := importOne(t, "# Task Group: Sensor settings\n\ndetails\n\n"+
+		"# Task Group: Folded calibration\n\n## References\n"+
+		"- From extensions/engram/notes/calibration.md\n  Wrapped calibration procedure.\n")
+	if len(res.Memories) != 1 || res.Memories[0].Name != "sensor-settings" {
+		t.Errorf("imported %d memories, want only the sensor settings group", len(res.Memories))
 	}
-	res, err := ImportCodex(path)
-	if err != nil {
-		t.Fatalf("ImportCodex: %v", err)
-	}
-	if len(res.Memories) != 1 {
-		t.Errorf("engram-origin Task Group must be skipped; imported %d", len(res.Memories))
-	}
-	if len(res.Skipped) != 1 {
-		t.Errorf("expected 1 loop-guard skip, got %d", len(res.Skipped))
+	if len(res.Skipped) != 1 || res.Skipped[0] != "Folded calibration" {
+		t.Errorf("skipped %v, want only the all-marked group", res.Skipped)
 	}
 }
 

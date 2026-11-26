@@ -25,21 +25,6 @@ Fix simple, quick, or blocking issues inline when within the active task's scope
 
 ## Correctness / robustness
 
-- **Codex import loop-guard: the group-level signal check.** Import skips a Task
-  Group whose text carries `extension=engram` or an `extensions/engram/` citation,
-  and strips the `Curated Engram update (DATE):` bullets the consolidator writes
-  when it folds a note. In real consolidated output (2026-10) no group carried
-  either signal: the consolidator paraphrased notes into labeled bullets, so a
-  content-hash fallback would not have matched them. By
-  2026-11-20 that had changed: the consolidator cited `extensions/engram/` notes
-  as evidence in 12 of 20 Task Groups (none carried `extension=engram`), so the
-  group check now decides most groups. It still has a false positive: a genuine
-  group that merely mentions the `extensions/engram/` path (a Codex session that
-  worked on engram itself, or a genuine rollout folded together with a cited
-  note) is skipped whole. Whether any of the 12 mixes genuine rollouts is
-  unchecked. The revisit trigger (a real whole-group echo, or a dropped genuine
-  group) has likely fired: decide whether to narrow the check to lines, together
-  with `migrate` for Codex below. Fixtures must be synthetic.
 - **Codex curate has no verified failure-event handling.** `ExtractCodexText` now
   parses the `codex exec --json` JSONL stream and returns the final
   `agent_message`; an exit-0 run with no assistant message is reported as "no
@@ -136,15 +121,6 @@ remain implicit:
   Revisit when a supported harness exposes inspectable session-loading evidence.
   Any integration must identify the harness/session and distinguish loading
   from use, while keeping semantic judgments in agents.
-- **`migrate` for Codex.** `migrate` adopts hand-authored Claude files (per-file
-  per-slug memory) that canonical supersedes, so a re-sync into the source slug
-  neither duplicates nor conflicts. Codex keeps one consolidated `MEMORY.md`
-  folded by its own consolidator, a different duplication shape: engram writes
-  marked notes and Codex folds them, so the "hand-authored original vs engram
-  render" collision does not arise the same way. Whether Codex needs a migrate
-  analogue at all — and if so, what "adopt" means against a consolidated file —
-  is unresolved. Decide once real consolidated Codex fixtures exist (ties to the
-  content-hash loop-guard item above).
 - Skills are project-scoped only (in-repo symlinks). Global install via the
   workspace `~/.agents/skills` + skill-standardizer flow is a later promotion.
   Deferred by Davis on 2026-11-25. Revisit when the memory skills are ready for

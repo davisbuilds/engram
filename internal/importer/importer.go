@@ -1,7 +1,5 @@
 // Package importer reverse-syncs a harness's native memory back into canonical
-// form. Import is a one-shot migration on-ramp, not the steady-state path, and
-// every importer is loop-guarded so engram never re-imports its own rendered
-// output back into canonical.
+// form. Importers filter recognized engram signals from native sources.
 package importer
 
 import (
@@ -12,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/davisbuilds/engram/internal/gitroot"
+	"github.com/davisbuilds/engram/internal/marker"
 	"github.com/davisbuilds/engram/internal/schema"
 	slug2 "github.com/davisbuilds/engram/internal/slug"
 )
@@ -325,14 +324,18 @@ func splitTaskGroups(s string) []taskGroup {
 	return groups
 }
 
-// isEngramOrigin reports whether a consolidated Task Group is engram's own output
-// rebounding through Codex's consolidator. The guard rests on signals engram
-// controls — its note marker text and its extension path — not on any single
-// consolidator-preserved field, so it holds even if the consolidator drops
-// rollout metadata (spec SC-06). In observed output the consolidator instead
-// folds notes into genuine groups as labeled bullets, which withoutEchoes strips.
-func isEngramOrigin(body string) bool {
-	return strings.Contains(body, "extension=engram") || strings.Contains(body, "extensions/engram/")
+func hasStandaloneCodexNoteMarker(body string) bool {
+	fence := ""
+	for line := range strings.SplitSeq(body, "\n") {
+		line = strings.TrimSpace(line)
+		fence = nextFence(fence, line)
+		if fence == "" {
+			if name, scope, owned := marker.CodexNoteName(line); owned && line == marker.CodexNoteMarker(name, scope) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // echoLabel matches how Codex's consolidator labels a bullet it folded from an
@@ -342,29 +345,65 @@ func isEngramOrigin(body string) bool {
 // with the same words is not an echo.
 var echoLabel = regexp.MustCompile(`(?i)^[-*] +curated engram update \(\d{4}-\d{2}-\d{2}\):`)
 
-// withoutEchoes returns a Task Group body with every engram echo bullet removed,
-// along with the indented lines that continue it. Code fences are content, so a
-// bullet quoted inside one is kept.
+var listItem = regexp.MustCompile(`^(?:[-*+]|[0-9]{1,9}[.)])[ \t]`)
+
 func withoutEchoes(body string) string {
 	lines := strings.Split(body, "\n")
 	kept := lines[:0:0]
-	fence, echoIndent := "", -1
-	for _, ln := range lines {
+	fence := ""
+	for i := 0; i < len(lines); i++ {
+		ln := lines[i]
 		t := strings.TrimSpace(ln)
 		indent := len(ln) - len(strings.TrimLeft(ln, " \t"))
-		if echoIndent >= 0 {
-			if t != "" && indent > echoIndent {
-				continue
+		if fence = nextFence(fence, t); fence == "" && (strings.Contains(t, "extensions/engram/") || isEchoBullet(t)) {
+			if prefix := listItem.FindString(ln[indent:]); prefix != "" {
+				markerEnd := indent + len(prefix) - 1
+				i += markedBulletContinuation(lines[i+1:], listItemTextIndent(ln, markerEnd))
 			}
-			echoIndent = -1
-		}
-		if fence = nextFence(fence, t); fence == "" && isEchoBullet(t) {
-			echoIndent = indent
 			continue
 		}
 		kept = append(kept, ln)
 	}
 	return strings.Join(kept, "\n")
+}
+
+func listItemTextIndent(line string, markerEnd int) int {
+	const maxMarkerPadding = 4
+
+	content := strings.TrimLeft(line[markerEnd:], " \t")
+	markerWidth := tabExpandedWidth(line[:markerEnd])
+	textWidth := tabExpandedWidth(line[:len(line)-len(content)])
+	if textWidth-markerWidth > maxMarkerPadding {
+		return markerWidth + 1
+	}
+	return textWidth
+}
+
+func markedBulletContinuation(lines []string, textIndent int) int {
+	count := 0
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, " \t"))
+		if tabExpandedWidth(line[:indent]) < textIndent {
+			break
+		}
+		count = i + 1
+	}
+	return count
+}
+
+func tabExpandedWidth(text string) int {
+	width := 0
+	for _, ch := range text {
+		if ch == '\t' {
+			width += 4 - width%4
+		} else {
+			width++
+		}
+	}
+	return width
 }
 
 // isEchoBullet reports whether a trimmed line is a list item carrying echoLabel.
@@ -388,7 +427,7 @@ func nextFence(fence, t string) string {
 	if fence == "" {
 		return fenceRun(t)
 	}
-	if run := fenceRun(t); run == t && run[0] == fence[0] && len(run) >= len(fence) {
+	if run := fenceRun(t); len(run) >= len(fence) && run == t && run[0] == fence[0] {
 		return ""
 	}
 	return fence
